@@ -1,0 +1,154 @@
+{
+  "$defs": {
+    "BoardEntry": {
+      "description": "Board DB の1ボードエントリ.",
+      "properties": {
+        "board_id": {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "title": "Board Id",
+          "type": "string"
+        },
+        "display_name": {
+          "title": "Display Name",
+          "type": "string"
+        },
+        "vendor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor"
+        },
+        "boardpart": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Boardpart"
+        },
+        "device": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Device"
+        },
+        "device_family": {
+          "title": "Device Family",
+          "type": "string"
+        },
+        "pynq_supported": {
+          "default": false,
+          "title": "Pynq Supported",
+          "type": "boolean"
+        },
+        "virtual": {
+          "default": false,
+          "title": "Virtual",
+          "type": "boolean"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "pattern": "^(generic|custom)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Category"
+        },
+        "interfaces": {
+          "items": {
+            "$ref": "#/$defs/BoardInterface"
+          },
+          "title": "Interfaces",
+          "type": "array"
+        }
+      },
+      "required": [
+        "board_id",
+        "display_name",
+        "device_family"
+      ],
+      "title": "BoardEntry",
+      "type": "object"
+    },
+    "BoardInterface": {
+      "description": "Board DB のインターフェースエントリ.",
+      "properties": {
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Direction"
+        },
+        "count": {
+          "default": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "source": {
+          "default": "manual",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "BoardInterface",
+      "type": "object"
+    }
+  },
+  "description": "Board DB file (fabricgate-boarddb/v1): board_id → device/platform metadata.",
+  "properties": {
+    "version": {
+      "default": "fabricgate-boarddb/v1",
+      "pattern": "^fabricgate-boarddb/v1$",
+      "title": "Version",
+      "type": "string"
+    },
+    "boards": {
+      "items": {
+        "$ref": "#/$defs/BoardEntry"
+      },
+      "title": "Boards",
+      "type": "array"
+    }
+  },
+  "required": [
+    "boards"
+  ],
+  "title": "FabricGate Board DB",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabricgate:schema:board-db:v1"
+}

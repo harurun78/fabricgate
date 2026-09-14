@@ -1,0 +1,17 @@
+# fabricgate/pynq-z2-shell reference shell manifest contract
+#
+# Freezes the DesignIndex shape the external fabricgate-shells repo must publish.
+schema: fabricgate-index/v1
+name: fabricgate/pynq-z2-shell
+version: 1.0.0
+summary: PYNQ-Z2 reference static shell — 1 RP, AXI4-Lite partition pin contract
+license: MIT
+author: FabricGate Project
+repository: https://github.com/harurun78/fabricgate-shells
+tags:
+  - reference
+  - shell
+  - pynq-z2
+platforms:
+  - platform: pynq-z2/pynq
+    digest: sha256:0a1b2c3d0a1b2c3d0a1b2c3d0a1b2c3d0a1b2c3d0a1b2c3d0a1b2c3d0a1b2c3d

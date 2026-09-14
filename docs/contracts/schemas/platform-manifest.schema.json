@@ -1,0 +1,948 @@
+{
+  "$defs": {
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "description": "Reference to a single artifact file.",
+      "properties": {
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "sha256"
+      ],
+      "title": "ArtifactRef",
+      "type": "object"
+    },
+    "Attestation": {
+      "additionalProperties": false,
+      "description": "Sigstore / cosign attestation bundle reference.",
+      "properties": {
+        "bundle": {
+          "pattern": "^[A-Za-z0-9._-]{1,256}$",
+          "title": "Bundle",
+          "type": "string"
+        },
+        "transparency_log_url": {
+          "maxLength": 512,
+          "pattern": "^https://",
+          "title": "Transparency Log Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bundle",
+        "transparency_log_url"
+      ],
+      "title": "Attestation",
+      "type": "object"
+    },
+    "Dependency": {
+      "additionalProperties": false,
+      "description": "Platform Manifest dependency entry.",
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 256,
+          "pattern": "^(\\*|[~^]?(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)([\\s<>=!]+.+)?)$",
+          "title": "Version",
+          "type": "string"
+        },
+        "platform": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Platform"
+        },
+        "optional": {
+          "default": false,
+          "title": "Optional",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    },
+    "HealthCheck": {
+      "additionalProperties": false,
+      "description": "Post-load health check definition.",
+      "properties": {
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "params"
+      ],
+      "title": "HealthCheck",
+      "type": "object"
+    },
+    "Interface": {
+      "additionalProperties": false,
+      "description": "Declared IP interface (informational).",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "base": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "Interface",
+      "type": "object"
+    },
+    "IpBlock": {
+      "additionalProperties": false,
+      "description": "IP block definition (replaces .hwh for MCU context).",
+      "properties": {
+        "base": {
+          "title": "Base",
+          "type": "string"
+        },
+        "registers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Register"
+          },
+          "title": "Registers",
+          "type": "object"
+        },
+        "streams": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Stream"
+          },
+          "title": "Streams",
+          "type": "object"
+        }
+      },
+      "required": [
+        "base"
+      ],
+      "title": "IpBlock",
+      "type": "object"
+    },
+    "KernelModule": {
+      "additionalProperties": false,
+      "description": "Kernel module reference (linux-fpgamgr).",
+      "properties": {
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "module_name": {
+          "title": "Module Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "sha256",
+        "module_name"
+      ],
+      "title": "KernelModule",
+      "type": "object"
+    },
+    "LinuxFpgamgrArtifacts": {
+      "additionalProperties": false,
+      "description": "Artifact set for the ``linux-fpgamgr`` runtime.",
+      "properties": {
+        "bitstream": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "dtbo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "modules": {
+          "items": {
+            "$ref": "#/$defs/KernelModule"
+          },
+          "title": "Modules",
+          "type": "array"
+        }
+      },
+      "required": [
+        "bitstream"
+      ],
+      "title": "LinuxFpgamgrArtifacts",
+      "type": "object"
+    },
+    "LinuxFpgamgrManifest": {
+      "description": "Platform Manifest — linux-fpgamgr runtime.",
+      "properties": {
+        "schema": {
+          "default": "fabricgate-platform/v1",
+          "pattern": "^fabricgate-platform/v1$",
+          "title": "Schema",
+          "type": "string"
+        },
+        "runtime": {
+          "const": "linux-fpgamgr",
+          "default": "linux-fpgamgr",
+          "title": "Runtime",
+          "type": "string"
+        },
+        "board": {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "title": "Board",
+          "type": "string"
+        },
+        "device_family": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Device Family"
+        },
+        "design_ref": {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?:(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+          "title": "Design Ref",
+          "type": "string"
+        },
+        "artifacts": {
+          "$ref": "#/$defs/LinuxFpgamgrArtifacts"
+        },
+        "kernel_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kernel Version"
+        },
+        "post_load": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PostLoad"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "bitstream_type": {
+          "anyOf": [
+            {
+              "pattern": "^(shell|partial)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bitstream Type"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "deprecated",
+                "yanked"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
+        "design_portability": {
+          "anyOf": [
+            {
+              "enum": [
+                "axi-only",
+                "board-specific",
+                "io-constrained"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Design Portability"
+        },
+        "shell_dependency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ShellDependency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tool_requirements": {
+          "items": {
+            "$ref": "#/$defs/ToolRequirement"
+          },
+          "title": "Tool Requirements",
+          "type": "array"
+        },
+        "attestation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Attestation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "interfaces": {
+          "items": {
+            "$ref": "#/$defs/Interface"
+          },
+          "title": "Interfaces",
+          "type": "array"
+        },
+        "dependencies": {
+          "items": {
+            "$ref": "#/$defs/Dependency"
+          },
+          "maxItems": 20,
+          "title": "Dependencies",
+          "type": "array"
+        }
+      },
+      "required": [
+        "board",
+        "design_ref",
+        "artifacts"
+      ],
+      "title": "LinuxFpgamgrManifest",
+      "type": "object"
+    },
+    "NanopynqArtifacts": {
+      "additionalProperties": false,
+      "description": "Artifact set for the ``nanopynq`` runtime.",
+      "properties": {
+        "bitstream": {
+          "$ref": "#/$defs/ArtifactRef"
+        }
+      },
+      "required": [
+        "bitstream"
+      ],
+      "title": "NanopynqArtifacts",
+      "type": "object"
+    },
+    "NanopynqManifest": {
+      "description": "Platform Manifest — nanopynq runtime (Phase 3).",
+      "properties": {
+        "schema": {
+          "default": "fabricgate-platform/v1",
+          "pattern": "^fabricgate-platform/v1$",
+          "title": "Schema",
+          "type": "string"
+        },
+        "runtime": {
+          "const": "nanopynq",
+          "default": "nanopynq",
+          "title": "Runtime",
+          "type": "string"
+        },
+        "board": {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "title": "Board",
+          "type": "string"
+        },
+        "device_family": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Device Family"
+        },
+        "design_ref": {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?:(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+          "title": "Design Ref",
+          "type": "string"
+        },
+        "artifacts": {
+          "$ref": "#/$defs/NanopynqArtifacts"
+        },
+        "transport": {
+          "title": "Transport",
+          "type": "string"
+        },
+        "mtu": {
+          "title": "Mtu",
+          "type": "integer"
+        },
+        "ips": {
+          "additionalProperties": {
+            "$ref": "#/$defs/IpBlock"
+          },
+          "title": "Ips",
+          "type": "object"
+        },
+        "mcu": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mcu"
+        },
+        "bitstream_type": {
+          "anyOf": [
+            {
+              "pattern": "^(shell|partial)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bitstream Type"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "deprecated",
+                "yanked"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
+        "design_portability": {
+          "anyOf": [
+            {
+              "enum": [
+                "axi-only",
+                "board-specific",
+                "io-constrained"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Design Portability"
+        },
+        "shell_dependency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ShellDependency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tool_requirements": {
+          "items": {
+            "$ref": "#/$defs/ToolRequirement"
+          },
+          "title": "Tool Requirements",
+          "type": "array"
+        },
+        "attestation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Attestation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "interfaces": {
+          "items": {
+            "$ref": "#/$defs/Interface"
+          },
+          "title": "Interfaces",
+          "type": "array"
+        },
+        "dependencies": {
+          "items": {
+            "$ref": "#/$defs/Dependency"
+          },
+          "maxItems": 20,
+          "title": "Dependencies",
+          "type": "array"
+        }
+      },
+      "required": [
+        "board",
+        "design_ref",
+        "artifacts",
+        "transport",
+        "mtu"
+      ],
+      "title": "NanopynqManifest",
+      "type": "object"
+    },
+    "PostLoad": {
+      "additionalProperties": false,
+      "description": "Actions to execute after FPGA programming.",
+      "properties": {
+        "services": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Services",
+          "type": "array"
+        },
+        "health_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HealthCheck"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "PostLoad",
+      "type": "object"
+    },
+    "PynqArtifacts": {
+      "additionalProperties": false,
+      "description": "Artifact set for the ``pynq`` runtime.",
+      "properties": {
+        "bitstream": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "hwh": {
+          "$ref": "#/$defs/ArtifactRef"
+        },
+        "dtbo": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "bitstream",
+        "hwh"
+      ],
+      "title": "PynqArtifacts",
+      "type": "object"
+    },
+    "PynqManifest": {
+      "description": "Platform Manifest — pynq runtime.",
+      "properties": {
+        "schema": {
+          "default": "fabricgate-platform/v1",
+          "pattern": "^fabricgate-platform/v1$",
+          "title": "Schema",
+          "type": "string"
+        },
+        "runtime": {
+          "const": "pynq",
+          "default": "pynq",
+          "title": "Runtime",
+          "type": "string"
+        },
+        "board": {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "title": "Board",
+          "type": "string"
+        },
+        "device_family": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Device Family"
+        },
+        "design_ref": {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?:(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+          "title": "Design Ref",
+          "type": "string"
+        },
+        "artifacts": {
+          "$ref": "#/$defs/PynqArtifacts"
+        },
+        "pynq_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pynq Version"
+        },
+        "bitstream_type": {
+          "anyOf": [
+            {
+              "pattern": "^(shell|partial)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bitstream Type"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "deprecated",
+                "yanked"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
+        "design_portability": {
+          "anyOf": [
+            {
+              "enum": [
+                "axi-only",
+                "board-specific",
+                "io-constrained"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Design Portability"
+        },
+        "shell_dependency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ShellDependency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tool_requirements": {
+          "items": {
+            "$ref": "#/$defs/ToolRequirement"
+          },
+          "title": "Tool Requirements",
+          "type": "array"
+        },
+        "attestation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Attestation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "interfaces": {
+          "items": {
+            "$ref": "#/$defs/Interface"
+          },
+          "title": "Interfaces",
+          "type": "array"
+        },
+        "dependencies": {
+          "items": {
+            "$ref": "#/$defs/Dependency"
+          },
+          "maxItems": 20,
+          "title": "Dependencies",
+          "type": "array"
+        }
+      },
+      "required": [
+        "board",
+        "design_ref",
+        "artifacts"
+      ],
+      "title": "PynqManifest",
+      "type": "object"
+    },
+    "Register": {
+      "additionalProperties": false,
+      "description": "Register definition for nanopynq IP block.",
+      "properties": {
+        "offset": {
+          "title": "Offset",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "offset",
+        "width"
+      ],
+      "title": "Register",
+      "type": "object"
+    },
+    "ShellDependency": {
+      "additionalProperties": false,
+      "description": "PR bitstream static shell dependency (exact version match only).\n\n``sha256`` is the mandatory ADR-009 pin: the SHA-256 of the referenced\nshell's distributed bitstream artifact on the same platform.",
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 64,
+          "pattern": "^=\\d+\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "sha256"
+      ],
+      "title": "ShellDependency",
+      "type": "object"
+    },
+    "Stream": {
+      "additionalProperties": false,
+      "description": "Stream definition for nanopynq IP block.",
+      "properties": {
+        "dir": {
+          "title": "Dir",
+          "type": "string"
+        },
+        "mtu": {
+          "title": "Mtu",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dir",
+        "mtu"
+      ],
+      "title": "Stream",
+      "type": "object"
+    },
+    "ToolRequirement": {
+      "additionalProperties": false,
+      "description": "Tool requirement metadata (informational).",
+      "properties": {
+        "tool": {
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Tool",
+          "type": "string"
+        },
+        "min_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Version"
+        },
+        "edition": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Edition"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "title": "ToolRequirement",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "linux-fpgamgr": "#/$defs/LinuxFpgamgrManifest",
+      "nanopynq": "#/$defs/NanopynqManifest",
+      "pynq": "#/$defs/PynqManifest"
+    },
+    "propertyName": "runtime"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/PynqManifest"
+    },
+    {
+      "$ref": "#/$defs/LinuxFpgamgrManifest"
+    },
+    {
+      "$ref": "#/$defs/NanopynqManifest"
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabricgate:schema:platform-manifest:v1",
+  "title": "FabricGate Platform Manifest",
+  "description": "Per-platform manifest, discriminated by runtime (pynq | linux-fpgamgr | nanopynq)."
+}

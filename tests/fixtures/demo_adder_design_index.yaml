@@ -1,0 +1,23 @@
+# fabricgate/demo-adder reference partial manifest contract
+#
+# The platform entry pins its static shell (ADR-009): version is an exact
+# "=X.Y.Z" match and sha256 is the shell's distributed bitstream digest
+# (== pynq_z2_shell_platform_manifest.yaml artifacts.bitstream.sha256).
+schema: fabricgate-index/v1
+name: fabricgate/demo-adder
+version: 1.0.0
+summary: AXI4-Lite adder demo partial for fabricgate/pynq-z2-shell (A + B -> SUM)
+license: MIT
+author: FabricGate Project
+repository: https://github.com/harurun78/fabricgate-shells
+tags:
+  - reference
+  - partial
+  - pynq-z2
+platforms:
+  - platform: pynq-z2/pynq
+    digest: sha256:4d5e6f704d5e6f704d5e6f704d5e6f704d5e6f704d5e6f704d5e6f704d5e6f70
+    shell_dependency:
+      name: fabricgate/pynq-z2-shell
+      version: "=1.0.0"
+      sha256: feedc0defeedc0defeedc0defeedc0defeedc0defeedc0defeedc0defeedc0de

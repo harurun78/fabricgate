@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+coverage.lcov
+htmlcov/
+.mypy_cache/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+
+
+# VSCode — keep shared settings, ignore user-specific files
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node.js (frontend)
+
+# Alembic
+*.db
+
+# Docker
+docker-compose.override.yaml
+docker-compose.override.yml
+
+# Local diagnostics
+.diagnostics/
+.vite/
+
+# Project review reports
+docs/report/
+tmp/
+
+# FPGA test fixture binaries (generated or downloaded — not committed)
+tests/fixtures/binaries/
+!tests/fixtures/binaries/.gitkeep

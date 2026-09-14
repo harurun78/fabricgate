@@ -1,0 +1,21 @@
+schema: fabricgate-platform/v1
+runtime: pynq
+board: zcu104
+device_family: xczu7ev
+design_ref: fabricgate/blink:1.0.0
+artifacts:
+  bitstream:
+    file: blink.bit
+    sha256: aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd
+  hwh:
+    file: blink.hwh
+    sha256: "11223344112233441122334411223344112233441122334411223344112233aa"
+pynq_version: ">=3.0.1"
+tool_requirements:
+  - tool: vivado
+    min_version: "2023.2"
+interfaces:
+  - name: axi_gpio_0
+    type: axi-lite
+    base: "0x41200000"
+    description: LED GPIO controller

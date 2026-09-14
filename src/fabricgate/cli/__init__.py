@@ -1,0 +1,1 @@
+"""FabricGate CLI (Click)."""

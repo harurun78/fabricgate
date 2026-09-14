@@ -1,0 +1,26 @@
+schema: fabricgate-index/v1
+name: fabricgate/blink
+version: 1.0.0
+summary: LED blink reference design — multi-platform demo
+license: Apache-2.0
+author: FabricGate Project
+tags:
+  - reference
+  - blink
+  - led
+  - getting-started
+platforms:
+  - platform: zcu104/pynq
+    digest: sha256:aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd
+    size: 256000
+    speed_grade:
+      min: "-2"
+      tested:
+        - "-2"
+  - platform: zcu104/linux-fpgamgr
+    digest: sha256:eeff0011eeff0011eeff0011eeff0011eeff0011eeff0011eeff0011eeff0011
+    size: 258000
+    speed_grade:
+      min: "-2"
+      tested:
+        - "-2"

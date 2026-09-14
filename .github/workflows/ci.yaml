@@ -1,0 +1,89 @@
+name: CI
+
+# Public CI: lint, type-check, unit tests, build + publication-boundary
+# check, dependency audit. No secrets are used anywhere in this workflow.
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_call:
+    inputs:
+      force_all:
+        description: "Kept for release.yaml compatibility; every job always runs here"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check (ruff / mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: ".python-version"
+      - run: uv sync --frozen --all-extras
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy src
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --frozen --all-extras --python ${{ matrix.python-version }}
+      - run: uv run pytest -q --cov=fabricgate --cov-report=term-missing
+
+  build:
+    name: Build & boundary check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - run: uv build
+      - name: Enforce publication boundary (no registry code in wheel/sdist)
+        run: |
+          set -euo pipefail
+          for whl in dist/*.whl; do
+            python3 -m zipfile --list "$whl" | grep -q "fabricgate/registry/" && { echo "::error::$whl contains fabricgate/registry/"; exit 1; }
+          done
+          for sdist in dist/*.tar.gz; do
+            tar -tzf "$sdist" | grep -q "fabricgate/registry/" && { echo "::error::$sdist contains fabricgate/registry/"; exit 1; }
+          done
+          echo "boundary OK"
+      - name: Smoke-install the wheel
+        run: |
+          python3 -m venv /tmp/smoke && /tmp/smoke/bin/pip install -q dist/*.whl
+          /tmp/smoke/bin/fabricgate --version && /tmp/smoke/bin/fgate --help > /dev/null
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - run: uv sync --frozen --all-extras
+      - run: uv run pip-audit
+
+  ci-success:
+    name: CI Success
+    if: always()
+    needs: [check, test, build, audit]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo '${{ toJSON(needs) }}' | grep -qE '"result": "(failure|cancelled)"' && exit 1
+          echo "all green"

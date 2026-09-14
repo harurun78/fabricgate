@@ -1,0 +1,16 @@
+# fabricgate/hello seed manifest contract
+# Freezes the DesignIndex shape the external fabricgate-hello repo must publish.
+schema: fabricgate-index/v1
+name: fabricgate/hello
+version: 1.0.0
+summary: Hello FabricGate! — minimal AXI-only reference design (MMIO greeting)
+license: MIT
+author: FabricGate Project
+repository: https://github.com/harurun78/fabricgate-hello
+tags:
+  - reference
+  - hello
+  - getting-started
+platforms:
+  - platform: generic-xc7z020/pynq
+    digest: sha256:aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd

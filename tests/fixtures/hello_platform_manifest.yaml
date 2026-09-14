@@ -1,0 +1,21 @@
+# fabricgate/hello seed platform manifest contract
+#
+# PynqArtifacts = bitstream + hwh required pair, no dtbo; AXI-only; built for
+# the generic-xc7z020 virtual board (part-only, no boardpart).
+schema: fabricgate-platform/v1
+runtime: pynq
+board: generic-xc7z020
+device_family: xc7z020
+design_ref: fabricgate/hello:1.0.0
+artifacts:
+  bitstream:
+    file: hello.bit
+    sha256: aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd
+  hwh:
+    file: hello.hwh
+    sha256: "11223344112233441122334411223344112233441122334411223344112233aa"
+pynq_version: ">=3.0"
+design_portability: axi-only
+tool_requirements:
+  - tool: vivado
+    min_version: "2024.1"

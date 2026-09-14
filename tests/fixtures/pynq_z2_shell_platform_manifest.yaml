@@ -1,0 +1,25 @@
+# fabricgate/pynq-z2-shell reference shell platform manifest contract
+# (schema: docs/specs/platform-manifest-schema.md §2.5-2.7)
+# bitstream_type: shell — must NOT carry shell_dependency (§2.6 positive example).
+# The bitstream sha256 below is the ADR-009 pin target for partials
+# (demo_adder_* fixtures reference this exact value).
+schema: fabricgate-platform/v1
+runtime: pynq
+board: pynq-z2
+device_family: xc7z020
+design_ref: fabricgate/pynq-z2-shell:1.0.0
+artifacts:
+  bitstream:
+    file: pynq_z2_shell.bit
+    sha256: feedc0defeedc0defeedc0defeedc0defeedc0defeedc0defeedc0defeedc0de
+  hwh:
+    file: pynq_z2_shell.hwh
+    sha256: "1badb0021badb0021badb0021badb0021badb0021badb0021badb0021badb002"
+pynq_version: ">=3.0"
+bitstream_type: shell
+design_portability: board-specific
+tool_requirements:
+  - tool: vivado
+    min_version: "2024.1"
+    required: true
+    note: "DFX shell build; Abstract Shell DCP is generated from the same Vivado run"

@@ -1,0 +1,30 @@
+# fabricgate/demo-adder reference partial platform manifest contract
+# (schema: docs/specs/platform-manifest-schema.md §2.5-2.7)
+# bitstream_type: partial — shell_dependency required (§2.6), exact "=X.Y.Z"
+# version pin, sha256 = shell's distributed bitstream digest (ADR-009).
+# tool_requirements is mandatory for the reference pair (spec §1: PR rebuild
+# effectively requires the identical Vivado version).
+schema: fabricgate-platform/v1
+runtime: pynq
+board: pynq-z2
+device_family: xc7z020
+design_ref: fabricgate/demo-adder:1.0.0
+artifacts:
+  bitstream:
+    file: demo_adder_partial.bit
+    sha256: ab12cd34ab12cd34ab12cd34ab12cd34ab12cd34ab12cd34ab12cd34ab12cd34
+  hwh:
+    file: demo_adder_partial.hwh
+    sha256: "9f8e7d6c9f8e7d6c9f8e7d6c9f8e7d6c9f8e7d6c9f8e7d6c9f8e7d6c9f8e7d6c"
+pynq_version: ">=3.0"
+bitstream_type: partial
+design_portability: board-specific
+shell_dependency:
+  name: fabricgate/pynq-z2-shell
+  version: "=1.0.0"
+  sha256: feedc0defeedc0defeedc0defeedc0defeedc0defeedc0defeedc0defeedc0de
+tool_requirements:
+  - tool: vivado
+    min_version: "2024.1"
+    required: true
+    note: "PR partial must be rebuilt with the same Vivado version as the shell"

@@ -1,0 +1,221 @@
+{
+  "$defs": {
+    "PlatformEntry": {
+      "additionalProperties": false,
+      "description": "A single platform entry within a Design Index.",
+      "properties": {
+        "platform": {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "title": "Platform",
+          "type": "string"
+        },
+        "digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Digest",
+          "type": "string"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size"
+        },
+        "speed_grade": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SpeedGrade"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "shell_dependency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ShellDependency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "platform",
+        "digest"
+      ],
+      "title": "PlatformEntry",
+      "type": "object"
+    },
+    "ShellDependency": {
+      "additionalProperties": false,
+      "description": "PR bitstream static shell dependency (exact version match only).\n\n``sha256`` is the mandatory ADR-009 pin: the SHA-256 of the referenced\nshell's distributed bitstream artifact on the same platform.",
+      "properties": {
+        "name": {
+          "maxLength": 128,
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 64,
+          "pattern": "^=\\d+\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "sha256"
+      ],
+      "title": "ShellDependency",
+      "type": "object"
+    },
+    "SpeedGrade": {
+      "additionalProperties": false,
+      "description": "Speed grade compatibility info.",
+      "properties": {
+        "min": {
+          "title": "Min",
+          "type": "string"
+        },
+        "tested": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tested",
+          "type": "array"
+        }
+      },
+      "required": [
+        "min"
+      ],
+      "title": "SpeedGrade",
+      "type": "object"
+    }
+  },
+  "description": "Top-level descriptor for a versioned FPGA design (fabricgate-index/v1). Lists per-platform builds.",
+  "properties": {
+    "schema": {
+      "default": "fabricgate-index/v1",
+      "pattern": "^fabricgate-index/v1$",
+      "title": "Schema",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 128,
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+      "title": "Name",
+      "type": "string"
+    },
+    "version": {
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+      "title": "Version",
+      "type": "string"
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Summary"
+    },
+    "license": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "pattern": "^([A-Za-z0-9\\-.+]+)(\\s+(AND|OR|WITH)\\s+[A-Za-z0-9\\-.+]+)*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "License"
+    },
+    "author": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Author"
+    },
+    "repository": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Repository"
+    },
+    "docs": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Docs"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 10,
+      "title": "Tags",
+      "type": "array"
+    },
+    "platforms": {
+      "items": {
+        "$ref": "#/$defs/PlatformEntry"
+      },
+      "minItems": 1,
+      "title": "Platforms",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name",
+    "version",
+    "platforms"
+  ],
+  "title": "FabricGate Design Index",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fabricgate:schema:design-index:v1"
+}

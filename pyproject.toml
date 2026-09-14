@@ -1,0 +1,97 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fabricgate"
+version = "0.1.0"
+description = "FabricGate CLI/SDK — discover, pull and verify FPGA designs across boards and runtimes"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["fpga", "bitstream", "pynq", "registry", "cli"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Embedded Systems",
+  "Topic :: System :: Hardware",
+]
+dependencies = [
+  "click>=8.3.3",                   # security: GHSA-47fr-3ffg-hgmw
+  "cryptography>=50.0.0",          # security: GHSA-537c-gmf6-5ccf, PYSEC-2026-3552
+  "defusedxml>=0.7",
+  "email-validator>=2.2",
+  "httpx>=0.27",
+  "keyring>=25.0",
+  "pydantic>=2.8",
+  "pydantic-settings>=2.14.2",     # security: GHSA-4xgf-cpjx-pc3j
+  "pyyaml>=6.0",
+  "rich>=13.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/harurun78/fabricgate"
+Source = "https://github.com/harurun78/fabricgate"
+Issues = "https://github.com/harurun78/fabricgate/issues"
+Changelog = "https://github.com/harurun78/fabricgate/blob/master/docs/contracts/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=6.0",
+  "ruff>=0.6",
+  "mypy>=1.10",
+  "pip-audit>=2.7",
+  "jsonschema>=4.20",       # tests/unit/test_contract_schemas.py
+  "types-PyYAML>=6.0",
+  "types-defusedxml>=0.7",
+]
+
+[project.scripts]
+fabricgate = "fabricgate.cli.main:main"
+fgate = "fabricgate.cli.main:main"
+
+[tool.uv]
+constraint-dependencies = [
+  "pip>=26.2",                    # via pip-audit (dev) — PYSEC-2026-196 (CVE-2026-8643), PYSEC-2026-3721
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fabricgate"]
+
+[tool.ruff]
+target-version = "py311"
+src = ["src", "tests"]
+line-length = 120
+extend-exclude = ["docs"]  # never reformat code samples inside the specs
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:httpx"
+
+[tool.coverage.run]
+source = ["src/fabricgate"]
+omit = ["*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "if __name__ == .__main__."]

@@ -1,0 +1,3968 @@
+openapi: 3.1.0
+info:
+  title: FabricGate Registry
+  version: 0.1.0
+paths:
+  /api/v1/livez:
+    get:
+      tags:
+      - health
+      summary: Liveness
+      description: 'Liveness probe: the process is up and serving.
+
+
+        Intentionally checks no external dependencies — use this for the container
+
+        HEALTHCHECK so a transient DB/S3 outage does not trigger a restart loop.
+
+        See ``/health`` for the deep readiness check (DB + S3) used by LBs/monitors.'
+      operationId: liveness_api_v1_livez_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+  /api/v1/health:
+    get:
+      tags:
+      - health
+      summary: Health Check
+      description: 'Deep health check: verifies DB and S3/MinIO connectivity.
+
+
+        Returns HTTP 503 with ``status: "degraded"`` if any component fails.
+
+        Individual component statuses are in the ``database`` and ``storage`` fields.
+
+        Error details are logged server-side only (not exposed in the response).'
+      operationId: health_check_api_v1_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/designs:
+    get:
+      tags:
+      - designs
+      summary: Search Designs
+      operationId: search_designs_api_v1_designs_get
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Q
+      - name: platform
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Platform
+      - name: board
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Board
+      - name: device_family
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device Family
+      - name: runtime
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime
+      - name: tag
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tag
+      - name: namespace
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Namespace
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Per Page
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          default: updated
+          title: Sort
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/stats:
+    get:
+      tags:
+      - designs
+      summary: Get Stats
+      description: Return aggregate registry statistics.
+      operationId: get_stats_api_v1_stats_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryStatsResponse'
+  /api/v1/namespaces/{namespace}/designs/{design}:
+    get:
+      tags:
+      - designs
+      summary: Get Design
+      operationId: get_design_api_v1_namespaces__namespace__designs__design__get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}:
+    get:
+      tags:
+      - designs
+      summary: Get Version
+      operationId: get_version_api_v1_namespaces__namespace__designs__design__versions__version__get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - designs
+      summary: Publish Version
+      description: 'Publish a new version via multipart/form-data.
+
+
+        Expected parts:
+
+        - ``index``: Design Index (YAML)
+
+        - ``readme`` (optional): README markdown
+
+        - ``platform:{board_id}/{runtime}:manifest``: Platform Manifest (YAML)
+
+        - ``platform:{board_id}/{runtime}:artifact:{filename}``: artifact file'
+      operationId: publish_version_api_v1_namespaces__namespace__designs__design__versions__version__post
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - designs
+      summary: Yank Version
+      operationId: yank_version_api_v1_namespaces__namespace__designs__design__versions__version__delete
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/YankRequest'
+              - type: 'null'
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/diff:
+    get:
+      tags:
+      - designs
+      summary: Get Version Diff
+      description: § 3.15 — Compare metadata between two versions (public, no auth).
+      operationId: get_version_diff_api_v1_namespaces__namespace__designs__design__versions__version__diff_get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: base
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Base
+      - name: platform
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Platform
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionDiffResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/uploads:
+    post:
+      tags:
+      - designs
+      summary: Create Artifact Uploads
+      description: 'Hand out presigned PUT URLs so artifacts bypass the API on the
+        way in.
+
+
+        Cloud Run rejects requests over 32MiB at the frontend, well below the
+
+        256MB an artifact may be, so the bytes cannot travel through this service
+
+        Each URL is signed for exactly one content-addressed key *and*
+
+        one SHA-256, so an upload can neither land elsewhere nor carry different
+
+        content; the publish request then references the digest instead of
+
+        resending it. Pull already works this way (307 to a presigned GET).'
+      operationId: create_artifact_uploads_api_v1_namespaces__namespace__designs__design__uploads_post
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactUploadRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactUploadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/deprecate:
+    post:
+      tags:
+      - designs
+      summary: Deprecate Version
+      operationId: deprecate_version_api_v1_namespaces__namespace__designs__design__versions__version__deprecate_post
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/DeprecateRequest'
+              - type: 'null'
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeprecateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - designs
+      summary: Undeprecate Version
+      operationId: undeprecate_version_api_v1_namespaces__namespace__designs__design__versions__version__deprecate_delete
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeprecateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/license-check:
+    get:
+      tags:
+      - designs
+      summary: License Check
+      description: § 3.14.3 — Check tool requirements for a design version (public,
+        no auth).
+      operationId: license_check_api_v1_namespaces__namespace__designs__design__versions__version__license_check_get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: tool
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+            maxItems: 50
+          - type: 'null'
+          title: Tool
+      - name: edition
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 32
+          - type: 'null'
+          title: Edition
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LicenseCheckResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}:
+    get:
+      tags:
+      - designs
+      summary: Get Platform Manifest
+      operationId: get_platform_manifest_api_v1_namespaces__namespace__designs__design__versions__version__platforms__board_id___runtime__get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: board_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Board Id
+      - name: runtime
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Runtime
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - designs
+      summary: Add Platform
+      description: 'Add a platform to an existing version via multipart/form-data.
+
+
+        Expected parts:
+
+        - ``manifest``: Platform Manifest (YAML)
+
+        - ``artifact:{filename}``: artifact file(s)'
+      operationId: add_platform_api_v1_namespaces__namespace__designs__design__versions__version__platforms__board_id___runtime__post
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: board_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Board Id
+      - name: runtime
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Runtime
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}/artifacts/{filename}:
+    get:
+      tags:
+      - designs
+      summary: Download Artifact
+      operationId: download_artifact_api_v1_namespaces__namespace__designs__design__versions__version__platforms__board_id___runtime__artifacts__filename__get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: board_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Board Id
+      - name: runtime
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Runtime
+      - name: filename
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Filename
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}/dependencies:
+    get:
+      tags:
+      - designs
+      summary: Get Dependencies
+      description: § 3.13 — Resolve the dependency tree for a platform (public, no
+        auth).
+      operationId: get_dependencies_api_v1_namespaces__namespace__designs__design__versions__version__platforms__board_id___runtime__dependencies_get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: board_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Board Id
+      - name: runtime
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Runtime
+      - name: include_optional
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Optional
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DependenciesResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}/shell:
+    get:
+      tags:
+      - designs
+      summary: Get Shell Info
+      description: § 3.14.2 — Resolve static shell info for a partial bitstream platform
+        (public, no auth).
+      operationId: get_shell_info_api_v1_namespaces__namespace__designs__design__versions__version__platforms__board_id___runtime__shell_get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: board_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Board Id
+      - name: runtime
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Runtime
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShellResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/stats:
+    get:
+      tags:
+      - designs
+      summary: Get Namespace Stats
+      description: § 3.11 — Namespace-level download statistics (public for non-private
+        namespaces).
+      operationId: get_namespace_stats_api_v1_namespaces__namespace__stats_get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceStatsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/stats:
+    get:
+      tags:
+      - designs
+      summary: Get Design Stats
+      description: § 3.11 — Design download statistics with period aggregation.
+      operationId: get_design_stats_api_v1_namespaces__namespace__designs__design__stats_get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: period
+        in: query
+        required: false
+        schema:
+          type: string
+          default: daily
+          title: Period
+      - name: from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: From
+      - name: to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: To
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesignStatsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/stats:
+    get:
+      tags:
+      - designs
+      summary: Get Version Stats
+      description: § 3.11 — Version download statistics with period aggregation.
+      operationId: get_version_stats_api_v1_namespaces__namespace__designs__design__versions__version__stats_get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: period
+        in: query
+        required: false
+        schema:
+          type: string
+          default: daily
+          title: Period
+      - name: from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: From
+      - name: to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: To
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionStatsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/batch-yank:
+    post:
+      tags:
+      - designs
+      summary: Batch Yank Versions
+      description: § 3.16 — Bulk yank versions in a single transaction.
+      operationId: batch_yank_versions_api_v1_namespaces__namespace__designs__design__batch_yank_post
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchYankRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchYankResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/designs/{design}/batch-deprecate:
+    post:
+      tags:
+      - designs
+      summary: Batch Deprecate Versions
+      description: § 3.16 — Bulk deprecate versions in a single transaction.
+      operationId: batch_deprecate_versions_api_v1_namespaces__namespace__designs__design__batch_deprecate_post
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchDeprecateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchDeprecateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/oauth/authorize:
+    get:
+      tags:
+      - auth
+      summary: Oauth Authorize
+      description: Redirect user to broker login page (Authorization Code + PKCE).
+      operationId: oauth_authorize_api_v1_oauth_authorize_get
+      parameters:
+      - name: provider
+        in: query
+        required: false
+        schema:
+          type: string
+          default: github
+          title: Provider
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/oauth/callback:
+    get:
+      tags:
+      - auth
+      summary: Oauth Callback
+      description: 'Handle broker callback: verify state, exchange code+PKCE, set
+        session cookie.'
+      operationId: oauth_callback_api_v1_oauth_callback_get
+      parameters:
+      - name: code
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Code
+      - name: state
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: State
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/oauth/token:
+    post:
+      tags:
+      - auth
+      summary: Token Exchange
+      description: Proxy token exchange to broker (authorization_code, refresh_token,
+        device_code grants).
+      operationId: token_exchange_api_v1_oauth_token_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: true
+              type: object
+              title: Body
+              default: {}
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/oauth/device_authorization:
+    post:
+      tags:
+      - auth
+      summary: Device Authorization
+      description: Start Device Authorization flow (CLI/SDK) via auth broker.
+      operationId: device_authorization_api_v1_oauth_device_authorization_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/oauth/device/activate:
+    get:
+      tags:
+      - auth
+      summary: Device Activate
+      description: 'Send the user from our /device page to the broker''s activation
+        screen.
+
+
+        The CLI prints ``{FG_FRONTEND_URL}/device``; that page collects the user
+
+        code and lands here. Keeping the hop server-side means the broker''s
+
+        hostname stays in ``AuthBrokerConfig`` with every other broker URL instead
+
+        of being duplicated into the frontend''s build-time config, and Phase 2''s
+
+        ZITADEL (which names this page differently) is absorbed there too.
+
+
+        Not an open redirect: the destination host comes from configuration and
+
+        only the query value is caller-supplied.'
+      operationId: device_activate_api_v1_oauth_device_activate_get
+      parameters:
+      - name: user_code
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: ^[A-Za-z0-9-]+$
+          title: User Code
+      responses:
+        '307':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/oauth/revoke:
+    post:
+      tags:
+      - auth
+      summary: Revoke Token
+      description: Revoke a refresh token via auth broker (RFC 7009).
+      operationId: revoke_token_api_v1_oauth_revoke_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              additionalProperties: true
+              type: object
+              title: Body
+              default: {}
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/oauth/logout:
+    post:
+      tags:
+      - auth
+      summary: Oauth Logout
+      description: Clear session and CSRF cookies (CSRF-protected).
+      operationId: oauth_logout_api_v1_oauth_logout_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/users/me:
+    get:
+      tags:
+      - auth
+      summary: Get Current User
+      description: Get current authenticated user's profile.
+      operationId: get_current_user_api_v1_users_me_get
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/users/me/username:
+    post:
+      tags:
+      - auth
+      summary: Setup Username
+      description: Set unique username after first login.
+      operationId: setup_username_api_v1_users_me_username_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsernameSetupRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/users/me/designs:
+    get:
+      tags:
+      - auth
+      summary: Get User Designs
+      description: List designs owned by the current user's personal namespace.
+      operationId: get_user_designs_api_v1_users_me_designs_get
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces:
+    get:
+      tags:
+      - namespaces
+      summary: List Namespaces
+      description: List public namespaces with optional name-prefix filter.
+      operationId: list_namespaces_api_v1_namespaces_get
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Q
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Per Page
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - namespaces
+      summary: Create Namespace
+      description: Create a new namespace. Requires authentication.
+      operationId: create_namespace_api_v1_namespaces_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NamespaceCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}:
+    get:
+      tags:
+      - namespaces
+      summary: Get Namespace
+      description: Get namespace info.
+      operationId: get_namespace_api_v1_namespaces__namespace__get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/verify:
+    post:
+      tags:
+      - namespaces
+      summary: Verify Namespace
+      description: Unlock a reserved namespace using a verification token.
+      operationId: verify_namespace_api_v1_namespaces__namespace__verify_post
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservedNamespaceVerifyRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/quota:
+    get:
+      tags:
+      - namespaces
+      summary: Get Quota
+      description: Return quota usage for a namespace.
+      operationId: get_quota_api_v1_namespaces__namespace__quota_get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - namespaces
+      summary: Update Quota
+      description: Update quota limits (platform:admin only).
+      operationId: update_quota_api_v1_namespaces__namespace__quota_patch
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuotaUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/members:
+    get:
+      summary: List Namespace Members
+      description: 'List all members of a namespace.
+
+
+        **Auth**: Required. User must be a namespace owner/admin or platform admin.
+
+
+        **Scope**: `ns:{namespace}:admin`'
+      operationId: list_namespace_members_api_v1_namespaces__namespace__members_get
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceMembersListResponse'
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      summary: Add Namespace Member
+      description: 'Add a member to a namespace.
+
+
+        **Auth**: Required. User must have admin access to the namespace.
+
+
+        **Scope**: `ns:{namespace}:admin`
+
+
+        **Errors**:
+
+        - 404: Namespace or user not found
+
+        - 409: Member already exists or sole owner constraint violated'
+      operationId: add_namespace_member_api_v1_namespaces__namespace__members_post
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceMemberResponse'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Bad Request
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Conflict
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/namespaces/{namespace}/members/{user_id}:
+    patch:
+      summary: Update Namespace Member Role
+      description: 'Update a namespace member''s role.
+
+
+        **Auth**: Required. User must be a namespace owner/admin or platform admin.
+
+
+        **Scope**: `ns:{namespace}:admin`
+
+
+        **Errors**:
+
+        - 404: Namespace or member not found
+
+        - 409: Cannot demote the sole owner'
+      operationId: update_namespace_member_role_api_v1_namespaces__namespace__members__user_id__patch
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: User Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRoleRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceMemberResponse'
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Bad Request
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Conflict
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      summary: Remove Namespace Member
+      description: 'Remove a member from a namespace.
+
+
+        **Auth**: Required. User must be a namespace owner/admin or platform admin.
+
+
+        **Scope**: `ns:{namespace}:admin`
+
+
+        **Errors**:
+
+        - 404: Namespace or member not found
+
+        - 409: Cannot remove the sole owner'
+      operationId: remove_namespace_member_api_v1_namespaces__namespace__members__user_id__delete
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: User Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '204':
+          description: Successful Response
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Conflict
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/users:
+    get:
+      tags:
+      - admin
+      summary: List Users
+      description: § 3.17 — List all users (admin only).
+      operationId: list_users_api_v1_admin_users_get
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Q
+      - name: suspended
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Suspended
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Per Page
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/users/{username}/suspend:
+    post:
+      tags:
+      - admin
+      summary: Suspend User
+      description: § 3.17 — Suspend a user account (idempotent).
+      operationId: suspend_user_api_v1_admin_users__username__suspend_post
+      parameters:
+      - name: username
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Username
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/SuspendRequest'
+              - type: 'null'
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuspendResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - admin
+      summary: Unsuspend User
+      description: § 3.17 — Lift a user account suspension (idempotent).
+      operationId: unsuspend_user_api_v1_admin_users__username__suspend_delete
+      parameters:
+      - name: username
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Username
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuspendResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/users/{username}:
+    delete:
+      tags:
+      - admin
+      summary: Delete User
+      description: § 3.17 — Delete a user account and associated tokens/memberships.
+      operationId: delete_user_api_v1_admin_users__username__delete
+      parameters:
+      - name: username
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Username
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/namespaces:
+    get:
+      tags:
+      - admin
+      summary: List Namespaces
+      description: § 3.17 — List all namespaces (admin only).
+      operationId: list_namespaces_api_v1_admin_namespaces_get
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Q
+      - name: sort
+        in: query
+        required: false
+        schema:
+          enum:
+          - name
+          - storage_used
+          - design_count
+          type: string
+          default: name
+          title: Sort
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Per Page
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminNamespaceListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/namespaces/{namespace}/quota:
+    patch:
+      tags:
+      - admin
+      summary: Override Namespace Quota
+      description: § 3.17 — Override quota for any namespace (null resets to default).
+      operationId: override_namespace_quota_api_v1_admin_namespaces__namespace__quota_patch
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuotaUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/storage:
+    get:
+      tags:
+      - admin
+      summary: Get Storage Overview
+      description: § 3.17 — Aggregate storage usage across all namespaces.
+      operationId: get_storage_overview_api_v1_admin_storage_get
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStorageOverview'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/namespaces/{namespace}/designs/{design}/versions/{version}/yank:
+    post:
+      tags:
+      - admin
+      summary: Operator Yank Version
+      description: Operator takedown yank — spec 2026-07-02-operator-moderation-design.md
+        §2.
+      operationId: operator_yank_version_api_v1_admin_namespaces__namespace__designs__design__versions__version__yank_post
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/YankRequest'
+              - type: 'null'
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/YankResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - admin
+      summary: Operator Unyank Version
+      description: Operator un-yank (reverses an operator takedown) — spec §2.
+      operationId: operator_unyank_version_api_v1_admin_namespaces__namespace__designs__design__versions__version__yank_delete
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: design
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Design
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/YankResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/namespaces/{namespace}/suspend:
+    post:
+      tags:
+      - admin
+      summary: Suspend Namespace
+      description: Operator namespace suspend (full-stop) — spec §2/§3.
+      operationId: suspend_namespace_api_v1_admin_namespaces__namespace__suspend_post
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/SuspendRequest'
+              - type: 'null'
+              title: Body
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceSuspendResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - admin
+      summary: Unsuspend Namespace
+      description: Operator namespace unsuspend (restores prior status) — spec §2.
+      operationId: unsuspend_namespace_api_v1_admin_namespaces__namespace__suspend_delete
+      parameters:
+      - name: namespace
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Namespace
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NamespaceSuspendResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/mirror/sync-log:
+    get:
+      tags:
+      - admin
+      summary: Get Mirror Sync Log
+      description: § 3.18 — List mirror sync history (admin only).
+      operationId: get_mirror_sync_log_api_v1_admin_mirror_sync_log_get
+      parameters:
+      - name: namespace
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by namespace
+          title: Namespace
+        description: Filter by namespace
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by status (success|failed|skipped)
+          title: Status
+        description: Filter by status (success|failed|skipped)
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+          title: Page
+      - name: per_page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Per Page
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MirrorSyncLogResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/admin/mirror/sync:
+    post:
+      tags:
+      - admin
+      summary: Trigger Mirror Sync
+      description: '§ 3.18 — Manually trigger a full upstream sync (admin only).
+
+
+        Runs synchronously; returns 200 OK on completion.'
+      operationId: trigger_mirror_sync_api_v1_admin_mirror_sync_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AddMemberRequest:
+      properties:
+        username:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Username
+        role:
+          $ref: '#/components/schemas/MemberRole'
+      type: object
+      required:
+      - username
+      - role
+      title: AddMemberRequest
+      description: Request model to add a new member to a namespace.
+    AdminNamespaceEntry:
+      properties:
+        name:
+          type: string
+          title: Name
+        display_name:
+          type: string
+          title: Display Name
+        status:
+          type: string
+          title: Status
+        is_verified:
+          type: boolean
+          title: Is Verified
+        design_count:
+          type: integer
+          title: Design Count
+        storage_used:
+          type: integer
+          title: Storage Used
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - name
+      - display_name
+      - status
+      - is_verified
+      - design_count
+      - storage_used
+      - created_at
+      title: AdminNamespaceEntry
+      description: Single namespace entry for admin namespace list.
+    AdminNamespaceListResponse:
+      properties:
+        namespaces:
+          items:
+            $ref: '#/components/schemas/AdminNamespaceEntry'
+          type: array
+          title: Namespaces
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        per_page:
+          type: integer
+          title: Per Page
+      type: object
+      required:
+      - namespaces
+      - total
+      - page
+      - per_page
+      title: AdminNamespaceListResponse
+      description: '``GET /api/v1/admin/namespaces`` response.'
+    AdminStorageOverview:
+      properties:
+        total_storage_used:
+          type: integer
+          title: Total Storage Used
+        total_storage_limit:
+          type: integer
+          title: Total Storage Limit
+        namespace_count:
+          type: integer
+          title: Namespace Count
+        top_namespaces:
+          items:
+            $ref: '#/components/schemas/AdminStorageTopEntry'
+          type: array
+          title: Top Namespaces
+      type: object
+      required:
+      - total_storage_used
+      - total_storage_limit
+      - namespace_count
+      - top_namespaces
+      title: AdminStorageOverview
+      description: '``GET /api/v1/admin/storage`` response.'
+    AdminStorageTopEntry:
+      properties:
+        namespace:
+          type: string
+          title: Namespace
+        storage_used:
+          type: integer
+          title: Storage Used
+      type: object
+      required:
+      - namespace
+      - storage_used
+      title: AdminStorageTopEntry
+      description: Top namespace by storage in admin storage overview.
+    AdminUserEntry:
+      properties:
+        id:
+          type: integer
+          title: Id
+        username:
+          type: string
+          title: Username
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        provider:
+          type: string
+          title: Provider
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        suspended:
+          type: boolean
+          title: Suspended
+        suspended_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Suspended At
+        suspension_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Suspension Reason
+      type: object
+      required:
+      - id
+      - username
+      - provider
+      - created_at
+      - suspended
+      title: AdminUserEntry
+      description: Single user entry for admin user list.
+    AdminUserListResponse:
+      properties:
+        users:
+          items:
+            $ref: '#/components/schemas/AdminUserEntry'
+          type: array
+          title: Users
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        per_page:
+          type: integer
+          title: Per Page
+      type: object
+      required:
+      - users
+      - total
+      - page
+      - per_page
+      title: AdminUserListResponse
+      description: '``GET /api/v1/admin/users`` response.'
+    ArtifactUploadItem:
+      properties:
+        filename:
+          type: string
+          maxLength: 255
+          minLength: 1
+          pattern: ^[^/\\]+$
+          title: Filename
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Sha256
+        size:
+          type: integer
+          minimum: 0.0
+          title: Size
+      additionalProperties: false
+      type: object
+      required:
+      - filename
+      - sha256
+      - size
+      title: ArtifactUploadItem
+      description: One artifact the client intends to upload directly to object storage.
+    ArtifactUploadRequest:
+      properties:
+        artifacts:
+          items:
+            $ref: '#/components/schemas/ArtifactUploadItem'
+          type: array
+          maxItems: 64
+          minItems: 1
+          title: Artifacts
+      additionalProperties: false
+      type: object
+      required:
+      - artifacts
+      title: ArtifactUploadRequest
+      description: '``POST .../designs/{design}/uploads`` request.'
+    ArtifactUploadResponse:
+      properties:
+        uploads:
+          items:
+            $ref: '#/components/schemas/ArtifactUploadTicket'
+          type: array
+          title: Uploads
+      type: object
+      required:
+      - uploads
+      title: ArtifactUploadResponse
+      description: '``POST .../designs/{design}/uploads`` response.'
+    ArtifactUploadTicket:
+      properties:
+        filename:
+          type: string
+          title: Filename
+        sha256:
+          type: string
+          title: Sha256
+        url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Url
+        headers:
+          additionalProperties:
+            type: string
+          type: object
+          title: Headers
+        expires_in:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Expires In
+      type: object
+      required:
+      - filename
+      - sha256
+      title: ArtifactUploadTicket
+      description: A presigned PUT for one artifact, or a note that it is already
+        stored.
+    BatchDeprecateRequest:
+      properties:
+        versions:
+          items:
+            type: string
+            pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          type: array
+          maxItems: 50
+          minItems: 1
+          title: Versions
+        deprecation_message:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Deprecation Message
+        successor:
+          anyOf:
+          - type: string
+            pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          - type: 'null'
+          title: Successor
+          description: Recommended successor version (semver string).
+      additionalProperties: false
+      type: object
+      required:
+      - versions
+      title: BatchDeprecateRequest
+      description: '``POST .../designs/{d}/batch-deprecate`` — bulk deprecate up to
+        50 versions.'
+    BatchDeprecateResponse:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        results:
+          items:
+            $ref: '#/components/schemas/BatchResultItem'
+          type: array
+          title: Results
+      type: object
+      required:
+      - name
+      - results
+      title: BatchDeprecateResponse
+      description: '``POST .../designs/{d}/batch-deprecate`` response.'
+    BatchResultItem:
+      properties:
+        version:
+          type: string
+          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          title: Version
+        status:
+          type: string
+          enum:
+          - yanked
+          - deprecated
+          - skipped
+          title: Status
+      type: object
+      required:
+      - version
+      - status
+      title: BatchResultItem
+      description: Result entry for a single version in a batch operation.
+    BatchYankRequest:
+      properties:
+        versions:
+          items:
+            type: string
+            pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          type: array
+          maxItems: 50
+          minItems: 1
+          title: Versions
+        reason:
+          type: string
+          maxLength: 500
+          title: Reason
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - versions
+      title: BatchYankRequest
+      description: '``POST .../designs/{d}/batch-yank`` — bulk yank up to 50 versions.'
+    BatchYankResponse:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        results:
+          items:
+            $ref: '#/components/schemas/BatchResultItem'
+          type: array
+          title: Results
+      type: object
+      required:
+      - name
+      - results
+      title: BatchYankResponse
+      description: '``POST .../designs/{d}/batch-yank`` response.'
+    ComponentHealth:
+      properties:
+        status:
+          type: string
+          enum:
+          - ok
+          - error
+          title: Status
+      type: object
+      required:
+      - status
+      title: ComponentHealth
+      description: Health status of a single infrastructure component.
+    DependenciesResponse:
+      properties:
+        root:
+          type: string
+          title: Root
+        platform:
+          type: string
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Platform
+        dependencies:
+          items:
+            $ref: '#/components/schemas/ResolvedDependency'
+          type: array
+          title: Dependencies
+      type: object
+      required:
+      - root
+      - platform
+      - dependencies
+      title: DependenciesResponse
+      description: '``GET .../dependencies`` — resolved dependency tree as flat list.'
+    DeprecateRequest:
+      properties:
+        deprecation_message:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Deprecation Message
+        successor:
+          anyOf:
+          - type: string
+            pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          - type: 'null'
+          title: Successor
+          description: Recommended successor version (semver string).
+      additionalProperties: false
+      type: object
+      title: DeprecateRequest
+      description: '``POST .../versions/{v}/deprecate`` — mark a version as deprecated.'
+    DeprecateResponse:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        version:
+          type: string
+          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          title: Version
+        deprecated:
+          type: boolean
+          title: Deprecated
+        deprecation_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Deprecation Message
+        successor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Successor
+      type: object
+      required:
+      - name
+      - version
+      - deprecated
+      title: DeprecateResponse
+      description: '``POST .../versions/{v}/deprecate`` response.'
+    DesignStatsResponse:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        total_downloads:
+          type: integer
+          minimum: 0.0
+          title: Total Downloads
+        period:
+          type: string
+          enum:
+          - daily
+          - weekly
+          - monthly
+          title: Period
+        series:
+          items:
+            $ref: '#/components/schemas/DownloadSeriesPoint'
+          type: array
+          title: Series
+      type: object
+      required:
+      - name
+      - total_downloads
+      - period
+      - series
+      title: DesignStatsResponse
+      description: '``GET .../designs/{design}/stats`` response.'
+    DesignSummary:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        latest_version:
+          type: string
+          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          title: Latest Version
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+        platforms:
+          items:
+            type: string
+            pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          type: array
+          title: Platforms
+        tags:
+          items:
+            type: string
+          type: array
+          title: Tags
+        bitstream_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Bitstream Type
+        updated_at:
+          type: string
+          format: date-time
+          title: Updated At
+        version_count:
+          type: integer
+          minimum: 0.0
+          title: Version Count
+          default: 0
+        download_count:
+          type: integer
+          minimum: 0.0
+          title: Download Count
+          default: 0
+      type: object
+      required:
+      - name
+      - latest_version
+      - platforms
+      - tags
+      - updated_at
+      title: DesignSummary
+      description: One row in search results / design listing.
+    DownloadSeriesPoint:
+      properties:
+        date:
+          type: string
+          format: date
+          title: Date
+        downloads:
+          type: integer
+          minimum: 0.0
+          title: Downloads
+      type: object
+      required:
+      - date
+      - downloads
+      title: DownloadSeriesPoint
+      description: One aggregated data point in a download series.
+    ErrorDetail:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - code
+      - message
+      title: ErrorDetail
+      description: Single error detail.
+    ErrorResponse:
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+      type: object
+      required:
+      - error
+      title: ErrorResponse
+      description: Uniform error response wrapper.
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          enum:
+          - ok
+          - degraded
+          title: Status
+        database:
+          $ref: '#/components/schemas/ComponentHealth'
+        storage:
+          $ref: '#/components/schemas/ComponentHealth'
+      type: object
+      required:
+      - status
+      - database
+      - storage
+      title: HealthResponse
+      description: Aggregated health response.
+    LicenseCheckResponse:
+      properties:
+        design:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Design
+        version:
+          type: string
+          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          title: Version
+        tool_requirements:
+          items:
+            $ref: '#/components/schemas/ToolRequirement'
+          type: array
+          title: Tool Requirements
+        check:
+          anyOf:
+          - $ref: '#/components/schemas/LicenseCheckResult'
+          - type: 'null'
+        disclaimer:
+          type: string
+          title: Disclaimer
+          default: FabricGate provides toolchain metadata only. License compliance
+            is the publisher's and user's responsibility.
+      type: object
+      required:
+      - design
+      - version
+      - tool_requirements
+      title: LicenseCheckResponse
+      description: '``GET .../versions/{version}/license-check``.'
+    LicenseCheckResult:
+      properties:
+        tool:
+          type: string
+          title: Tool
+        edition:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Edition
+        meets_requirements:
+          type: boolean
+          title: Meets Requirements
+        notes:
+          items:
+            type: string
+          type: array
+          title: Notes
+      type: object
+      required:
+      - tool
+      - meets_requirements
+      - notes
+      title: LicenseCheckResult
+      description: Result of tool/edition requirement check.
+    LivenessResponse:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+      type: object
+      required:
+      - status
+      title: LivenessResponse
+      description: Liveness probe response.
+    MemberRole:
+      type: string
+      enum:
+      - owner
+      - admin
+      - write
+      - read
+      title: MemberRole
+      description: Member roles - aligned with API token scopes.
+    MirrorSyncLogEntry:
+      properties:
+        id:
+          type: integer
+          title: Id
+        namespace:
+          type: string
+          title: Namespace
+        design_name:
+          type: string
+          title: Design Name
+        version:
+          type: string
+          title: Version
+        status:
+          type: string
+          title: Status
+        synced_at:
+          type: string
+          format: date-time
+          title: Synced At
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Message
+      type: object
+      required:
+      - id
+      - namespace
+      - design_name
+      - version
+      - status
+      - synced_at
+      title: MirrorSyncLogEntry
+      description: Single entry in the mirror sync log.
+    MirrorSyncLogResponse:
+      properties:
+        entries:
+          items:
+            $ref: '#/components/schemas/MirrorSyncLogEntry'
+          type: array
+          title: Entries
+        total:
+          type: integer
+          title: Total
+        page:
+          type: integer
+          title: Page
+        per_page:
+          type: integer
+          title: Per Page
+      type: object
+      required:
+      - entries
+      - total
+      - page
+      - per_page
+      title: MirrorSyncLogResponse
+      description: '``GET /api/v1/admin/mirror/sync-log`` response.'
+    NamespaceCreateRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 64
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        display_name:
+          type: string
+          maxLength: 128
+          title: Display Name
+        description:
+          type: string
+          maxLength: 500
+          title: Description
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - display_name
+      title: NamespaceCreateRequest
+      description: Create a new namespace.
+    NamespaceListResponse:
+      properties:
+        namespaces:
+          items:
+            $ref: '#/components/schemas/NamespaceResponse'
+          type: array
+          title: Namespaces
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+        page:
+          type: integer
+          minimum: 1.0
+          title: Page
+        per_page:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Per Page
+      type: object
+      required:
+      - namespaces
+      - total
+      - page
+      - per_page
+      title: NamespaceListResponse
+      description: Paginated namespace listing.
+    NamespaceMemberResponse:
+      properties:
+        user_id:
+          type: integer
+          title: User Id
+        username:
+          type: string
+          title: Username
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        role:
+          $ref: '#/components/schemas/MemberRole'
+        joined_at:
+          type: string
+          format: date-time
+          title: Joined At
+      type: object
+      required:
+      - user_id
+      - username
+      - role
+      - joined_at
+      title: NamespaceMemberResponse
+      description: Response model for a single namespace member.
+    NamespaceMembersListResponse:
+      properties:
+        members:
+          items:
+            $ref: '#/components/schemas/NamespaceMemberResponse'
+          type: array
+          title: Members
+        total:
+          type: integer
+          title: Total
+      type: object
+      required:
+      - members
+      - total
+      title: NamespaceMembersListResponse
+      description: Response model for namespace members list.
+    NamespacePeriodDownloads:
+      properties:
+        last_7d:
+          type: integer
+          minimum: 0.0
+          title: Last 7D
+        last_30d:
+          type: integer
+          minimum: 0.0
+          title: Last 30D
+      type: object
+      required:
+      - last_7d
+      - last_30d
+      title: NamespacePeriodDownloads
+      description: Rolling period counters in namespace statistics.
+    NamespaceResponse:
+      properties:
+        name:
+          type: string
+          title: Name
+        display_name:
+          type: string
+          title: Display Name
+        description:
+          type: string
+          title: Description
+        status:
+          type: string
+          enum:
+          - active
+          - reserved
+          - verified
+          - suspended
+          title: Status
+        is_verified:
+          type: boolean
+          title: Is Verified
+          default: false
+        reserved_until:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Reserved Until
+        sponsor_tier:
+          anyOf:
+          - type: string
+            enum:
+            - platinum
+            - gold
+            - silver
+          - type: 'null'
+          title: Sponsor Tier
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - name
+      - display_name
+      - description
+      - status
+      - created_at
+      title: NamespaceResponse
+      description: Namespace detail.
+    NamespaceStatsResponse:
+      properties:
+        namespace:
+          type: string
+          title: Namespace
+        total_downloads:
+          type: integer
+          minimum: 0.0
+          title: Total Downloads
+        top_designs:
+          items:
+            $ref: '#/components/schemas/NamespaceTopDesign'
+          type: array
+          title: Top Designs
+        period_downloads:
+          $ref: '#/components/schemas/NamespacePeriodDownloads'
+      type: object
+      required:
+      - namespace
+      - total_downloads
+      - top_designs
+      - period_downloads
+      title: NamespaceStatsResponse
+      description: '``GET /api/v1/namespaces/{namespace}/stats`` response.'
+    NamespaceSuspendResponse:
+      properties:
+        namespace:
+          type: string
+          title: Namespace
+        status:
+          type: string
+          title: Status
+        suspended:
+          type: boolean
+          title: Suspended
+      type: object
+      required:
+      - namespace
+      - status
+      - suspended
+      title: NamespaceSuspendResponse
+      description: '``POST/DELETE /api/v1/admin/namespaces/{namespace}/suspend`` response.'
+    NamespaceTopDesign:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        total_downloads:
+          type: integer
+          minimum: 0.0
+          title: Total Downloads
+      type: object
+      required:
+      - name
+      - total_downloads
+      title: NamespaceTopDesign
+      description: Top design entry in namespace statistics.
+    QuotaDesignsInfo:
+      properties:
+        used:
+          type: integer
+          minimum: 0.0
+          title: Used
+        limit:
+          type: integer
+          minimum: 0.0
+          title: Limit
+      type: object
+      required:
+      - used
+      - limit
+      title: QuotaDesignsInfo
+      description: Designs sub-object in QuotaResponse.
+    QuotaResponse:
+      properties:
+        namespace:
+          type: string
+          title: Namespace
+        storage:
+          $ref: '#/components/schemas/QuotaStorageInfo'
+        versions_per_design:
+          $ref: '#/components/schemas/QuotaVersionsInfo'
+        designs:
+          $ref: '#/components/schemas/QuotaDesignsInfo'
+        file_size_limit_bytes:
+          type: integer
+          minimum: 0.0
+          title: File Size Limit Bytes
+      type: object
+      required:
+      - namespace
+      - storage
+      - versions_per_design
+      - designs
+      - file_size_limit_bytes
+      title: QuotaResponse
+      description: '``GET /api/v1/namespaces/{ns}/quota`` response.'
+    QuotaStorageInfo:
+      properties:
+        used_bytes:
+          type: integer
+          minimum: 0.0
+          title: Used Bytes
+        limit_bytes:
+          type: integer
+          minimum: 0.0
+          title: Limit Bytes
+        used_percent:
+          type: number
+          minimum: 0.0
+          title: Used Percent
+      type: object
+      required:
+      - used_bytes
+      - limit_bytes
+      - used_percent
+      title: QuotaStorageInfo
+      description: Storage sub-object in QuotaResponse.
+    QuotaUpdateRequest:
+      properties:
+        storage_bytes_limit:
+          anyOf:
+          - type: integer
+            maximum: 10995116277760.0
+            minimum: 1.0
+          - type: 'null'
+          title: Storage Bytes Limit
+        versions_per_design_limit:
+          anyOf:
+          - type: integer
+            maximum: 100000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Versions Per Design Limit
+        designs_limit:
+          anyOf:
+          - type: integer
+            maximum: 100000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Designs Limit
+        file_size_limit:
+          anyOf:
+          - type: integer
+            maximum: 10995116277760.0
+            minimum: 1.0
+          - type: 'null'
+          title: File Size Limit
+      additionalProperties: false
+      type: object
+      title: QuotaUpdateRequest
+      description: '``PATCH /api/v1/namespaces/{ns}/quota`` — all fields optional.
+
+
+        A ``null`` value resets the field to the platform default.'
+    QuotaVersionsInfo:
+      properties:
+        limit:
+          type: integer
+          minimum: 0.0
+          title: Limit
+      type: object
+      required:
+      - limit
+      title: QuotaVersionsInfo
+      description: Versions-per-design sub-object in QuotaResponse.
+    RegistryStatsResponse:
+      properties:
+        total_designs:
+          type: integer
+          minimum: 0.0
+          title: Total Designs
+        total_namespaces:
+          type: integer
+          minimum: 0.0
+          title: Total Namespaces
+        total_versions:
+          type: integer
+          minimum: 0.0
+          title: Total Versions
+        total_platforms:
+          type: integer
+          minimum: 0.0
+          title: Total Platforms
+      type: object
+      required:
+      - total_designs
+      - total_namespaces
+      - total_versions
+      - total_platforms
+      title: RegistryStatsResponse
+      description: '``GET /api/v1/stats`` — aggregate registry statistics.'
+    ReservedNamespaceVerifyRequest:
+      properties:
+        token:
+          type: string
+          maxLength: 256
+          minLength: 16
+          title: Token
+      additionalProperties: false
+      type: object
+      required:
+      - token
+      title: ReservedNamespaceVerifyRequest
+      description: Verification token input for reserved namespace unlock.
+    ResolvedDependency:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        resolved_version:
+          type: string
+          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          title: Resolved Version
+        platform:
+          type: string
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Platform
+        optional:
+          type: boolean
+          title: Optional
+        depth:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Depth
+        required_by:
+          type: string
+          maxLength: 256
+          title: Required By
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - resolved_version
+      - platform
+      - optional
+      - depth
+      - required_by
+      title: ResolvedDependency
+      description: Resolved dependency entry (API response / SDK internal).
+    SearchResponse:
+      properties:
+        designs:
+          items:
+            $ref: '#/components/schemas/DesignSummary'
+          type: array
+          title: Designs
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+        page:
+          type: integer
+          minimum: 1.0
+          title: Page
+        per_page:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Per Page
+      type: object
+      required:
+      - designs
+      - total
+      - page
+      - per_page
+      title: SearchResponse
+      description: '``GET /api/v1/designs`` response.'
+    ShellArtifactInfo:
+      properties:
+        file:
+          type: string
+          title: File
+        sha256:
+          type: string
+          title: Sha256
+        size:
+          type: integer
+          title: Size
+      type: object
+      required:
+      - file
+      - sha256
+      - size
+      title: ShellArtifactInfo
+      description: Single artifact from the referenced static shell.
+    ShellInfo:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        version:
+          type: string
+          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          title: Version
+        board:
+          type: string
+          title: Board
+        device_family:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device Family
+        runtime:
+          type: string
+          title: Runtime
+        bitstream_type:
+          type: string
+          title: Bitstream Type
+        artifacts:
+          items:
+            $ref: '#/components/schemas/ShellArtifactInfo'
+          type: array
+          title: Artifacts
+        pull_url:
+          type: string
+          title: Pull Url
+      type: object
+      required:
+      - name
+      - version
+      - board
+      - runtime
+      - bitstream_type
+      - artifacts
+      - pull_url
+      title: ShellInfo
+      description: Static shell design resolved from ``shell_dependency``.
+    ShellResponse:
+      properties:
+        shell:
+          $ref: '#/components/schemas/ShellInfo'
+      type: object
+      required:
+      - shell
+      title: ShellResponse
+      description: '``GET .../platforms/{device}/{runtime}/shell``.'
+    SuspendRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          title: Reason
+          default: ''
+      additionalProperties: false
+      type: object
+      title: SuspendRequest
+      description: '``POST /api/v1/admin/users/{username}/suspend`` request.'
+    SuspendResponse:
+      properties:
+        username:
+          type: string
+          title: Username
+        suspended:
+          type: boolean
+          title: Suspended
+        suspended_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Suspended At
+        suspension_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Suspension Reason
+      type: object
+      required:
+      - username
+      - suspended
+      title: SuspendResponse
+      description: '``POST /api/v1/admin/users/{username}/suspend`` response.'
+    ToolRequirement:
+      properties:
+        tool:
+          type: string
+          maxLength: 64
+          pattern: ^[a-z][a-z0-9-]*$
+          title: Tool
+        min_version:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Min Version
+        edition:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Edition
+        required:
+          type: boolean
+          title: Required
+          default: true
+        note:
+          anyOf:
+          - type: string
+            maxLength: 256
+          - type: 'null'
+          title: Note
+      additionalProperties: false
+      type: object
+      required:
+      - tool
+      title: ToolRequirement
+      description: Tool requirement metadata (informational).
+    UpdateMemberRoleRequest:
+      properties:
+        role:
+          $ref: '#/components/schemas/MemberRole'
+      type: object
+      required:
+      - role
+      title: UpdateMemberRoleRequest
+      description: Request model to update a member's role.
+    UsernameSetupRequest:
+      properties:
+        username:
+          type: string
+          maxLength: 64
+          minLength: 3
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Username
+      additionalProperties: false
+      type: object
+      required:
+      - username
+      title: UsernameSetupRequest
+      description: First-login username setup request.
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    VersionDiffField:
+      properties:
+        field:
+          type: string
+          title: Field
+        base:
+          title: Base
+        head:
+          title: Head
+      type: object
+      required:
+      - field
+      title: VersionDiffField
+      description: Single field difference for a shared platform.
+    VersionDiffPlatform:
+      properties:
+        platform:
+          type: string
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Platform
+        fields:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/VersionDiffField'
+            type: array
+          - type: string
+            enum:
+            - added
+            - removed
+          title: Fields
+      type: object
+      required:
+      - platform
+      - fields
+      title: VersionDiffPlatform
+      description: Difference entry for one platform.
+    VersionDiffResponse:
+      properties:
+        base:
+          type: string
+          title: Base
+        head:
+          type: string
+          title: Head
+        summary:
+          $ref: '#/components/schemas/VersionDiffSummary'
+        diff:
+          items:
+            $ref: '#/components/schemas/VersionDiffPlatform'
+          type: array
+          title: Diff
+      type: object
+      required:
+      - base
+      - head
+      - summary
+      - diff
+      title: VersionDiffResponse
+      description: '``GET .../versions/{version}/diff`` response.'
+    VersionDiffSummary:
+      properties:
+        platforms_added:
+          items:
+            type: string
+            pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          type: array
+          title: Platforms Added
+        platforms_removed:
+          items:
+            type: string
+            pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          type: array
+          title: Platforms Removed
+        platforms_changed:
+          items:
+            type: string
+            pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          type: array
+          title: Platforms Changed
+      type: object
+      title: VersionDiffSummary
+      description: Summary of platform-level changes between two versions.
+    VersionStatsResponse:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        version:
+          type: string
+          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          title: Version
+        total_downloads:
+          type: integer
+          minimum: 0.0
+          title: Total Downloads
+        period:
+          type: string
+          enum:
+          - daily
+          - weekly
+          - monthly
+          title: Period
+        series:
+          items:
+            $ref: '#/components/schemas/DownloadSeriesPoint'
+          type: array
+          title: Series
+      type: object
+      required:
+      - name
+      - version
+      - total_downloads
+      - period
+      - series
+      title: VersionStatsResponse
+      description: '``GET .../versions/{version}/stats`` response.'
+    YankRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          title: Reason
+          default: ''
+      additionalProperties: false
+      type: object
+      title: YankRequest
+      description: Soft-delete (yank) a version.
+    YankResponse:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$
+          title: Name
+        version:
+          type: string
+          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          title: Version
+        yanked:
+          type: boolean
+          title: Yanked
+          default: true
+        yanked_reason:
+          type: string
+          title: Yanked Reason
+        yanked_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Yanked By
+      type: object
+      required:
+      - name
+      - version
+      - yanked_reason
+      title: YankResponse
+      description: '``DELETE .../versions/{v}`` response.'
