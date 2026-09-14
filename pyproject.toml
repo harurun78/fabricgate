@@ -76,6 +76,11 @@ select = ["E", "W", "F", "I", "B", "UP", "RUF"]
 
 [tool.mypy]
 python_version = "3.11"
+# `fabricgate` is a namespace package (no __init__.py): tell mypy where the
+# package root is so `fabricgate.cli` etc. resolve.
+mypy_path = "src"
+namespace_packages = true
+explicit_package_bases = true
 strict = true
 warn_return_any = true
 warn_unused_configs = true

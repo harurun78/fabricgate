@@ -63,3 +63,19 @@ def test_pyproject_has_no_server_dependencies():
     data = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     names = {re.split(r"[<>=!~\[ ]", d, maxsplit=1)[0].lower() for d in data["project"]["dependencies"]}
     assert names.isdisjoint({"fastapi", "uvicorn", "sqlalchemy", "alembic", "psycopg2-binary", "boto3"})
+
+
+def test_fabricgate_is_a_namespace_package():
+    """`fabricgate` must stay a PEP 420 namespace package (no __init__.py).
+
+    The private registry distribution installs `fabricgate.registry` next to
+    this package; a regular package here would shadow it.
+    """
+    assert not (_REPO_ROOT / "src" / "fabricgate" / "__init__.py").exists()
+    assert (_REPO_ROOT / "src" / "fabricgate" / "_version.py").exists()
+
+
+def test_version_module_matches_pyproject():
+    pyproject = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    module = (_REPO_ROOT / "src" / "fabricgate" / "_version.py").read_text(encoding="utf-8")
+    assert re.search(r'__version__ = "([^"]+)"', module).group(1) == pyproject

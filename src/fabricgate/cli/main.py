@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from fabricgate import __version__
+from fabricgate._version import __version__
 from fabricgate.cli.commands.build import build_cmd
 from fabricgate.cli.commands.deprecate import deprecate_cmd
 from fabricgate.cli.commands.diff import diff_cmd
