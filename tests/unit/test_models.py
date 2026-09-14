@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from fabricgate import __version__
+from fabricgate._version import __version__
 from fabricgate.models.cli import (
     CacheEntry,
     CacheIndex,
