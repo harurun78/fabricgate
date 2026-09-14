@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: ".python-version"
-      - run: uv sync --frozen --all-extras
+      - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy src
@@ -38,13 +38,18 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
+    env:
+      # Overrides .python-version so both uv sync and uv run use the matrix
+      # interpreter; otherwise uv run re-creates the venv with 3.11 and drops
+      # the dev group.
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --frozen --all-extras --python ${{ matrix.python-version }}
+      - run: uv sync --frozen
       - run: uv run pytest -q --cov=fabricgate --cov-report=term-missing
 
   build:
@@ -75,7 +80,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - run: uv sync --frozen --all-extras
+      - run: uv sync --frozen
       - run: uv run pip-audit
 
   ci-success:

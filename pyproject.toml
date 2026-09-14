@@ -41,7 +41,7 @@ Source = "https://github.com/harurun78/fabricgate"
 Issues = "https://github.com/harurun78/fabricgate/issues"
 Changelog = "https://github.com/harurun78/fabricgate/blob/master/docs/contracts/CHANGELOG.md"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "pytest>=8.0",
   "pytest-cov>=6.0",

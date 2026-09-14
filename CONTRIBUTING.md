@@ -7,7 +7,7 @@ Thanks for your interest. This repository holds the public client side of Fabric
 ```sh
 git clone https://github.com/harurun78/fabricgate.git
 cd fabricgate
-uv sync --all-extras          # https://docs.astral.sh/uv/
+uv sync                       # https://docs.astral.sh/uv/  (installs the dev group too)
 uv run fabricgate --help
 ```
 
