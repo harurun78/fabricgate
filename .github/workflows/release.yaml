@@ -60,6 +60,19 @@ jobs:
             exit 1
           fi
 
+      - name: Use a unique dev version for TestPyPI dry-runs
+        # TestPyPI never lets a deleted filename be reused, so every dry-run
+        # publishes <version>.dev<run_number>. Tag pushes keep the real version.
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          BASE=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          DEV="${BASE}.dev${GITHUB_RUN_NUMBER}"
+          uv version --frozen "$DEV"
+          sed -i "s/^__version__ = \".*\"$/__version__ = \"${DEV}\"/" src/fabricgate/_version.py
+          grep -q "\"${DEV}\"" src/fabricgate/_version.py
+          echo "dry-run version: ${DEV}"
+
       - name: Build
         run: uv build
 
