@@ -1,5 +1,7 @@
 # FabricGate
 
+[![PyPI](https://img.shields.io/pypi/v/fabricgate.svg)](https://pypi.org/project/fabricgate/)
+[![Python](https://img.shields.io/pypi/pyversions/fabricgate.svg)](https://pypi.org/project/fabricgate/)
 [![CI](https://github.com/harurun78/fabricgate/actions/workflows/ci.yaml/badge.svg)](https://github.com/harurun78/fabricgate/actions/workflows/ci.yaml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -7,7 +9,7 @@
 
 FabricGate is a package registry for FPGA designs (bitstreams plus the metadata a runtime needs to load them). This repository contains the client side: the `fabricgate` CLI, the Python SDK, the shared data models, and the public API contracts. The hosted registry lives at `https://registry.fabricgate.dev`.
 
-> **Status: alpha.** The registry is being seeded with community PYNQ overlays. Interfaces marked *stable* in `docs/specs/` are kept backward compatible; everything else may still change before 1.0.
+> **Status: alpha (0.1.0).** The registry is being seeded with community PYNQ overlays. Interfaces marked *stable* in `docs/specs/` are kept backward compatible; everything else may still change before 1.0.
 
 ## Install
 
@@ -86,3 +88,12 @@ The registry server is operated as a hosted service and its implementation is no
 - [CONTRIBUTING.md](CONTRIBUTING.md) — development setup, tests, pull requests
 - [SECURITY.md](SECURITY.md) — how to report a vulnerability
 - [LICENSE](LICENSE) — MIT
+
+## Verifying what you install
+
+Every release is published from this repository via PyPI Trusted Publishing and carries a GitHub build-provenance attestation:
+
+```sh
+pip download --no-deps fabricgate==0.1.0
+gh attestation verify fabricgate-0.1.0-py3-none-any.whl --repo harurun78/fabricgate
+```
