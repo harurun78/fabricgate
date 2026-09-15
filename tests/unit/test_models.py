@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -46,8 +47,10 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 # ---------------------------------------------------------------------------
 
 
-def test_version():
-    assert __version__ == "0.1.0"
+def test_version_is_a_release_version():
+    # The literal lives in pyproject.toml; test_release_hygiene.py asserts the two
+    # agree. Pinning the number here too would just break on every bump.
+    assert re.fullmatch(r"\d+\.\d+\.\d+(\.dev\d+)?", __version__), __version__
 
 
 # ---------------------------------------------------------------------------

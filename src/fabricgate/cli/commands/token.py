@@ -10,7 +10,11 @@ from fabricgate.cli.exit_codes import exit_code_for
 from fabricgate.sdk import api as sdk_api
 
 
-@click.group(name="token")
+# Hidden until the registry implements the API keys endpoints: the hosted
+# service answers 404 for every call these subcommands make, so the group is
+# kept out of `--help` rather than advertising a surface that cannot work.
+# See https://github.com/harurun78/fabricgate/issues/6
+@click.group(name="token", hidden=True)
 @click.pass_obj
 def token_group(obj: dict[str, object]) -> None:
     """Manage API keys for CI/CD and automation."""

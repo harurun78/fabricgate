@@ -670,6 +670,10 @@ fabricgate/blink           1.0.0     zcu104/pynq +1         2026-03-17
 ---
 
 ### 3.8 `fabricgate token`
+> **Not available yet.** The hosted registry does not implement these endpoints, so this
+> command group is hidden from `--help` and any call returns 404. Tracked in
+> [issue #6](https://github.com/harurun78/fabricgate/issues/6).
+
 
 API キー（machine token）の管理コマンド。CI/CD や自動化スクリプト向けの長期資格情報を作成・一覧・失効できる。
 
@@ -861,6 +865,10 @@ New shell version found: community/zcu104-shell:1.3.0
 ---
 
 ### 3.9 `fabricgate webhook`
+> **Not available yet.** The hosted registry does not implement these endpoints, so this
+> command group is hidden from `--help` and any call returns 404. Tracked in
+> [issue #6](https://github.com/harurun78/fabricgate/issues/6).
+
 
 Webhook（HTTP 通知）の管理コマンド。ネームスペース管理者が利用する。
 
