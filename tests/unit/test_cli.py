@@ -2820,3 +2820,25 @@ def test_exit_code_table_covers_every_failure_kind() -> None:
     assert EXIT_CODE[FailureKind.PERMISSION] == 2
     assert EXIT_CODE[FailureKind.UNRESOLVABLE] == 5
     assert EXIT_CODE[FailureKind.SHELL_NOT_FOUND] == 6
+
+
+class TestUnsupportedCommandsAreHidden:
+    """token / webhook call registry endpoints that do not exist yet (issue #6).
+
+    They stay importable so the implementation is not lost, but they must not
+    appear in `--help`, where they would advertise a surface that 404s.
+    """
+
+    def test_hidden_from_help(self):
+        result = CliRunner().invoke(main, ["--help"])
+        assert result.exit_code == 0, result.output
+        assert "token" not in result.output
+        assert "webhook" not in result.output
+
+    def test_still_registered(self):
+        from fabricgate.cli.commands.token import token_group
+        from fabricgate.cli.commands.webhook import webhook_group
+
+        assert token_group.hidden is True
+        assert webhook_group.hidden is True
+        assert {"token", "webhook"} <= set(main.commands)

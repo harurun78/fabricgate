@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fabricgate"
-version = "0.1.0"
+version = "0.1.1"
 description = "FabricGate CLI/SDK — discover, pull and verify FPGA designs across boards and runtimes"
 readme = "README.md"
 requires-python = ">=3.11"
