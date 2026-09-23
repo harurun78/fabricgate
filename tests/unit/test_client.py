@@ -282,6 +282,25 @@ class TestFamilyFallbackResolution:
         with pytest.raises(resolver.ResolutionError, match="not found"):
             resolver.resolve_platform_detailed(idx, "pynq-z2/pynq")  # no generic-xc7z020 entry
 
+    @pytest.mark.parametrize(
+        ("board_id", "generic"),
+        [
+            ("pynq-z1", "generic-xc7z020"),
+            ("zcu111", "generic-xczu28dr"),
+            ("rfsoc2x2", "generic-xczu28dr"),
+            ("rfsoc4x2", "generic-xczu48dr"),
+        ],
+    )
+    def test_pynq_curation_boards_are_known(self, board_id: str, generic: str) -> None:
+        """Boards added for the PYNQ overlay index resolve exactly and via family fallback
+        instead of failing as an unregistered board."""
+        exact = f"{board_id}/pynq"
+        idx = self._index_with(exact, f"{generic}/pynq")
+        assert resolver.resolve_platform_detailed(idx, exact).fallback_from is None
+        res = resolver.resolve_platform_detailed(self._index_with(f"{generic}/pynq"), exact)
+        assert res.entry.platform == f"{generic}/pynq"
+        assert res.fallback_from == exact
+
     def test_runtime_is_preserved_in_fallback(self) -> None:
         idx = self._index_with("generic-xc7z020/pynq", "generic-xc7z020/linux-fpgamgr")
         res = resolver.resolve_platform_detailed(idx, "pynq-z2/linux-fpgamgr")

@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 from jsonschema import Draft202012Validator
 
@@ -83,6 +84,33 @@ def test_platform_manifest_accepts_reference_shell_pair() -> None:
 
 def test_board_db_accepts_bundled_official() -> None:
     Draft202012Validator(_schema("board-db.schema.json")).validate(_bundled_board_db())
+
+
+@pytest.mark.parametrize(
+    ("board_id", "boardpart", "device", "device_family"),
+    [
+        ("zcu104", "xilinx.com:zcu104:part0:1.1", "xczu7ev-ffvc1156-2-e", "xczu7ev"),
+        ("pynq-z2", "tul.com.tw:pynq-z2:part0:1.0", "xc7z020clg400-1", "xc7z020"),
+        ("pynq-z1", "www.digilentinc.com:pynq-z1:part0:1.0", "xc7z020clg400-1", "xc7z020"),
+        ("zcu111", "xilinx.com:zcu111:part0:1.4", "xczu28dr-ffvg1517-2-e", "xczu28dr"),
+        ("rfsoc2x2", "xilinx.com:rfsoc2x2:part0:1.1", "xczu28dr-ffvg1517-2-e", "xczu28dr"),
+        ("rfsoc4x2", "realdigital.org:rfsoc4x2:part0:1.0", "xczu48dr-ffvg1517-2-e", "xczu48dr"),
+    ],
+)
+def test_bundled_official_pynq_boards_resolve_both_ways(
+    board_id: str, boardpart: str, device: str, device_family: str
+) -> None:
+    """Every PYNQ board ships with a unique boardpart so `.hwh` reverse lookup and
+    `pull --platform {board_id}/pynq` agree on the same entry."""
+    from fabricgate.models.board_db import BoardDb, BoardDbFile
+
+    db = BoardDb(BoardDbFile.model_validate(_bundled_board_db()).boards)  # raises on duplicate boardpart
+    entry = db.lookup(board_id)
+    assert entry is not None
+    assert entry.pynq_supported is True
+    assert entry.device == device
+    assert entry.device_family == device_family
+    assert db.lookup_by_boardpart(boardpart) is entry
 
 
 # --- corrupted fixtures are rejected -------------------------------------

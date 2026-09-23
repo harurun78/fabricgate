@@ -153,7 +153,7 @@ CLI が `board_id` を解決する順序:
 
 `BOARDPART` から `board_id` を解決する手順:
 
-1. `official.yaml` + `custom.yaml` を走査し、`boardpart` フィールドが一致するエントリを返す
+1. `official.yaml` + `custom.yaml` を走査し、`boardpart` フィールドが完全一致するエントリを返す。なければ末尾の board file version を無視した `vendor:name:part` で一意に一致するエントリを返す(複数一致は曖昧として不一致扱い)
 2. 一致なし → デバイスパートから `device_family` と `package` を抽出し、`custom-{device_family}-{package}` を構築
 3. `device_family` も判定できない場合 → ユーザーに手動入力を要求
 

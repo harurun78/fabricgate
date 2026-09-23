@@ -51,6 +51,100 @@ boards:
         count: 1
         source: vivado-boardstore
 
+  - board_id: pynq-z1
+    display_name: Digilent PYNQ-Z1
+    vendor: digilent
+    # Source: Digilent board files pynq-z1/1.0/board.xml
+    #   (vendor="www.digilentinc.com" name="PYNQ-Z1", part0 part_name="xc7z020clg400-1";
+    #   Vivado normalizes the board name to lower case in the BOARD_PART string)
+    #   https://github.com/cathalmccabe/pynq-z1_board_files/blob/master/pynq-z1/1.0/board.xml
+    # Same device as PYNQ-Z2 but a different board part / pin-out; the PYNQ base
+    # overlay is built with `-part xc7z020clg400-1` only
+    #   https://github.com/Xilinx/PYNQ/blob/master/boards/Pynq-Z1/base/base.tcl
+    boardpart: "www.digilentinc.com:pynq-z1:part0:1.0"
+    device: xc7z020clg400-1
+    device_family: xc7z020
+    pynq_supported: true
+    interfaces:
+      - type: pmod
+        count: 2
+        source: manual # board.xml: ja / jb (digilentinc.com:interface:pmod_rtl)
+      - type: i2c
+        direction: inout
+        count: 1
+        source: manual # board.xml: i2c (xilinx.com:interface:iic_rtl)
+      - type: spi
+        direction: inout
+        count: 1
+        source: manual # board.xml: spi (xilinx.com:interface:spi_rtl)
+
+  # -------------------------------------------------------------------------
+  # Xilinx / AMD RFSoC (Zynq UltraScale+ RFSoC)
+  # -------------------------------------------------------------------------
+  - board_id: zcu111
+    display_name: Xilinx ZCU111 RFSoC Evaluation Kit
+    vendor: xilinx
+    # Source: Xilinx Board Store boards/Xilinx/zcu111/1.4/board.xml (branch 2024.1)
+    #   (vendor="xilinx.com" name="zcu111", part0 part_name="xczu28dr-ffvg1517-2-e")
+    #   https://github.com/Xilinx/XilinxBoardStore/blob/2024.1/boards/Xilinx/zcu111/1.4/board.xml
+    # 1.4 is the newest board file; PYNQ-era projects also use 1.1 / 1.2 (DSP-PYNQ pins 1.1).
+    # The .hwh reverse lookup ignores the trailing board file version when there is no
+    # exact match, so 1.1 / 1.2 / 1.3 HWH files resolve here too; pull resolves by board_id.
+    boardpart: "xilinx.com:zcu111:part0:1.4"
+    device: xczu28dr-ffvg1517-2-e
+    device_family: xczu28dr
+    pynq_supported: true
+    interfaces:
+      - type: uart
+        direction: inout
+        count: 1
+        source: vivado-boardstore # uart2_pl
+      - type: i2c
+        direction: inout
+        count: 2
+        source: vivado-boardstore # iic0_pl / iic1_pl
+      - type: sfp
+        direction: inout
+        count: 4
+        source: vivado-boardstore # sfp0_1x .. sfp3_1x (gt_rtl)
+
+  - board_id: rfsoc2x2
+    display_name: Xilinx RFSoC 2x2 Development Board
+    vendor: xilinx
+    # Source: Xilinx board file rfsoc2x2/1.1/board.xml (distributed via the Vivado
+    #   board store xhub, not on GitHub; copy at
+    #   https://github.com/ali-rasteh/rfsoc-sdr/blob/main/vivado/rfsoc_board_files/rfsoc2x2/1.1/board.xml)
+    #   (vendor="xilinx.com" name="rfsoc2x2", part0 part_name="xczu28dr-ffvg1517-2-e")
+    # BOARD_PART string confirmed in the PYNQ team's DSP-PYNQ project script
+    #   https://github.com/Xilinx/DSP-PYNQ/blob/master/boards/RFSoC2x2/create_project.tcl
+    #   and the device in the PYNQ base overlay
+    #   https://github.com/Xilinx/RFSoC2x2-PYNQ/blob/master/board/RFSoC2x2/base/base.tcl
+    boardpart: "xilinx.com:rfsoc2x2:part0:1.1"
+    device: xczu28dr-ffvg1517-2-e
+    device_family: xczu28dr
+    pynq_supported: true
+    interfaces:
+      - type: pmod
+        count: 2
+        source: manual # board.xml: pmod0 / pmod1 (gpio_rtl)
+
+  - board_id: rfsoc4x2
+    display_name: RealDigital RFSoC 4x2 Development Board
+    vendor: realdigital
+    # Source: RealDigital board files board_files/rfsoc4x2/1.0/board.xml
+    #   (vendor="realdigital.org" name="rfsoc4x2", part0 part_name="xczu48dr-ffvg1517-2-e")
+    #   https://github.com/RealDigitalOrg/RFSoC4x2-BSP/blob/master/board_files/rfsoc4x2/1.0/board.xml
+    # BOARD_PART / part confirmed in the PYNQ base overlay
+    #   https://github.com/Xilinx/RFSoC-PYNQ/blob/master/boards/RFSoC4x2/base/base.tcl
+    boardpart: "realdigital.org:rfsoc4x2:part0:1.0"
+    device: xczu48dr-ffvg1517-2-e
+    device_family: xczu48dr
+    pynq_supported: true
+    interfaces:
+      - type: pmod
+        count: 3
+        source: manual # board.xml: pmod0 / pmod1 / pmod01 (gpio_rtl)
+
   # -------------------------------------------------------------------------
   # Lattice iCE40 + RP2040
   # -------------------------------------------------------------------------
