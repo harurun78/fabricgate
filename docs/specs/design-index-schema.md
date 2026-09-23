@@ -133,7 +133,7 @@ Known board_id values (the bundled `official.yaml`, see `board-db-schema.md`):
 | `pynq-z1` | PYNQ-Z1 | xc7z020clg400-1 |
 | `pico-ice` | pico-ice | ice40up5k-sg48 |
 | `generic-xczu7ev` | (virtual) | xczu7ev（任意パッケージ）|
-| `custom-xczu7ev-ffvc1156` | (virtual) | xczu7ev-ffvc1156 |
+| `generic-xc7z020` | (virtual) | xc7z020（任意パッケージ）|
 
 Known runtime values: `pynq`, `linux-fpgamgr`, `nanopynq`
 

@@ -129,6 +129,11 @@ def _parse_db_file(path: Path) -> list[BoardEntry]:
 # ---------------------------------------------------------------------------
 
 
+def _strip_boardpart_version(boardpart: str) -> str:
+    """``vendor:name:part:version`` から末尾の version を落とす."""
+    return boardpart.rsplit(":", 1)[0]
+
+
 class BoardDb:
     """Board DB resolver.
 
@@ -198,11 +203,19 @@ class BoardDb:
         return None
 
     def lookup_by_boardpart(self, boardpart: str) -> BoardEntry | None:
-        """Vivado BOARDPART 属性からエントリを検索する."""
+        """Vivado BOARDPART 属性からエントリを検索する.
+
+        完全一致を優先し、なければ末尾の board file version を無視した
+        ``vendor:name:part`` で一意に一致するエントリを返す
+        (``xilinx.com:zcu111:part0:1.2`` → ``...:1.4`` の登録に解決)。
+        候補が複数なら曖昧として ``None``.
+        """
         for board in self._boards:
             if board.boardpart == boardpart:
                 return board
-        return None
+        key = _strip_boardpart_version(boardpart)
+        candidates = [b for b in self._boards if b.boardpart and _strip_boardpart_version(b.boardpart) == key]
+        return candidates[0] if len(candidates) == 1 else None
 
     @property
     def boards(self) -> list[BoardEntry]:

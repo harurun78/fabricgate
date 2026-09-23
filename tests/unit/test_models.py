@@ -2249,6 +2249,33 @@ boards:
         db = BoardDb.load(official_path=official_yaml, custom_path=tmp_path / "nope.yaml")
         assert db.lookup_by_boardpart("unknown:boardpart:99") is None
 
+    def test_lookup_by_boardpart_other_board_file_version(self, official_yaml, tmp_path):
+        """A different board file version resolves to the same board (exact match first)."""
+        from fabricgate.models.board_db import BoardDb
+
+        db = BoardDb.load(official_path=official_yaml, custom_path=tmp_path / "nope.yaml")
+        entry = db.lookup_by_boardpart("xilinx.com:zcu104:part0:1.2")
+        assert entry is not None
+        assert entry.board_id == "zcu104"
+
+    def test_lookup_by_boardpart_ambiguous_version_returns_none(self, official_yaml, tmp_path):
+        """Two entries differing only by version: exact match wins, other versions are ambiguous."""
+        from fabricgate.models.board_db import BoardDb
+
+        custom = tmp_path / "custom.yaml"
+        custom.write_text(
+            "version: fabricgate-boarddb/v1\n"
+            "boards:\n"
+            "  - board_id: zcu104-rev-a\n"
+            "    display_name: ZCU104 old board file\n"
+            "    boardpart: 'xilinx.com:zcu104:part0:1.0'\n"
+            "    device_family: xczu7ev\n"
+        )
+        db = BoardDb.load(official_path=official_yaml, custom_path=custom)
+        assert db.lookup_by_boardpart("xilinx.com:zcu104:part0:1.0").board_id == "zcu104-rev-a"
+        assert db.lookup_by_boardpart("xilinx.com:zcu104:part0:1.1").board_id == "zcu104"
+        assert db.lookup_by_boardpart("xilinx.com:zcu104:part0:1.2") is None
+
     def test_boards_property_returns_copy(self, official_yaml, tmp_path):
         from fabricgate.models.board_db import BoardDb
 
