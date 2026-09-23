@@ -121,13 +121,16 @@ runtime:  ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
 
 `generic-*` は同一 device_family を持つすべてのボードで自動マッチする。`custom-*` は同一 ID の完全一致のみマッチ。
 
-Known board_id examples (non-exhaustive):
+Known board_id values (the bundled `official.yaml`, see `board-db-schema.md`):
 
 | board_id | Board | device |
 |----------|-------|--------|
 | `zcu104` | ZCU104 | xczu7ev-ffvc1156-2-e |
-| `pynq-z2` | PYNQ-Z2 | xc7z020-clg400-1 |
-| `arty-a7-35` | Arty A7-35T | xc7a35t-csg324-1 |
+| `zcu111` | ZCU111 RFSoC | xczu28dr-ffvg1517-2-e |
+| `rfsoc2x2` | RFSoC 2x2 | xczu28dr-ffvg1517-2-e |
+| `rfsoc4x2` | RFSoC 4x2 | xczu48dr-ffvg1517-2-e |
+| `pynq-z2` | PYNQ-Z2 | xc7z020clg400-1 |
+| `pynq-z1` | PYNQ-Z1 | xc7z020clg400-1 |
 | `pico-ice` | pico-ice | ice40up5k-sg48 |
 | `generic-xczu7ev` | (virtual) | xczu7ev（任意パッケージ）|
 | `custom-xczu7ev-ffvc1156` | (virtual) | xczu7ev-ffvc1156 |
