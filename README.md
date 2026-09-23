@@ -51,8 +51,10 @@ The bundled Board DB (`src/fabricgate/data/board-db/official.yaml`) currently kn
 
 | Board | Device | Runtime |
 |---|---|---|
-| `pynq-z2` | xc7z020 | `pynq` |
+| `pynq-z1`, `pynq-z2` | xc7z020 | `pynq` |
 | `zcu104` | xczu7ev | `pynq`, `linux-fpgamgr` |
+| `zcu111`, `rfsoc2x2` | xczu28dr | `pynq` |
+| `rfsoc4x2` | xczu48dr | `pynq` |
 | `pico-ice` | iCE40UP5K | `nanopynq` (Phase 3, forward reference) |
 | `generic-xc7z020`, `generic-xczu7ev` | — | device-level fallback for boards not yet listed |
 
