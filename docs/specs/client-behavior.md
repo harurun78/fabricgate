@@ -66,8 +66,16 @@ Parent: [registry-api.md](./registry-api.md)
 | `readme` | README（Markdown） | 任意 |
 | `platform:{board_id}/{runtime}:manifest` | その platform の Platform Manifest | platform ごとに必須 |
 | `platform:{board_id}/{runtime}:artifact:{filename}` | manifest が参照するアーティファクト本体 | アーティファクトごと |
+| `platform:{board_id}/{runtime}:artifact-url:{filename}` | アーティファクトの取得元 `https` URL（text part、UTF-8、前後空白は trim） | `push --artifact-url` 指定分 |
 
-`{board_id}/{runtime}` は `PlatformId`、`{filename}` は manifest の `artifacts[].file`。分類規則: `index` / `readme` は完全一致、manifest は `platform:` で始まり `:manifest` で終わる、artifact は `platform:` で始まり `:artifact:` を含む。それ以外は `unknown`（無視される）。
+`{board_id}/{runtime}` は `PlatformId`、`{filename}` は manifest の `artifacts[].file`。分類規則: `index` / `readme` は完全一致、manifest は `platform:` で始まり `:manifest` で終わる、artifact は `platform:` で始まり `:artifact:` を含む、artifact-url は `platform:` で始まり `:artifact-url:` を含む。それ以外は `unknown`（無視される）。
+
+同一 `{filename}` について `artifact:` と `artifact-url:` を**両方送ってはならない（MUST NOT）**（サーバは `400 INVALID_REQUEST`）。
+URL 指定分は `/uploads` の ticket も要求しない。1 つの manifest 内で file ごとに upload / URL を混在させてよい
+（例: `.bit` は URL、`.hwh` はアップロード）。クライアントは `https` スキームのみ事前検証し、ホスト allow-list
+（既定: `github.com`, `raw.githubusercontent.com`, `release-assets.githubusercontent.com`, `objects.githubusercontent.com`,
+`files.pythonhosted.org`）・userinfo 禁止・2048 文字上限・リダイレクト先/private アドレス検査・取得サイズ上限
+（既定 512 MiB → `413 PAYLOAD_TOO_LARGE`）はサーバに委ねる。外部参照バイトは namespace ストレージ quota に計上されない。
 
 ### 3.2 Content-Type 許可リスト（`upload_validation.py:18-21`）
 
@@ -90,7 +98,7 @@ Parent: [registry-api.md](./registry-api.md)
 
 ### 3.4 サーバ側検証
 
-サーバは各アーティファクトの本体 bytes の SHA-256（hex）を計算し、対応する manifest の `sha256` フィールドと照合する。不一致はアップロードを拒否する（`registry/routers/designs/versions.py:325-333`）。サーバは `form.multi_items()` を走査し、各パートを分類して処理する（最初の一致を採用）。
+サーバは各アーティファクトの本体 bytes の SHA-256（hex）を計算し、対応する manifest の `sha256` フィールドと照合する。不一致はアップロードを拒否する（`registry/routers/designs/versions.py:325-333`）。`artifact-url` 指定分は publish 時に URL を 1 回取得して同様に照合し（不一致は `400 DIGEST_MISMATCH`）、以後 download endpoint はその URL へ `307` を返す。version / design detail の `artifacts[].source` は `"registry"` | `"external"` で保管元を示す。サーバは `form.multi_items()` を走査し、各パートを分類して処理する（最初の一致を採用）。
 
 ---
 

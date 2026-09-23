@@ -3968,3 +3968,40 @@ def test_undeprecate_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(sdk_api.SDKError) as exc_info:
         sdk_api.undeprecate("alice/counter:1.0.0", registry="http://test")
     assert exc_info.value.code == ExitKind.INFRA
+
+
+def test_push_artifact_url_sends_url_part_and_requests_no_ticket(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """--artifact-url: the URL travels as a text part; no ticket, no upload for that file."""
+    url = "https://github.com/acme/blink/releases/download/v1/design.bit"
+    captured: dict[str, object] = {}
+
+    class _RecordingClient(_FakePushRegistryClient):
+        def publish_version(self, namespace, design, version, files):
+            captured["files"] = dict(files)
+            captured["client"] = self
+            return super().publish_version(namespace, design, version, files)
+
+    _write_push_project(tmp_path)
+    _patch_all_rc(monkeypatch, _RecordingClient)
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+
+    sdk_api.push(tmp_path, token="tok", artifact_urls={"design.bit": url})
+
+    files = captured["files"]
+    assert files["platform:xc7z020/pynq:artifact-url:design.bit"] == url.encode()
+    assert not [key for key in files if ":artifact:" in key]
+    client = captured["client"]
+    assert [item["filename"] for item in client.upload_requests[0]] == ["design.hwh"]
+    assert [name for name, _sha, _size in client.uploaded] == ["design.hwh"]
+
+
+def test_push_artifact_url_invalid_maps_to_invalid(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _write_push_project(tmp_path)
+    _patch_all_rc(monkeypatch, _FakePushRegistryClient)
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+
+    with pytest.raises(sdk_api.SDKError) as excinfo:
+        sdk_api.push(tmp_path, token="tok", artifact_urls={"design.bit": "http://example.com/design.bit"})
+    assert excinfo.value.code == ExitKind.INVALID

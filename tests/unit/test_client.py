@@ -583,3 +583,64 @@ class TestPublisher:
         platform_key = "xc7z020/linux-fpgamgr"
         assert f"platform:{platform_key}:artifact:design.bin" in files
         assert f"platform:{platform_key}:artifact:mymodule.ko" in files
+
+
+# ============================================================================
+# publisher — artifacts published by URL (push --artifact-url)
+# ============================================================================
+
+_BIT_URL = "https://github.com/acme/blink/releases/download/v1/design.bit"
+
+
+def test_collect_artifacts_url_replaces_upload_part(tmp_path: Path) -> None:
+    TestPublisher()._write_project(tmp_path)
+    idx, _ = load_design_index(tmp_path)
+    files = collect_artifacts(tmp_path, idx, artifact_urls={"design.bit": _BIT_URL})
+    assert files["platform:xc7z020/pynq:artifact-url:design.bit"] == _BIT_URL.encode()
+    assert "platform:xc7z020/pynq:artifact:design.bit" not in files
+    assert "platform:xc7z020/pynq:artifact:design.hwh" in files
+
+
+def test_collect_artifacts_url_does_not_need_local_file(tmp_path: Path) -> None:
+    TestPublisher()._write_project(tmp_path)
+    (tmp_path / "xc7z020" / "pynq" / "design.bit").unlink()
+    idx, _ = load_design_index(tmp_path)
+    files = collect_artifacts(tmp_path, idx, artifact_urls={"design.bit": _BIT_URL})
+    assert "platform:xc7z020/pynq:artifact-url:design.bit" in files
+
+
+def test_collect_artifacts_url_still_verifies_local_digest(tmp_path: Path) -> None:
+    TestPublisher()._write_project(tmp_path)
+    (tmp_path / "xc7z020" / "pynq" / "design.bit").write_bytes(b"tampered")
+    idx, _ = load_design_index(tmp_path)
+    with pytest.raises(PublishError, match="Digest mismatch"):
+        collect_artifacts(tmp_path, idx, artifact_urls={"design.bit": _BIT_URL})
+
+
+def test_collect_artifacts_url_rejects_non_https(tmp_path: Path) -> None:
+    TestPublisher()._write_project(tmp_path)
+    idx, _ = load_design_index(tmp_path)
+    with pytest.raises(PublishError, match="https"):
+        collect_artifacts(tmp_path, idx, artifact_urls={"design.bit": "http://example.com/design.bit"})
+
+
+def test_collect_artifacts_url_rejects_undeclared_filename(tmp_path: Path) -> None:
+    TestPublisher()._write_project(tmp_path)
+    idx, _ = load_design_index(tmp_path)
+    with pytest.raises(PublishError, match=r"other\.bit"):
+        collect_artifacts(tmp_path, idx, artifact_urls={"other.bit": _BIT_URL})
+
+
+def test_collect_artifacts_url_rejects_placeholder_sha256(tmp_path: Path) -> None:
+    TestPublisher()._write_project(tmp_path)
+    manifest_path = tmp_path / "xc7z020" / "pynq" / "manifest.yaml"
+    data = yaml.safe_load(manifest_path.read_text())
+    data["artifacts"]["bitstream"]["sha256"] = "a" * 64
+    manifest_path.write_text(yaml.safe_dump(data))
+    idx_path = tmp_path / "fabricgate-index.yaml"
+    idx_data = yaml.safe_load(idx_path.read_text())
+    idx_data["platforms"][0]["digest"] = f"sha256:{hashlib.sha256(manifest_path.read_bytes()).hexdigest()}"
+    idx_path.write_text(yaml.safe_dump(idx_data))
+    idx, _ = load_design_index(tmp_path)
+    with pytest.raises(PublishError, match="placeholder"):
+        collect_artifacts(tmp_path, idx, artifact_urls={"design.bit": _BIT_URL})

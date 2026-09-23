@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from pydantic import Field
+from pydantic import Field, SerializeAsAny
 
 from fabricgate.models.common import (
     DesignName,
@@ -113,7 +113,8 @@ class DesignInfo(FabricGateModel):
     author: str | None = None
     repository: str | None = None
     tags: list[str] = Field(default_factory=list)
-    platforms: Sequence[PlatformEntry]
+    platforms: Sequence[SerializeAsAny[PlatformEntry]]
+    """Wire entries (``ApiPlatformEntry``) keep ``artifacts`` / ``attestation`` when dumped."""
 
 
 class SearchResult(FabricGateModel):

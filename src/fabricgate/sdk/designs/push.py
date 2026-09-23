@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from pathlib import Path
 
 from fabricgate.client import auth
@@ -60,6 +61,7 @@ def push(
     token: str | None = None,
     board_override: str | None = None,
     skip_sha_check: bool = False,
+    artifact_urls: Mapping[str, str] | None = None,
 ) -> PushResult:
     """Publish a design to the registry.
 
@@ -78,6 +80,11 @@ def push(
     board_override:
         When provided (e.g. ``"generic-xczu7ev"``), replace the ``custom-*``
         board prefix in all platform IDs before publishing.
+    artifact_urls:
+        ``{filename: https_url}`` for artifacts the registry should fetch from an
+        existing public URL instead of receiving an upload.  The manifest still
+        declares the file's ``sha256``; the registry verifies the fetched bytes
+        against it.
 
     Returns
     -------
@@ -116,7 +123,13 @@ def push(
 
     try:
         sha_warnings: list[str] = []
-        files = collect_artifacts(project_dir, index, sha_warnings=sha_warnings, skip_sha_check=skip_sha_check)
+        files = collect_artifacts(
+            project_dir,
+            index,
+            sha_warnings=sha_warnings,
+            skip_sha_check=skip_sha_check,
+            artifact_urls=artifact_urls,
+        )
     except PublishError as exc:
         raise SDKError(str(exc), code=ExitKind.INVALID) from exc
 

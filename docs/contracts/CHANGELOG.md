@@ -23,6 +23,23 @@
   根拠: `docs/specs/client-behavior.md` §6。
 
 ### Added
+- `ArtifactInfo.source` (`"registry" | "external"`, optional) on
+  `VersionDetailResponse.platforms[].artifacts[]` / design detail. `"external"`
+  marks an artifact published by URL (`fabricgate push --artifact-url`): the
+  registry fetched it once at publish time to verify the manifest `sha256` and
+  the download endpoint answers `307` to that URL. Additive only; older servers
+  omit it and tolerant readers yield `null`. `pull` needs no change.
+- Publish request (multipart): new text part
+  `platform:{board_id}/{runtime}:artifact-url:{filename}` (body = the `https`
+  URL) on `POST .../versions/{version}`, and `artifact-url:{filename}` on the
+  incremental add route `POST .../versions/{version}/platforms/{board_id}/{runtime}`.
+  For that filename the client sends no `artifact:{filename}` part and requests
+  no upload ticket; both for one file → `400 INVALID_REQUEST`. Server-side
+  validation: `https` only, no userinfo, ≤ 2048 chars, operator host allowlist,
+  per-hop redirect checks, fetch size cap (`413 PAYLOAD_TOO_LARGE`), digest
+  compared to the manifest (`400 DIGEST_MISMATCH`). External bytes do not count
+  toward the namespace storage quota. `openapi.*` is regenerated from the
+  registry app and lands in a follow-up once it pins this model revision.
 - `PlatformEntry.attestation` (`{transparency_log_url: string} | null`) on
   `VersionDetailResponse.platforms[]` — attestation **presence** signal for the
   trust badges UI (UI-TRUST-001). Additive only; `null` for platforms whose
