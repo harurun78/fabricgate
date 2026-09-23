@@ -991,3 +991,35 @@ class TestGetVersionDiff:
         assert result.base == "1.0.0"
         assert result.head == "2.0.0"
         assert result.summary.platforms_changed == ["xczu7ev/pynq"]
+
+
+class TestPublishVersionArtifactUrl:
+    def test_artifact_url_is_sent_as_text_field(self) -> None:
+        """``artifact-url`` parts are plain form fields (no filename), other parts stay files."""
+        seen: dict[str, bytes] = {}
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            seen["body"] = request.read()
+            return httpx.Response(
+                200,
+                json={"name": "demo/blink", "version": "1.0.0", "platforms": ["xc7z020/pynq"], "published_at": _NOW},
+                request=request,
+            )
+
+        client = _make_client(httpx.MockTransport(_handler))
+        client.publish_version(
+            "demo",
+            "blink",
+            "1.0.0",
+            {
+                "index": b"index-data",
+                "platform:xc7z020/pynq:artifact-url:design.bit": b"https://github.com/acme/blink/design.bit",
+            },
+        )
+
+        parts = seen["body"].split(b"\r\n--")
+        url_part = next(p for p in parts if b'name="platform:xc7z020/pynq:artifact-url:design.bit"' in p)
+        assert b"filename=" not in url_part
+        assert b"https://github.com/acme/blink/design.bit" in url_part
+        index_part = next(p for p in parts if b'name="index"' in p)
+        assert b'filename="index"' in index_part

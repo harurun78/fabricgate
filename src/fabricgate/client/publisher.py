@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -62,16 +64,29 @@ def collect_artifacts(
     index: DesignIndex,
     sha_warnings: list[str] | None = None,
     skip_sha_check: bool = False,
+    artifact_urls: Mapping[str, str] | None = None,
 ) -> dict[str, bytes]:
     """Collect all files required for a publish upload.
 
     Returns a mapping of ``{field_name: content}`` ready for multipart upload.
     Field names match the registry API contract:
-    - ``index``                           → the design index YAML
-    - ``platform:{pid}:manifest``         → each platform manifest
-    - ``platform:{pid}:artifact:{file}``  → artifact files referenced in manifests
+    - ``index``                               → the design index YAML
+    - ``platform:{pid}:manifest``             → each platform manifest
+    - ``platform:{pid}:artifact:{file}``      → artifact files referenced in manifests
+    - ``platform:{pid}:artifact-url:{file}``  → the https URL for a file in *artifact_urls*
+
+    *artifact_urls* maps a manifest filename to a public ``https`` URL the registry
+    fetches instead of receiving the bytes.  It applies to every platform that
+    declares that filename.  A local copy is optional; when present its digest is
+    still checked against the manifest.
     """
     files: dict[str, bytes] = {}
+    artifact_urls = dict(artifact_urls or {})
+    for name, candidate in artifact_urls.items():
+        if urlsplit(candidate).scheme != "https":
+            msg = f"Artifact URL for {name} must use https: {candidate}"
+            raise PublishError(msg)
+    unmatched_urls = set(artifact_urls)
 
     # Include the design index itself
     for candidate in ("fabricgate-index.yaml", "fabricgate-index.yml"):
@@ -103,26 +118,39 @@ def collect_artifacts(
         artifact_dir = manifest_path.parent
         for ref in _extract_artifact_refs(manifest):
             artifact_path = artifact_dir / ref.file
-            if not artifact_path.exists():
+            url = artifact_urls.get(ref.file)
+            if url is None and not artifact_path.exists():
                 msg = f"Artifact not found: {artifact_path}"
                 raise PublishError(msg)
-            content = artifact_path.read_bytes()
             # Verify digest if declared
             if ref.sha256:
                 if _is_placeholder_sha256(ref.sha256):
+                    if url is not None:
+                        # The registry compares the fetched bytes with this value, so a
+                        # placeholder is a guaranteed DIGEST_MISMATCH — fail early.
+                        msg = f"Artifact {ref.file} is published by URL but its sha256 is a placeholder"
+                        raise PublishError(msg)
                     # Placeholder sha256: skip verification but warn the caller.
                     if not skip_sha_check and sha_warnings is not None:
                         sha_warnings.append(
                             f"Artifact {ref.file} has a placeholder sha256 "
                             "— run with real bitstream to get a verifiable hash"
                         )
-                else:
+                elif artifact_path.exists():
                     actual = sha256_digest(artifact_path)
                     expected = f"sha256:{ref.sha256}"
                     if actual != expected:
                         msg = f"Digest mismatch for {artifact_path}: expected {expected}, got {actual}"
                         raise PublishError(msg)
-            files[f"platform:{platform_key}:artifact:{ref.file}"] = content
+            if url is not None:
+                unmatched_urls.discard(ref.file)
+                files[f"platform:{platform_key}:artifact-url:{ref.file}"] = url.encode()
+            else:
+                files[f"platform:{platform_key}:artifact:{ref.file}"] = artifact_path.read_bytes()
+
+    if unmatched_urls:
+        msg = f"Artifact URLs for files not declared in any platform manifest: {', '.join(sorted(unmatched_urls))}"
+        raise PublishError(msg)
 
     return files
 

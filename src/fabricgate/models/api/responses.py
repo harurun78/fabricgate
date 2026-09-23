@@ -29,6 +29,8 @@ class ArtifactInfo(ApiResponseModel):
     filename: str
     sha256: str
     size: int
+    source: Literal["registry", "external"] | None = None
+    """``"external"`` when downloads redirect to a publisher-supplied URL; absent on older servers."""
 
 
 class AttestationInfo(ApiResponseModel):

@@ -2842,3 +2842,105 @@ class TestUnsupportedCommandsAreHidden:
         assert token_group.hidden is True
         assert webhook_group.hidden is True
         assert {"token", "webhook"} <= set(main.commands)
+
+
+# ---------------------------------------------------------------------------
+# push — --artifact-url
+# ---------------------------------------------------------------------------
+
+_BIT_URL = "https://github.com/acme/blink/releases/download/v1/design.bit"
+_HWH_URL = "https://raw.githubusercontent.com/acme/blink/main/design.hwh"
+
+
+def test_push_artifact_url_forwards_mapping(monkeypatch, tmp_path) -> None:
+    captured_kwargs: dict = {}
+
+    def _fake_push(*_args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _PUSH_RESULT
+
+    monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", _fake_push)
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["push", str(tmp_path), "--artifact-url", f"design.bit={_BIT_URL}", "--artifact-url", f"design.hwh={_HWH_URL}"],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured_kwargs["artifact_urls"] == {"design.bit": _BIT_URL, "design.hwh": _HWH_URL}
+
+
+def test_push_artifact_url_rejects_malformed_value(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", lambda *_a, **_k: _PUSH_RESULT)
+    runner = CliRunner()
+    result = runner.invoke(main, ["push", str(tmp_path), "--artifact-url", "design.bit"])
+    assert result.exit_code == 2
+    assert "<filename>=<url>" in result.output
+
+
+def test_push_artifact_url_rejects_duplicate_filename(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", lambda *_a, **_k: _PUSH_RESULT)
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["push", str(tmp_path), "--artifact-url", f"design.bit={_BIT_URL}", "--artifact-url", f"design.bit={_HWH_URL}"],
+    )
+    assert result.exit_code == 2
+    assert "design.bit" in result.output
+
+
+def test_push_without_artifact_url_passes_none(monkeypatch, tmp_path) -> None:
+    captured_kwargs: dict = {}
+
+    def _fake_push(*_args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return _PUSH_RESULT
+
+    monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", _fake_push)
+    runner = CliRunner()
+    result = runner.invoke(main, ["push", str(tmp_path)])
+    assert result.exit_code == 0
+    assert captured_kwargs["artifact_urls"] is None
+
+
+# ---------------------------------------------------------------------------
+# info --json — artifacts[].source
+# ---------------------------------------------------------------------------
+
+
+def _info_with_artifact(source: str | None) -> DesignInfo:
+    from fabricgate.models.api.responses import ApiPlatformEntry, ArtifactInfo
+
+    artifact = {"filename": "design.bit", "sha256": "b" * 64, "size": 4}
+    if source is not None:
+        artifact["source"] = source
+    return DesignInfo(
+        name="test-ns/blink",
+        version="1.0.0",
+        platforms=[
+            ApiPlatformEntry(
+                platform="xc7z020/pynq",
+                digest="sha256:" + "a" * 64,
+                artifacts=[ArtifactInfo.model_validate(artifact)],
+            )
+        ],
+    )
+
+
+def test_info_json_surfaces_artifact_source(monkeypatch) -> None:
+    monkeypatch.setattr("fabricgate.cli.commands.info.sdk_api.info", lambda *_a, **_k: _info_with_artifact("external"))
+    runner = CliRunner()
+    result = runner.invoke(main, ["--json", "info", "test-ns/blink:1.0.0"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["platforms"][0]["artifacts"][0]["source"] == "external"
+
+
+def test_info_json_artifact_source_absent_on_older_server(monkeypatch) -> None:
+    monkeypatch.setattr("fabricgate.cli.commands.info.sdk_api.info", lambda *_a, **_k: _info_with_artifact(None))
+    runner = CliRunner()
+    result = runner.invoke(main, ["--json", "info", "test-ns/blink:1.0.0"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    artifact = payload["platforms"][0]["artifacts"][0]
+    assert artifact["filename"] == "design.bit"
+    assert artifact["source"] is None

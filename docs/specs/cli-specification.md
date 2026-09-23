@@ -222,7 +222,7 @@ Authorization ヘッダを自動付与し、ダウンロード統計の pull 主
 Publish a design to the registry.
 
 ```
-fabricgate push <directory> [--namespace <ns>] [--yes] [--skip-sha-check]
+fabricgate push <directory> [--namespace <ns>] [--yes] [--skip-sha-check] [--artifact-url <filename>=<url>]...
 ```
 
 **Arguments:**
@@ -235,6 +235,7 @@ fabricgate push <directory> [--namespace <ns>] [--yes] [--skip-sha-check]
 | `--namespace` | ネームスペースを上書きする |
 | `--yes` | AXI-only の `custom-*` デザインを `generic-*` プラットフォームに自動昇格する（TTY プロンプトを省略） |
 | `--skip-sha-check` | プレースホルダー sha256 (`a` × 64) の警告を抑制する（実際のハッシュ検証は行われる） |
+| `--artifact-url <filename>=<url>` | `<filename>` をアップロードせず、既存の公開 `https` URL への参照として公開する（繰り返し可） |
 
 **Expected directory structure:**
 
@@ -339,6 +340,26 @@ $ fabricgate push ./my-design/ --skip-sha-check
 ```
 
 `--skip-sha-check` は警告の抑制だけで、実際のハッシュが存在する場合の検証は省略しない。
+
+**URL 参照による公開（`--artifact-url`）:**
+
+GitHub Release 等に既に公開されているアーティファクトは、コピーをアップロードせずに URL で参照できる。
+レジストリは publish 時に URL を 1 回取得して manifest の `sha256` と照合し、以後の download は
+その URL へ 307 リダイレクトする（再ホストしない）。`pull` 側の挙動は変わらない。
+
+```
+$ fabricgate push ./my-design/ \
+    --artifact-url design.bit=https://github.com/acme/blink/releases/download/v1.0.0/design.bit
+```
+
+| ルール | 内容 |
+|---|---|
+| 値の形式 | `<filename>=<url>`。`<filename>` は manifest の `artifacts[].file`。形式違反・同一 filename の重複は usage error（exit 2） |
+| URL | `https` のみ。`http` 等は送信前に拒否する（exit 3）。ホスト allow-list・リダイレクト検査はサーバ側で行い、クライアントは持たない |
+| 適用範囲 | 同じ filename を宣言する**すべての** platform に同じ URL を適用する |
+| 相互排他 | URL 指定した filename については upload ticket を要求せず `artifact:` パートも送らない（[client-behavior §3.1](./client-behavior.md)）。同一ファイルに inline と URL の両方が届いた場合サーバは `400 INVALID_REQUEST` を返す |
+| digest | manifest の `sha256` は URL 指定でも必須。プレースホルダー（`a` × 64）のままの URL 指定はエラー（サーバで必ず `DIGEST_MISMATCH` になるため）。ローカルにファイルがあれば従来どおり digest を照合し、無ければ manifest の値を信頼する |
+| 未宣言 filename | どの manifest にも無い filename を指定するとエラー（exit 3） |
 
 ---
 
@@ -603,6 +624,10 @@ Platforms:
     Size:        258 KB
     Artifacts:   blink.bit, blink.dtbo
 ```
+
+`--json` では `platforms[].artifacts[]` にサーバ応答の `filename` / `sha256` / `size` / `source` をそのまま出力する。
+`source` は `"registry"`（レジストリ保管）または `"external"`（`push --artifact-url` による URL 参照。download は
+その URL へリダイレクト）。`source` を返さない旧サーバでは `null` になる（加算的フィールド、ADR-014 tolerant reader）。
 
 ---
 

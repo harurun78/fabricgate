@@ -295,11 +295,17 @@ class RegistryClient:
         version: str,
         files: dict[str, bytes],
     ) -> PublishResponse:
-        """Publish a new version via multipart upload."""
-        multipart_files = [(k, (k, v, _part_content_type(k))) for k, v in files.items()]
+        """Publish a new version via multipart upload.
+
+        ``platform:{pid}:artifact-url:{filename}`` entries carry a URL and go out
+        as plain text fields; every other entry is a file part.
+        """
+        url_fields = {k: v.decode() for k, v in files.items() if ":artifact-url:" in k}
+        multipart_files = [(k, (k, v, _part_content_type(k))) for k, v in files.items() if k not in url_fields]
         resp = self._request(
             "POST",
             f"/namespaces/{namespace}/designs/{design}/versions/{version}",
+            data=url_fields,
             files=multipart_files,
         )
         return PublishResponse.model_validate_json(resp.content)

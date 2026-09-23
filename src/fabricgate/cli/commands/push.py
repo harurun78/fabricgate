@@ -94,6 +94,23 @@ def _handle_promotion_prompt(
     return None
 
 
+def _parse_artifact_urls(
+    _ctx: click.Context,
+    _param: click.Parameter,
+    values: tuple[str, ...],
+) -> dict[str, str] | None:
+    """Turn repeated ``<filename>=<url>`` values into a mapping (``None`` when unused)."""
+    urls: dict[str, str] = {}
+    for value in values:
+        filename, sep, url = value.partition("=")
+        if not sep or not filename or not url:
+            raise click.BadParameter(f"expected <filename>=<url>, got {value!r}")
+        if filename in urls:
+            raise click.BadParameter(f"{filename} is given more than once")
+        urls[filename] = url
+    return urls or None
+
+
 @click.command(name="push")
 @click.argument("directory", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--namespace", default=None, help="Override namespace for publishing.")
@@ -110,6 +127,14 @@ def _handle_promotion_prompt(
     default=False,
     help="Suppress placeholder sha256 warnings (does NOT bypass verification of real hashes).",
 )
+@click.option(
+    "--artifact-url",
+    "artifact_urls",
+    multiple=True,
+    metavar="<filename>=<url>",
+    callback=_parse_artifact_urls,
+    help="Publish <filename> by reference to an existing https URL instead of uploading it. Repeatable.",
+)
 @click.pass_obj
 def push_cmd(
     obj: dict[str, object],
@@ -117,6 +142,7 @@ def push_cmd(
     namespace: str | None,
     auto_yes: bool,
     skip_sha_check: bool,
+    artifact_urls: dict[str, str] | None,
 ) -> None:
     """Publish a design to the registry."""
     board_override: str | None = None
@@ -142,6 +168,7 @@ def push_cmd(
             registry=str(obj["registry"]),
             board_override=board_override,
             skip_sha_check=skip_sha_check,
+            artifact_urls=artifact_urls,
         )
     except sdk_api.SDKError as exc:
         click.echo(str(exc), err=True)

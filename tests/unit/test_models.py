@@ -2664,3 +2664,20 @@ class TestReferenceShellFixtures:
         del data["shell_dependency"]
         with pytest.raises(ValidationError, match="shell_dependency is required"):
             PynqManifest.model_validate(data)
+
+
+class TestArtifactInfoSource:
+    def test_source_is_optional_and_defaults_to_none(self) -> None:
+        from fabricgate.models.api.responses import ArtifactInfo
+
+        info = ArtifactInfo.model_validate({"filename": "d.bit", "sha256": "b" * 64, "size": 1})
+        assert info.source is None
+
+    def test_source_accepts_registry_and_external_only(self) -> None:
+        from fabricgate.models.api.responses import ArtifactInfo
+
+        base = {"filename": "d.bit", "sha256": "b" * 64, "size": 1}
+        assert ArtifactInfo.model_validate({**base, "source": "external"}).source == "external"
+        assert ArtifactInfo.model_validate({**base, "source": "registry"}).source == "registry"
+        with pytest.raises(ValidationError):
+            ArtifactInfo.model_validate({**base, "source": "mirror"})
