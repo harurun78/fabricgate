@@ -110,7 +110,7 @@ def _oauth_error_response(resp: httpx.Response) -> ErrorResponse | None:
     return ErrorResponse(
         error=ErrorDetail(
             code=body["error"].upper(),
-            message=description if isinstance(description, str) else "",
+            message=description if isinstance(description, str) and description else body["error"],
         )
     )
 

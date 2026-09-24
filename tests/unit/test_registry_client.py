@@ -263,6 +263,15 @@ class TestTokenExchange:
         assert excinfo.value.error.error.code == code
         assert excinfo.value.error.error.message == "waiting"
 
+    def test_raw_oauth_error_without_description_keeps_reason(self) -> None:
+        client = _make_client(_transport(400, {"error": "access_denied"}))
+
+        with pytest.raises(RegistryError) as excinfo:
+            client.token_exchange(grant_type="device_code", device_code="abc")
+
+        assert excinfo.value.error is not None
+        assert excinfo.value.error.error.message == "access_denied"
+
 
 # ---------------------------------------------------------------------------
 # Publish / Yank
