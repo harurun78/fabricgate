@@ -692,6 +692,18 @@ DESIGN                     VERSION   PLATFORMS              PUBLISHED
 fabricgate/blink           1.0.0     zcu104/pynq +1         2026-03-17
 ```
 
+`--namespace` defaults to the authenticated user's namespace (derived from the stored credentials). `--namespace` without `--remote` is a usage error.
+
+**Exit codes:**
+
+| Code | Condition |
+|------|-----------|
+| 0 | Success |
+| 1 | Namespace could not be determined from the credentials (specify `--namespace`) |
+| 2 | `--remote` without `--namespace` and not logged in (run `fabricgate login`); 401/403 from the registry |
+| 3 | Invalid namespace name |
+| 4 | Network error / server 5xx |
+
 ---
 
 ### 3.8 `fabricgate token`

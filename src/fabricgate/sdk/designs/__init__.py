@@ -14,7 +14,7 @@ from fabricgate.sdk.designs.lifecycle import deprecate, undeprecate, yank
 from fabricgate.sdk.designs.pull import pull, verify
 from fabricgate.sdk.designs.push import push
 from fabricgate.sdk.designs.quota import quota
-from fabricgate.sdk.designs.search import info, search
+from fabricgate.sdk.designs.search import info, list_remote, search
 from fabricgate.sdk.designs.stats import stats
 from fabricgate.sdk.designs.watch import watch
 
@@ -23,6 +23,7 @@ __all__ = [
     "diff",
     "info",
     "license_check",
+    "list_remote",
     "pull",
     "push",
     "quota",
