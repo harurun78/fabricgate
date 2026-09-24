@@ -48,7 +48,12 @@ class HwhInfo:
     """Vivado board part (``SYSTEMINFO/@BOARD``), e.g. ``xilinx.com:zcu104:part0:1.1``."""
 
     part: str | None
-    """Full Vivado part string, e.g. ``xczu7ev-ffvc1156-2-e``."""
+    """Vivado part string, e.g. ``xczu7ev-ffvc1156-2-e``.
+
+    When read from ``<SYSTEMINFO>`` it is rebuilt as DEVICE+PACKAGE+SPEEDGRADE
+    (e.g. ``xczu7evffvc1156-2``), so it may not match Vivado's canonical form
+    (dashes, temperature grade). Nothing reads it today.
+    """
 
     device_family: str | None
     """Device family extracted from *part*, e.g. ``xczu7ev``."""
