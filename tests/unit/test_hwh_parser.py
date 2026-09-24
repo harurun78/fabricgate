@@ -128,6 +128,44 @@ class TestParseHwh:
         assert info.boardpart is None
         assert info.device_family == "xczu7ev"
 
+    def test_parses_real_vivado_systeminfo(self, tmp_path: Path) -> None:
+        # Shape of a real Vivado export: no root BOARDPART/PART, board and device under SYSTEMINFO.
+        hwh = tmp_path / "design.hwh"
+        hwh.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<EDKSYSTEM EDWVERSION="1.2" TIMESTAMP="Thu Jan  1 00:00:00 2023" VIVADOVERSION="2022.1">'
+            '<SYSTEMINFO ARCH="zynq" BOARD="tul.com.tw:pynq-z2:part0:1.0" DEVICE="7z020"'
+            ' NAME="dma_axis_ip_example" PACKAGE="clg400" SPEEDGRADE="-1"/>'
+            "</EDKSYSTEM>"
+        )
+        info = parse_hwh(hwh)
+        assert info.boardpart == "tul.com.tw:pynq-z2:part0:1.0"
+        assert info.part == "xc7z020clg400-1"
+        assert info.device_family == "xc7z020"
+        assert info.package == "clg400"
+
+    def test_systeminfo_ultrascale_device_keeps_xc_prefix(self, tmp_path: Path) -> None:
+        hwh = tmp_path / "design.hwh"
+        hwh.write_text(
+            '<?xml version="1.0"?><EDKSYSTEM>'
+            '<SYSTEMINFO ARCH="zynquplus" BOARD="xilinx.com:zcu104:part0:1.1" DEVICE="xczu7ev"'
+            ' PACKAGE="ffvc1156" SPEEDGRADE="-2"/>'
+            "</EDKSYSTEM>"
+        )
+        info = parse_hwh(hwh)
+        assert info.boardpart == "xilinx.com:zcu104:part0:1.1"
+        assert info.device_family == "xczu7ev"
+        assert info.package == "ffvc1156"
+
+    def test_neither_systeminfo_nor_root_attributes(self, tmp_path: Path) -> None:
+        hwh = tmp_path / "design.hwh"
+        hwh.write_text('<?xml version="1.0"?><EDKSYSTEM VIVADOVERSION="2022.1"/>')
+        info = parse_hwh(hwh)
+        assert info.boardpart is None
+        assert info.part is None
+        assert info.device_family is None
+        assert info.package is None
+
     def test_invalid_xml_raises(self, tmp_path: Path) -> None:
         hwh = tmp_path / "bad.hwh"
         hwh.write_text("<broken>")
