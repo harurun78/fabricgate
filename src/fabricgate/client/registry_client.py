@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import httpx
 
 from fabricgate.client.errors import FailureKind
-from fabricgate.models.api.errors import ErrorResponse
+from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
 from fabricgate.models.api.responses import (
     ApiKeyCreateResponse,
     ApiKeyListResponse,
@@ -21,6 +22,7 @@ from fabricgate.models.api.responses import (
     LoginResponse,
     NamespaceResponse,
     NamespaceStatsResponse,
+    OAuthTokenResponse,
     PublishResponse,
     QuotaResponse,
     SearchResponse,
@@ -92,6 +94,27 @@ class NetworkError(RegistryError):
         return FailureKind.INFRA
 
 
+def _oauth_error_response(resp: httpx.Response) -> ErrorResponse | None:
+    """Map a raw OAuth error body (RFC 6749 §5.2) onto the registry error envelope.
+
+    ``{"error": "authorization_pending"}`` becomes code ``AUTHORIZATION_PENDING``,
+    so a proxy that does not wrap OAuth errors cannot stall the device-flow poll.
+    """
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict) or not isinstance(body.get("error"), str):
+        return None
+    description = body.get("error_description")
+    return ErrorResponse(
+        error=ErrorDetail(
+            code=body["error"].upper(),
+            message=description if isinstance(description, str) and description else body["error"],
+        )
+    )
+
+
 def _part_content_type(field_name: str) -> str:
     """Return the appropriate MIME type for a multipart field.
 
@@ -136,11 +159,14 @@ class RegistryClient:
         try:
             resp = self._client.request(method, path, **kwargs)
             if resp.status_code >= 400:
+                err: ErrorResponse | None
                 try:
                     err = ErrorResponse.model_validate_json(resp.content)
                 except Exception:
+                    err = _oauth_error_response(resp)
+                if err is None:
                     resp.raise_for_status()
-                    raise  # unreachable, satisfies type checker
+                    raise AssertionError("unreachable: status >= 400")
                 raise RegistryError(resp.status_code, err)
             return resp
         except httpx.HTTPError as exc:
@@ -240,8 +266,23 @@ class RegistryClient:
         return result
 
     def token_exchange(self, **kwargs: str) -> LoginResponse:
+        """Exchange a grant for a token.
+
+        Accepts the OAuth token response the registry returns
+        (``access_token`` / ``expires_in`` / ``scope``) and, as a tolerant
+        reader, the flat ``{token, expires_at, scopes}`` shape.
+        """
         resp = self._request("POST", "/oauth/token", json=kwargs)
-        return LoginResponse.model_validate_json(resp.content)
+        body = resp.json()
+        if not (isinstance(body, dict) and "access_token" in body):
+            return LoginResponse.model_validate_json(resp.content)
+        oauth = OAuthTokenResponse.model_validate_json(resp.content)
+        return LoginResponse(
+            token=oauth.access_token,
+            expires_at=datetime.now(tz=UTC) + timedelta(seconds=oauth.expires_in),
+            scopes=oauth.scope.split(),
+            refresh_token=oauth.refresh_token,
+        )
 
     # ---- Publish ----
 

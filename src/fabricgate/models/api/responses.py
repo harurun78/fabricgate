@@ -67,6 +67,19 @@ class LoginResponse(ApiResponseModel):
     token: str
     expires_at: datetime
     scopes: list[str]
+    refresh_token: str | None = None
+
+
+class OAuthTokenResponse(ApiResponseModel):
+    """Standard OAuth token response (RFC 6749 §5.1) from ``POST /oauth/token``.
+
+    ``RegistryClient.token_exchange`` normalizes it into :class:`LoginResponse`.
+    """
+
+    access_token: str
+    expires_in: int
+    scope: str = ""
+    refresh_token: str | None = None
 
 
 class UsernameSetupResponse(ApiResponseModel):

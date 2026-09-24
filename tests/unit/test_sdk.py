@@ -513,6 +513,57 @@ def test_login_auth_declined_raises_sdk_error(monkeypatch: pytest.MonkeyPatch) -
         sdk_api.login(registry="https://example.com/api/v1", poll_interval=0)
 
 
+def test_login_parses_oauth_response_and_raw_pending(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Real client over HTTP: raw OAuth pending, enveloped pending, then an OAuth token body."""
+    import httpx
+
+    from fabricgate.client.registry_client import RegistryClient
+
+    token_bodies = [
+        (403, {"error": "authorization_pending"}),
+        (400, {"error": {"code": "AUTHORIZATION_PENDING", "message": ""}}),
+        (
+            200,
+            {
+                "access_token": "at-oauth",
+                "refresh_token": "rt-oauth",
+                "expires_in": 86400,
+                "scope": "openid offline_access",
+                "token_type": "Bearer",
+            },
+        ),
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/oauth/device_authorization"):
+            return httpx.Response(
+                200,
+                json={"device_code": "D", "user_code": "U", "verification_uri": "https://x/d", "interval": 0},
+            )
+        status, body = token_bodies.pop(0)
+        return httpx.Response(status, json=body)
+
+    class _MockTransportClient(RegistryClient):
+        def __init__(self, base_url: str, token: str | None = None) -> None:
+            super().__init__(base_url=base_url, token=token)
+            self._client = httpx.Client(base_url=base_url, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr(_sdk_auth_mod, "RegistryClient", _MockTransportClient)
+    monkeypatch.setattr(_sdk_auth_mod.time, "sleep", lambda _s: None)
+    saved: list[Any] = []
+    monkeypatch.setattr(sdk_api.auth, "save_credentials", lambda cred, path=None: saved.append(cred))
+
+    before = datetime.now(tz=UTC)
+    sdk_api.login(registry="https://example.com/api/v1", poll_interval=0)
+
+    assert token_bodies == []
+    (cred,) = saved
+    assert cred.token == "at-oauth"
+    assert cred.refresh_token == "rt-oauth"
+    assert cred.scopes == ["openid", "offline_access"]
+    assert (cred.expires_at - before).total_seconds() >= 86400
+
+
 def test_login_keyring_storage_label(monkeypatch: pytest.MonkeyPatch) -> None:
     """キーリングが利用可能な場合、storage labelに 'keychain' が含まれる。"""
     import sys

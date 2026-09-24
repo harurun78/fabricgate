@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -216,6 +216,61 @@ class TestTokenExchange:
         result = client.token_exchange(grant_type="device_code", device_code="abc")
 
         assert result.token == "tok123"
+        assert result.refresh_token is None
+
+    def test_parses_oauth_token_response(self) -> None:
+        body = {
+            "access_token": "at-123",
+            "refresh_token": "rt-456",
+            "id_token": "id-789",
+            "expires_in": 86400,
+            "scope": "openid profile email offline_access",
+            "token_type": "Bearer",
+        }
+        client = _make_client(_transport(200, body))
+
+        before = datetime.now(tz=UTC)
+        result = client.token_exchange(grant_type="device_code", device_code="abc")
+        after = datetime.now(tz=UTC)
+
+        assert result.token == "at-123"
+        assert result.refresh_token == "rt-456"
+        assert result.scopes == ["openid", "profile", "email", "offline_access"]
+        assert before + timedelta(seconds=86400) <= result.expires_at <= after + timedelta(seconds=86400)
+
+    def test_oauth_token_response_without_scope(self) -> None:
+        body = {"access_token": "at-123", "expires_in": 60, "token_type": "Bearer"}
+        client = _make_client(_transport(200, body))
+
+        result = client.token_exchange(grant_type="device_code", device_code="abc")
+
+        assert result.scopes == []
+
+    @pytest.mark.parametrize(
+        ("oauth_error", "code"),
+        [("authorization_pending", "AUTHORIZATION_PENDING"), ("slow_down", "SLOW_DOWN")],
+    )
+    def test_raw_oauth_error_body_becomes_registry_error(self, oauth_error: str, code: str) -> None:
+        body = {"error": oauth_error, "error_description": "waiting"}
+        client = _make_client(_transport(403, body))
+
+        with pytest.raises(RegistryError) as excinfo:
+            client.token_exchange(grant_type="device_code", device_code="abc")
+
+        assert not isinstance(excinfo.value, NetworkError)
+        assert excinfo.value.status_code == 403
+        assert excinfo.value.error is not None
+        assert excinfo.value.error.error.code == code
+        assert excinfo.value.error.error.message == "waiting"
+
+    def test_raw_oauth_error_without_description_keeps_reason(self) -> None:
+        client = _make_client(_transport(400, {"error": "access_denied"}))
+
+        with pytest.raises(RegistryError) as excinfo:
+            client.token_exchange(grant_type="device_code", device_code="abc")
+
+        assert excinfo.value.error is not None
+        assert excinfo.value.error.error.message == "access_denied"
 
 
 # ---------------------------------------------------------------------------
