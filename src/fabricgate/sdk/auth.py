@@ -107,6 +107,7 @@ def login(
             token=token_resp.token,
             expires_at=token_resp.expires_at,
             scopes=token_resp.scopes,
+            refresh_token=token_resp.refresh_token,
         )
         auth.save_credentials(cred)
 

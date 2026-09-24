@@ -69,6 +69,20 @@
   Generated from the Pydantic models via `scripts/extract_schemas.py`;
   drift-gated in CI. Enables new-language SDK codegen against the file formats.
 
+### Fixed
+- `POST /api/v1/oauth/token` success body: the client now reads the standard
+  OAuth token response (RFC 6749 §5.1: `access_token`, `expires_in`, `scope`,
+  `refresh_token`), which is what the registry returns. `expires_at` is
+  computed client-side as receipt time + `expires_in`, `scopes` is
+  `scope.split()`. The flat `{token, expires_at, scopes}` shape the client
+  previously required is still accepted. `refresh_token` is kept in the stored
+  credentials (new optional field; no refresh grant is sent yet).
+- Error bodies in the raw OAuth form (RFC 6749 §5.2,
+  `{"error": "authorization_pending", "error_description": "…"}`) are mapped to
+  the error envelope with `code = error.upper()` (e.g. `AUTHORIZATION_PENDING`,
+  `SLOW_DOWN`) instead of surfacing as a network error. Applies to every
+  endpoint; enveloped errors are unchanged.
+
 ## [0.4.0] - 2026-06-11
 
 ### Changed

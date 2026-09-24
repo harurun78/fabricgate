@@ -41,6 +41,7 @@ class Credentials(FabricGateModel):
     token: str
     expires_at: datetime
     scopes: list[str]
+    refresh_token: str | None = None
 
 
 # ---------------------------------------------------------------------------
