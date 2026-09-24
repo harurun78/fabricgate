@@ -45,7 +45,7 @@ class HwhInfo:
     """Parsed metadata from a single .hwh file."""
 
     boardpart: str | None
-    """Vivado BOARDPART attribute, e.g. ``xilinx.com:zcu104:part0:1.1``."""
+    """Vivado board part (``SYSTEMINFO/@BOARD``), e.g. ``xilinx.com:zcu104:part0:1.1``."""
 
     part: str | None
     """Full Vivado part string, e.g. ``xczu7ev-ffvc1156-2-e``."""
@@ -101,6 +101,18 @@ def parse_hwh(path: Path) -> HwhInfo:
     package: str | None = None
     if part:
         device_family, package = _extract_device_family_and_package(part)
+
+    # Real Vivado exports carry board and device on <SYSTEMINFO>, not on the root:
+    #   <SYSTEMINFO BOARD="tul.com.tw:pynq-z2:part0:1.0" DEVICE="7z020" PACKAGE="clg400" SPEEDGRADE="-1"/>
+    sysinfo = root.find("SYSTEMINFO")  # type: ignore[union-attr]
+    if sysinfo is not None:
+        boardpart = sysinfo.get("BOARD") or boardpart
+        device = sysinfo.get("DEVICE", "").lower()
+        if device:
+            # 7-series DEVICE lacks the "xc" prefix ("7z020"); UltraScale+ has it ("xczu7ev").
+            device_family = device if device.startswith("xc") else f"xc{device}"
+            package = sysinfo.get("PACKAGE", "").lower() or None
+            part = f"{device_family}{package or ''}{sysinfo.get('SPEEDGRADE', '')}"
 
     interfaces: list[ParsedInterface] = []
     ext_ifaces = root.find("EXTERNALINTERFACES")  # type: ignore[union-attr]
