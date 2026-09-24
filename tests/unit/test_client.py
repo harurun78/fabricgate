@@ -289,6 +289,14 @@ class TestFamilyFallbackResolution:
             ("zcu111", "generic-xczu28dr"),
             ("rfsoc2x2", "generic-xczu28dr"),
             ("rfsoc4x2", "generic-xczu48dr"),
+            ("ultra96-v2", "generic-xczu3eg"),
+            ("zcu208", "generic-xczu48dr"),
+            ("zcu216", "generic-xczu49dr"),
+            ("kv260", "generic-xck26"),
+            ("kr260", "generic-xck26"),
+            ("pynq-zu", "generic-xczu5eg"),
+            ("zcu102", "generic-xczu9eg"),
+            ("zcu106", "generic-xczu7ev"),
         ],
     )
     def test_pynq_curation_boards_are_known(self, board_id: str, generic: str) -> None:
