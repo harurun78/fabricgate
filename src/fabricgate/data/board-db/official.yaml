@@ -87,7 +87,8 @@ boards:
     # resolves here via the version-tolerant lookup), em.avnet.com:ultra96v2:part0:1.0
     # (Avnet bdf 2017.4 branch) and the 1.3 file on Avnet bdf master, which renamed the
     # vendor to "Avnet-tria" (https://github.com/Avnet/bdf/blob/master/ultra96v2/1.3/board.xml).
-    # The last two differ in vendor and do not resolve until #14.
+    # The last two differ in vendor, and lookup_by_boardpart only tolerates the version, so
+    # they stay unresolved even after the #14 parser fix until vendor aliases are supported.
     boardpart: "avnet.com:ultra96v2:part0:1.2"
     device: xczu3eg-sbva484-1-i
     device_family: xczu3eg
