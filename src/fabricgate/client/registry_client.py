@@ -161,9 +161,9 @@ class RegistryClient:
         device_family: str | None = None,
         runtime: str | None = None,
         tag: str | None = None,
-        namespace: str | None = None,
         page: int = 1,
         per_page: int = 20,
+        namespace: str | None = None,
     ) -> SearchResponse:
         params: dict[str, Any] = {"page": page, "per_page": per_page}
         if namespace:
