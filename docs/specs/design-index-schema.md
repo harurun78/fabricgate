@@ -126,9 +126,17 @@ Known board_id values (the bundled `official.yaml`, see `board-db-schema.md`):
 | board_id | Board | device |
 |----------|-------|--------|
 | `zcu104` | ZCU104 | xczu7ev-ffvc1156-2-e |
+| `zcu106` | ZCU106 | xczu7ev-ffvc1156-2-e |
+| `zcu102` | ZCU102 | xczu9eg-ffvb1156-2-e |
+| `ultra96-v2` | Ultra96-V2 | xczu3eg-sbva484-1-i |
+| `pynq-zu` | PYNQ-ZU | xczu5eg-sfvc784-1-e |
+| `kv260` | Kria KV260 | xck26-sfvc784-2LV-c |
+| `kr260` | Kria KR260 | xck26-sfvc784-2LV-c |
 | `zcu111` | ZCU111 RFSoC | xczu28dr-ffvg1517-2-e |
 | `rfsoc2x2` | RFSoC 2x2 | xczu28dr-ffvg1517-2-e |
 | `rfsoc4x2` | RFSoC 4x2 | xczu48dr-ffvg1517-2-e |
+| `zcu208` | ZCU208 RFSoC | xczu48dr-fsvg1517-2-e |
+| `zcu216` | ZCU216 RFSoC | xczu49dr-ffvf1760-2-e |
 | `pynq-z2` | PYNQ-Z2 | xc7z020clg400-1 |
 | `pynq-z1` | PYNQ-Z1 | xc7z020clg400-1 |
 | `pico-ice` | pico-ice | ice40up5k-sg48 |

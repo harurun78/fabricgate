@@ -95,6 +95,14 @@ def test_board_db_accepts_bundled_official() -> None:
         ("zcu111", "xilinx.com:zcu111:part0:1.4", "xczu28dr-ffvg1517-2-e", "xczu28dr"),
         ("rfsoc2x2", "xilinx.com:rfsoc2x2:part0:1.1", "xczu28dr-ffvg1517-2-e", "xczu28dr"),
         ("rfsoc4x2", "realdigital.org:rfsoc4x2:part0:1.0", "xczu48dr-ffvg1517-2-e", "xczu48dr"),
+        ("ultra96-v2", "avnet.com:ultra96v2:part0:1.2", "xczu3eg-sbva484-1-i", "xczu3eg"),
+        ("zcu208", "xilinx.com:zcu208:part0:2.0", "xczu48dr-fsvg1517-2-e", "xczu48dr"),
+        ("zcu216", "xilinx.com:zcu216:part0:2.0", "xczu49dr-ffvf1760-2-e", "xczu49dr"),
+        ("kv260", "xilinx.com:kv260_som:part0:1.4", "xck26-sfvc784-2LV-c", "xck26"),
+        ("kr260", "xilinx.com:kr260_som:part0:1.1", "xck26-sfvc784-2LV-c", "xck26"),
+        ("pynq-zu", "tul.com.tw:pynqzu:part0:1.1", "xczu5eg-sfvc784-1-e", "xczu5eg"),
+        ("zcu102", "xilinx.com:zcu102:part0:3.4", "xczu9eg-ffvb1156-2-e", "xczu9eg"),
+        ("zcu106", "xilinx.com:zcu106:part0:2.6", "xczu7ev-ffvc1156-2-e", "xczu7ev"),
     ],
 )
 def test_bundled_official_pynq_boards_resolve_both_ways(
