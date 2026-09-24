@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, ClassVar
@@ -2964,6 +2965,146 @@ def test_quota_requires_namespace_or_login(monkeypatch: pytest.MonkeyPatch) -> N
     with pytest.raises(sdk_api.SDKError) as exc_info:
         sdk_api.quota(registry="http://test")
     assert exc_info.value.code == ExitKind.GENERIC
+
+
+# ===========================================================================
+# list_remote (fabricgate list --remote)
+# ===========================================================================
+
+
+def _design_summary(name: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "latest_version": "1.0.0",
+        "summary": None,
+        "platforms": ["xczu7ev/pynq", "xczu7ev/linux-fpgamgr"],
+        "tags": [],
+        "updated_at": "2026-03-17T00:00:00Z",
+    }
+
+
+class _ListRemoteFakeClient:
+    calls: ClassVar[list[dict[str, Any]]] = []
+    pages: ClassVar[list[list[dict[str, Any]]]] = [[_design_summary("alice/blink")]]
+
+    def __init__(self, *_args, **kwargs) -> None:
+        type(self).calls.append({"init": kwargs})
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def search_designs(self, **kwargs: Any) -> SearchResponse:
+        type(self).calls.append(kwargs)
+        page = kwargs["page"]
+        total = sum(len(p) for p in type(self).pages)
+        designs = type(self).pages[page - 1] if page - 1 < len(type(self).pages) else []
+        body = {"designs": designs, "total": total, "page": page, "per_page": kwargs["per_page"]}
+        return SearchResponse.model_validate_json(json.dumps(body))
+
+
+def test_list_remote_explicit_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    _ListRemoteFakeClient.calls = []
+    _ListRemoteFakeClient.pages = [[_design_summary("alice/blink")]]
+    _patch_all_rc(monkeypatch, _ListRemoteFakeClient)
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+
+    result = sdk_api.list_remote(namespace="alice", registry="http://test")
+
+    assert [d.name for d in result] == ["alice/blink"]
+    assert result[0].latest_version == "1.0.0"
+    assert _ListRemoteFakeClient.calls[1]["namespace"] == "alice"
+
+
+def test_list_remote_pages_through_all_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    _ListRemoteFakeClient.calls = []
+    first_page = [_design_summary(f"alice/d{i}") for i in range(100)]
+    _ListRemoteFakeClient.pages = [first_page, [_design_summary("alice/last")]]
+    _patch_all_rc(monkeypatch, _ListRemoteFakeClient)
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+
+    result = sdk_api.list_remote(namespace="alice", registry="http://test")
+
+    assert len(result) == 101
+    assert result[-1].name == "alice/last"
+    assert [c["page"] for c in _ListRemoteFakeClient.calls[1:]] == [1, 2]
+
+
+def test_list_remote_default_namespace_from_scopes_and_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fabricgate.models.cli import Credentials
+
+    _ListRemoteFakeClient.calls = []
+    _ListRemoteFakeClient.pages = [[_design_summary("alice/blink")]]
+    _patch_all_rc(monkeypatch, _ListRemoteFakeClient)
+    monkeypatch.setattr(
+        sdk_api.auth,
+        "load_credentials",
+        lambda _reg: Credentials(
+            registry="http://test",
+            token="tok",
+            expires_at=datetime(2099, 1, 1, tzinfo=UTC),
+            scopes=["openid", "ns:alice:read", "ns:alice:write"],
+        ),
+    )
+
+    sdk_api.list_remote(registry="http://test")
+
+    assert _ListRemoteFakeClient.calls[0]["init"]["token"] == "tok"
+    assert _ListRemoteFakeClient.calls[1]["namespace"] == "alice"
+
+
+def test_list_remote_unauthenticated_without_namespace_is_permission(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.list_remote(registry="http://test")
+    assert exc_info.value.code == ExitKind.PERMISSION
+    assert "fabricgate login" in str(exc_info.value)
+
+
+def test_list_remote_ambiguous_scopes_requires_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fabricgate.models.cli import Credentials
+
+    monkeypatch.setattr(
+        sdk_api.auth,
+        "load_credentials",
+        lambda _reg: Credentials(
+            registry="http://test",
+            token="tok",
+            expires_at=datetime(2099, 1, 1, tzinfo=UTC),
+            scopes=["ns:alice:read", "ns:bob:read"],
+        ),
+    )
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.list_remote(registry="http://test")
+    assert exc_info.value.code == ExitKind.GENERIC
+
+
+def test_list_remote_invalid_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.list_remote(namespace="Not Valid!", registry="http://test")
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_list_remote_registry_error_maps_kind(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fabricgate.client.registry_client import RegistryError
+    from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
+
+    class _Forbidden(_ListRemoteFakeClient):
+        def search_designs(self, **kwargs: Any) -> SearchResponse:
+            raise RegistryError(403, ErrorResponse(error=ErrorDetail(code="FORBIDDEN", message="forbidden")))
+
+    _patch_all_rc(monkeypatch, _Forbidden)
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.list_remote(namespace="private", registry="http://test")
+    assert exc_info.value.code == ExitKind.PERMISSION
 
 
 # ===========================================================================

@@ -121,6 +121,18 @@ class TestSearchDesigns:
         assert result.total == 0
         assert result.designs == []
 
+    def test_namespace_filter_is_sent_as_query_param(self) -> None:
+        def _handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/api/v1/designs"
+            params = dict(request.url.params)
+            assert params["namespace"] == "alice"
+            assert params["per_page"] == "100"
+            return httpx.Response(200, json={"designs": [], "total": 0, "page": 1, "per_page": 100}, request=request)
+
+        client = _make_client(httpx.MockTransport(_handler))
+        result = client.search_designs(namespace="alice", per_page=100)
+        assert result.total == 0
+
 
 class TestGetDesign:
     def test_returns_design_detail(self) -> None:

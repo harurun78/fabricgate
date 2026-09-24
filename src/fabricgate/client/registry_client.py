@@ -163,8 +163,11 @@ class RegistryClient:
         tag: str | None = None,
         page: int = 1,
         per_page: int = 20,
+        namespace: str | None = None,
     ) -> SearchResponse:
         params: dict[str, Any] = {"page": page, "per_page": per_page}
+        if namespace:
+            params["namespace"] = namespace
         if q:
             params["q"] = q
         if platform:

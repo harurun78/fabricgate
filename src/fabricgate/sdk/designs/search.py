@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+from fabricgate.client import auth
 from fabricgate.client.registry_client import RegistryClient, RegistryError
+from fabricgate.models.api.responses import DesignSummary
 from fabricgate.models.cli import DesignInfo, SearchResult
-from fabricgate.sdk._helpers import SDKError, _parse_design_ref, _registry_error_kind
+from fabricgate.sdk._helpers import (
+    ExitKind,
+    SDKError,
+    _default_namespace_from_scopes,
+    _parse_design_ref,
+    _registry_error_kind,
+    _validate_namespace_name,
+)
+
+_LIST_PAGE_SIZE = 100  # API maximum for per_page
 
 
 def search(
@@ -41,6 +52,48 @@ def search(
         )
         for entry in response.designs
     ]
+
+
+def list_remote(
+    *,
+    namespace: str | None = None,
+    registry: str = "https://registry.fabricgate.dev/api/v1",
+    token: str | None = None,
+) -> list[DesignSummary]:
+    """List every design published in a namespace (``fabricgate list --remote``).
+
+    Without *namespace* the caller's own namespace is derived from the stored
+    credentials; if none are stored the failure kind is ``PERMISSION``.
+    """
+    creds = auth.load_credentials(registry)
+    effective_token = token or (creds.token if creds is not None else None)
+
+    ns = namespace
+    if ns is None:
+        if creds is None:
+            raise SDKError(
+                "Authentication required. Run 'fabricgate login' or specify --namespace.",
+                code=ExitKind.PERMISSION,
+            )
+        ns = _default_namespace_from_scopes(creds.scopes)
+        if ns is None:
+            raise SDKError("Namespace is required. Specify --namespace.", code=ExitKind.GENERIC)
+
+    _validate_namespace_name(ns)
+
+    designs: list[DesignSummary] = []
+    try:
+        with RegistryClient(base_url=registry, token=effective_token) as client:
+            page = 1
+            while True:
+                response = client.search_designs(namespace=ns, page=page, per_page=_LIST_PAGE_SIZE)
+                designs.extend(response.designs)
+                if not response.designs or len(designs) >= response.total:
+                    break
+                page += 1
+    except RegistryError as exc:
+        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+    return designs
 
 
 def info(

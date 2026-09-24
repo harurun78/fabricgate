@@ -10,6 +10,7 @@ from click.testing import CliRunner
 
 from fabricgate.cli.main import main
 from fabricgate.models.api.responses import (
+    DesignSummary,
     QuotaDesignsInfo,
     QuotaResponse,
     QuotaStorageInfo,
@@ -669,6 +670,83 @@ def test_list_appears_in_help() -> None:
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
     assert "list" in result.output
+
+
+def _remote_entries() -> list[DesignSummary]:
+    return [
+        DesignSummary(
+            name="fabricgate/blink",
+            latest_version="1.0.0",
+            platforms=["xczu7ev/pynq", "xczu7ev/linux-fpgamgr"],
+            tags=[],
+            updated_at=datetime(2026, 3, 17, 12, 0, tzinfo=UTC),
+        ),
+        DesignSummary(
+            name="fabricgate/uart",
+            latest_version="0.2.0",
+            platforms=["xc7z020/pynq"],
+            tags=[],
+            updated_at=datetime(2026, 3, 10, tzinfo=UTC),
+        ),
+    ]
+
+
+def test_list_remote_text_output(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def _fake_list_remote(**kwargs):
+        seen.update(kwargs)
+        return _remote_entries()
+
+    monkeypatch.setattr("fabricgate.cli.commands.list_cmd.sdk_api.list_remote", _fake_list_remote)
+    runner = CliRunner()
+    result = runner.invoke(main, ["list", "--remote", "--namespace", "fabricgate"])
+    assert result.exit_code == 0, result.output
+    assert seen["namespace"] == "fabricgate"
+    lines = result.output.splitlines()
+    assert lines[0].split() == ["DESIGN", "VERSION", "PLATFORMS", "PUBLISHED"]
+    assert lines[1].split() == ["fabricgate/blink", "1.0.0", "xczu7ev/pynq", "+1", "2026-03-17"]
+    assert lines[2].split() == ["fabricgate/uart", "0.2.0", "xc7z020/pynq", "2026-03-10"]
+
+
+def test_list_remote_json_output(monkeypatch) -> None:
+    monkeypatch.setattr("fabricgate.cli.commands.list_cmd.sdk_api.list_remote", lambda **_kw: _remote_entries())
+    runner = CliRunner()
+    result = runner.invoke(main, ["--json", "list", "--remote", "--namespace", "fabricgate"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert [d["name"] for d in data] == ["fabricgate/blink", "fabricgate/uart"]
+    assert data[0]["latest_version"] == "1.0.0"
+
+
+def test_list_remote_empty(monkeypatch) -> None:
+    monkeypatch.setattr("fabricgate.cli.commands.list_cmd.sdk_api.list_remote", lambda **_kw: [])
+    runner = CliRunner()
+    result = runner.invoke(main, ["list", "--remote", "--namespace", "fabricgate"])
+    assert result.exit_code == 0
+    assert "No designs found." in result.output
+    result = runner.invoke(main, ["--json", "list", "--remote", "--namespace", "fabricgate"])
+    assert result.exit_code == 0
+    assert json.loads(result.output) == []
+
+
+def test_list_remote_unauthenticated_exit_code_2(monkeypatch) -> None:
+    def _fake_list_remote(**_kw):
+        raise sdk_api.SDKError("Authentication required", code=sdk_api.ExitKind.PERMISSION)
+
+    monkeypatch.setattr("fabricgate.cli.commands.list_cmd.sdk_api.list_remote", _fake_list_remote)
+    runner = CliRunner()
+    result = runner.invoke(main, ["list", "--remote"])
+    assert result.exit_code == 2
+    assert "Authentication required" in result.output
+
+
+def test_list_namespace_requires_remote(monkeypatch) -> None:
+    monkeypatch.setattr("fabricgate.cli.commands.list_cmd.load_index", lambda _d: (_ for _ in ()).throw(AssertionError))
+    runner = CliRunner()
+    result = runner.invoke(main, ["list", "--namespace", "fabricgate"])
+    assert result.exit_code == 2
+    assert "--namespace requires --remote" in result.output
 
 
 # ===========================================================================
