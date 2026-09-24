@@ -39,7 +39,7 @@ python -c "from pynq import Overlay; ol = Overlay('adder-demo/adder.bit')"
 | Command | Purpose |
 |---|---|
 | `search`, `info`, `diff`, `stats`, `watch` | discover designs and track updates |
-| `pull`, `verify`, `list` | download with digest verification, re-verify, inspect the local cache |
+| `pull`, `verify`, `list` | download with digest verification, re-verify, inspect the local cache (`list --remote [--namespace <ns>]` lists designs on the registry) |
 | `build`, `push`, `yank`, `deprecate` | publish your own designs (`build` generates the Platform Manifest and Design Index from a build directory) |
 | `login`, `token`, `quota`, `webhook`, `license-check` | account, automation and policy helpers |
 

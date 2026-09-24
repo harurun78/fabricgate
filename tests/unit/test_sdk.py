@@ -4197,3 +4197,10 @@ def test_push_artifact_url_invalid_maps_to_invalid(monkeypatch: pytest.MonkeyPat
     with pytest.raises(sdk_api.SDKError) as excinfo:
         sdk_api.push(tmp_path, token="tok", artifact_urls={"design.bit": "http://example.com/design.bit"})
     assert excinfo.value.code == ExitKind.INVALID
+
+
+def test_top_level_sdk_exports_list_remote() -> None:
+    from fabricgate import sdk
+
+    assert sdk.list_remote is _sdk_designs_mod.list_remote
+    assert "list_remote" in sdk.__all__
