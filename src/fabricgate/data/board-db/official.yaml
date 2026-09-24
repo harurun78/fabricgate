@@ -288,8 +288,8 @@ boards:
         source: vivado-boardstore # iic0_pl / iic1_pl
       - type: sfp
         direction: inout
-        count: 4
-        source: vivado-boardstore # sfp0_1x .. sfp3_1x (gt_rtl)
+        count: 2
+        source: vivado-boardstore # sfp2_1x / sfp3_1x (gt_rtl); sfp0_1x / sfp1_1x are commented out in board.xml
 
   - board_id: zcu216
     display_name: Xilinx ZCU216 RFSoC Evaluation Kit
@@ -314,8 +314,8 @@ boards:
         source: vivado-boardstore # iic0_pl / iic1_pl
       - type: sfp
         direction: inout
-        count: 4
-        source: vivado-boardstore # sfp0_1x .. sfp3_1x (gt_rtl)
+        count: 2
+        source: vivado-boardstore # sfp2_1x / sfp3_1x (gt_rtl); sfp0_1x / sfp1_1x are commented out in board.xml
 
   # -------------------------------------------------------------------------
   # Lattice iCE40 + RP2040
