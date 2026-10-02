@@ -23,6 +23,22 @@
   根拠: `docs/specs/client-behavior.md` §6。
 
 ### Added
+- OpenAPI success-response schemas for 14 registry operations that were
+  previously documented as `schema: {}` (registry #853). Documentation only:
+  the wire format, status codes of JSON routes and error responses are
+  unchanged. 11 component schemas are added (`DesignDetailResponse`,
+  `VersionDetailResponse`, `VersionSummary`, `ApiPlatformEntry`,
+  `ArtifactInfo`, `AttestationInfo`, `ShellDependency`, `SpeedGrade`,
+  `PublishResponse`, `PlatformAddResponse`, `UsernameSetupResponse`).
+  - JSON bodies now reference their models: design detail, version detail,
+    publish (`201`), yank, platform add (`201`), `POST /users/me/username`,
+    `GET /users/me/designs` (`DesignSummary[]`), namespace create / get /
+    verify (`NamespaceResponse`), namespace quota get / patch (`QuotaResponse`).
+  - `GET .../platforms/{board_id}/{runtime}` (platform manifest) is documented
+    as `200 application/x-yaml` (string) instead of `application/json`.
+  - `GET .../artifacts/{filename}` is documented as `307` (redirect to the
+    download URL) instead of `200`; the server already answered `307`.
+  - `GET /users/me` stays undocumented (no public model yet).
 - `ArtifactInfo.source` (`"registry" | "external"`, optional) on
   `VersionDetailResponse.platforms[].artifacts[]` / design detail. `"external"`
   marks an artifact published by URL (`fabricgate push --artifact-url`): the
