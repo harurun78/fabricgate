@@ -82,6 +82,16 @@ class OAuthTokenResponse(ApiResponseModel):
     refresh_token: str | None = None
 
 
+class UserProfileResponse(ApiResponseModel):
+    """``GET /api/v1/users/me`` — the authenticated user's profile."""
+
+    username: str
+    namespace: str
+    """Personal namespace; currently always equal to ``username``."""
+    email: str | None = None
+    created_at: datetime
+
+
 class UsernameSetupResponse(ApiResponseModel):
     """Result of first-login username setup."""
 

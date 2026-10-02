@@ -23,6 +23,13 @@
   根拠: `docs/specs/client-behavior.md` §6。
 
 ### Added
+- `fabricgate.models.api.responses.UserProfileResponse` (`username`,
+  `namespace`, `email`, `created_at`) and the `GET /users/me` success-response
+  schema that references it (registry #979). Same fields as before, so
+  additive for clients.
+  - Wire note: `created_at` is now serialized by pydantic like every other
+    response model, so a UTC timestamp reads `...Z` instead of `...+00:00`.
+    Both are RFC 3339 and parse to the same instant.
 - OpenAPI success-response schemas for 14 registry operations that were
   previously documented as `schema: {}` (registry #853). Documentation only:
   the wire format, status codes of JSON routes and error responses are
