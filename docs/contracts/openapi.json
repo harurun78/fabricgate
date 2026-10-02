@@ -281,7 +281,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DesignDetailResponse"
+                }
               }
             }
           },
@@ -339,7 +341,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/VersionDetailResponse"
+                }
               }
             }
           },
@@ -412,7 +416,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PublishResponse"
+                }
               }
             }
           },
@@ -501,7 +507,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/YankResponse"
+                }
               }
             }
           },
@@ -1010,10 +1018,12 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "Platform Manifest",
             "content": {
-              "application/json": {
-                "schema": {}
+              "application/x-yaml": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1104,7 +1114,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformAddResponse"
+                }
               }
             }
           },
@@ -1185,13 +1197,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+          "307": {
+            "description": "Redirect to the artifact download URL"
           },
           "422": {
             "description": "Validation Error",
@@ -2119,7 +2126,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UsernameSetupResponse"
+                }
               }
             }
           },
@@ -2167,7 +2176,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DesignSummary"
+                  },
+                  "title": "Response Get User Designs Api V1 Users Me Designs Get"
+                }
               }
             }
           },
@@ -2296,7 +2311,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NamespaceResponse"
+                }
               }
             }
           },
@@ -2337,7 +2354,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NamespaceResponse"
+                }
               }
             }
           },
@@ -2388,7 +2407,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/NamespaceResponse"
+                }
               }
             }
           },
@@ -2429,7 +2450,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaResponse"
+                }
               }
             }
           },
@@ -2494,7 +2517,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaResponse"
+                }
               }
             }
           },
@@ -4076,6 +4101,115 @@
         "title": "AdminUserListResponse",
         "description": "``GET /api/v1/admin/users`` response."
       },
+      "ApiPlatformEntry": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+            "title": "Platform"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Digest"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "speed_grade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeedGrade"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shell_dependency": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShellDependency"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactInfo"
+            },
+            "type": "array",
+            "title": "Artifacts"
+          },
+          "attestation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttestationInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "platform",
+          "digest"
+        ],
+        "title": "ApiPlatformEntry",
+        "description": "Platform entry enriched with artifact list for API responses.\n\nOverrides the strict ``PlatformEntry`` (local Design Index validation)\nto tolerate unknown fields when parsed from the wire (ADR-014)."
+      },
+      "ArtifactInfo": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "registry",
+                  "external"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "sha256",
+          "size"
+        ],
+        "title": "ArtifactInfo",
+        "description": "A single downloadable artifact file."
+      },
       "ArtifactUploadItem": {
         "properties": {
           "filename": {
@@ -4190,6 +4324,20 @@
         ],
         "title": "ArtifactUploadTicket",
         "description": "A presigned PUT for one artifact, or a note that it is already stored."
+      },
+      "AttestationInfo": {
+        "properties": {
+          "transparency_log_url": {
+            "type": "string",
+            "title": "Transparency Log Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transparency_log_url"
+        ],
+        "title": "AttestationInfo",
+        "description": "Attestation presence exposed per platform (UI-TRUST-001).\n\nPresence-only signal: the registry has NOT verified the attestation;\nclients verify locally via ``fabricgate pull --verify-attestation``."
       },
       "BatchDeprecateRequest": {
         "properties": {
@@ -4464,6 +4612,111 @@
         ],
         "title": "DeprecateResponse",
         "description": "``POST .../versions/{v}/deprecate`` response."
+      },
+      "DesignDetailResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+            "title": "Name"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512,
+                "pattern": "^([A-Za-z0-9\\-.+]+)(\\s+(AND|OR|WITH)\\s+[A-Za-z0-9\\-.+]+)*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "docs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Docs"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "readme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readme"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/VersionSummary"
+            },
+            "type": "array",
+            "title": "Versions"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "versions",
+          "created_at"
+        ],
+        "title": "DesignDetailResponse",
+        "description": "``GET /api/v1/namespaces/{ns}/designs/{d}`` response."
       },
       "DesignStatsResponse": {
         "properties": {
@@ -5168,6 +5421,77 @@
         "title": "NamespaceTopDesign",
         "description": "Top design entry in namespace statistics."
       },
+      "PlatformAddResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+            "title": "Version"
+          },
+          "platform": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+            "title": "Platform"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "platform",
+          "published_at"
+        ],
+        "title": "PlatformAddResponse",
+        "description": "``POST .../platforms/{device}/{runtime}`` (incremental publish)."
+      },
+      "PublishResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+            "title": "Version"
+          },
+          "platforms": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+            },
+            "type": "array",
+            "title": "Platforms"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "platforms",
+          "published_at"
+        ],
+        "title": "PublishResponse",
+        "description": "``POST .../versions/{v}`` response."
+      },
       "QuotaDesignsInfo": {
         "properties": {
           "used": {
@@ -5480,6 +5804,36 @@
         "title": "ShellArtifactInfo",
         "description": "Single artifact from the referenced static shell."
       },
+      "ShellDependency": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^=\\d+\\.\\d+\\.\\d+$",
+            "title": "Version"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "sha256"
+        ],
+        "title": "ShellDependency",
+        "description": "PR bitstream static shell dependency (exact version match only).\n\n``sha256`` is the mandatory ADR-009 pin: the SHA-256 of the referenced\nshell's distributed bitstream artifact on the same platform."
+      },
       "ShellInfo": {
         "properties": {
           "name": {
@@ -5553,6 +5907,28 @@
         ],
         "title": "ShellResponse",
         "description": "``GET .../platforms/{device}/{runtime}/shell``."
+      },
+      "SpeedGrade": {
+        "properties": {
+          "min": {
+            "type": "string",
+            "title": "Min"
+          },
+          "tested": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tested"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "min"
+        ],
+        "title": "SpeedGrade",
+        "description": "Speed grade compatibility info."
       },
       "SuspendRequest": {
         "properties": {
@@ -5699,6 +6075,36 @@
         "title": "UsernameSetupRequest",
         "description": "First-login username setup request."
       },
+      "UsernameSetupResponse": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "namespace": {
+            "type": "string",
+            "title": "Namespace"
+          },
+          "created": {
+            "type": "boolean",
+            "title": "Created",
+            "default": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "namespace",
+          "created_at"
+        ],
+        "title": "UsernameSetupResponse",
+        "description": "Result of first-login username setup."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -5738,6 +6144,176 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VersionDetailResponse": {
+        "properties": {
+          "schema": {
+            "type": "string",
+            "title": "Schema",
+            "default": "fabricgate-index/v1"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+            "title": "Version"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 512,
+                "pattern": "^([A-Za-z0-9\\-.+]+)(\\s+(AND|OR|WITH)\\s+[A-Za-z0-9\\-.+]+)*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "docs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Docs"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "readme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readme"
+          },
+          "platforms": {
+            "items": {
+              "$ref": "#/components/schemas/ApiPlatformEntry"
+            },
+            "type": "array",
+            "title": "Platforms"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          },
+          "yanked": {
+            "type": "boolean",
+            "title": "Yanked",
+            "default": false
+          },
+          "yanked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yanked Reason"
+          },
+          "yanked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yanked By"
+          },
+          "deprecated": {
+            "type": "boolean",
+            "title": "Deprecated",
+            "default": false
+          },
+          "deprecation_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecation Message"
+          },
+          "successor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Successor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "platforms",
+          "published_at"
+        ],
+        "title": "VersionDetailResponse",
+        "description": "``GET .../versions/{v}`` — Design Index as JSON with API metadata."
       },
       "VersionDiffField": {
         "properties": {
@@ -5900,6 +6476,68 @@
         ],
         "title": "VersionStatsResponse",
         "description": "``GET .../versions/{version}/stats`` response."
+      },
+      "VersionSummary": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+            "title": "Version"
+          },
+          "platforms": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+            },
+            "type": "array",
+            "title": "Platforms"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          },
+          "yanked": {
+            "type": "boolean",
+            "title": "Yanked",
+            "default": false
+          },
+          "deprecated": {
+            "type": "boolean",
+            "title": "Deprecated",
+            "default": false
+          },
+          "deprecation_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecation Message"
+          },
+          "successor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Successor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "platforms",
+          "published_at"
+        ],
+        "title": "VersionSummary",
+        "description": "One version in design detail."
       },
       "YankRequest": {
         "properties": {
