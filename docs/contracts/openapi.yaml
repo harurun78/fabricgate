@@ -1342,7 +1342,8 @@ paths:
           description: Successful Response
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
         '422':
           description: Validation Error
           content:
@@ -4026,6 +4027,30 @@ components:
       - role
       title: UpdateMemberRoleRequest
       description: Request model to update a member's role.
+    UserProfileResponse:
+      properties:
+        username:
+          type: string
+          title: Username
+        namespace:
+          type: string
+          title: Namespace
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - username
+      - namespace
+      - created_at
+      title: UserProfileResponse
+      description: '``GET /api/v1/users/me`` — the authenticated user''s profile.'
     UsernameSetupRequest:
       properties:
         username:
