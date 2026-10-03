@@ -37,16 +37,6 @@ class ExternalAuthPrincipal(FabricGateModel):
     email: EmailStr | None = None
 
 
-class UsernameSetupRequest(FabricGateModel):
-    """First-login username setup request."""
-
-    username: str = Field(
-        min_length=3,
-        max_length=64,
-        pattern=r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
-    )
-
-
 class ReservedNamespaceVerifyRequest(FabricGateModel):
     """Verification token input for reserved namespace unlock."""
 

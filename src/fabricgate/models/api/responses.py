@@ -92,15 +92,6 @@ class UserProfileResponse(ApiResponseModel):
     created_at: datetime
 
 
-class UsernameSetupResponse(ApiResponseModel):
-    """Result of first-login username setup."""
-
-    username: str
-    namespace: str
-    created: bool = True
-    created_at: datetime
-
-
 # ---------------------------------------------------------------------------
 # Namespace responses
 # ---------------------------------------------------------------------------

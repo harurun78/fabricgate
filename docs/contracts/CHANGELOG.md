@@ -92,6 +92,15 @@
   Generated from the Pydantic models via `scripts/extract_schemas.py`;
   drift-gated in CI. Enables new-language SDK codegen against the file formats.
 
+### Removed
+- **BREAKING (Registry API)**: `POST /api/v1/users/me/username` and its models
+  `fabricgate.models.api.requests.UsernameSetupRequest` /
+  `fabricgate.models.api.responses.UsernameSetupResponse` are removed
+  (registry #994). Usernames are set automatically at the first OAuth login,
+  and no client calls this endpoint (the CLI/SDK never did). The endpoint also
+  accepted an existing namespace's name as a new username, which granted write
+  access to that namespace. The registry now answers `404`.
+
 ### Fixed
 - `POST /api/v1/oauth/token` success body: the client now reads the standard
   OAuth token response (RFC 6749 §5.1: `access_token`, `expires_in`, `scope`,

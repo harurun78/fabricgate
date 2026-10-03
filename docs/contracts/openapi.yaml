@@ -1350,41 +1350,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/users/me/username:
-    post:
-      tags:
-      - auth
-      summary: Setup Username
-      description: Set unique username after first login.
-      operationId: setup_username_api_v1_users_me_username_post
-      parameters:
-      - name: authorization
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Authorization
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UsernameSetupRequest'
-      responses:
-        '201':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UsernameSetupResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/users/me/designs:
     get:
       tags:
@@ -4051,43 +4016,6 @@ components:
       - created_at
       title: UserProfileResponse
       description: '``GET /api/v1/users/me`` — the authenticated user''s profile.'
-    UsernameSetupRequest:
-      properties:
-        username:
-          type: string
-          maxLength: 64
-          minLength: 3
-          pattern: ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$
-          title: Username
-      additionalProperties: false
-      type: object
-      required:
-      - username
-      title: UsernameSetupRequest
-      description: First-login username setup request.
-    UsernameSetupResponse:
-      properties:
-        username:
-          type: string
-          title: Username
-        namespace:
-          type: string
-          title: Namespace
-        created:
-          type: boolean
-          title: Created
-          default: true
-        created_at:
-          type: string
-          format: date-time
-          title: Created At
-      type: object
-      required:
-      - username
-      - namespace
-      - created_at
-      title: UsernameSetupResponse
-      description: Result of first-login username setup.
     ValidationError:
       properties:
         loc:
