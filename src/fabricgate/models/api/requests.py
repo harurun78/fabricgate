@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import EmailStr, Field, field_validator
@@ -188,6 +189,50 @@ class QuotaUpdateRequest(FabricGateModel):
     versions_per_design_limit: int | None = Field(default=None, ge=1, le=100_000)
     designs_limit: int | None = Field(default=None, ge=1, le=100_000)
     file_size_limit: int | None = Field(default=None, ge=1, le=10_995_116_277_760)
+
+
+# ---------------------------------------------------------------------------
+# API keys
+# ---------------------------------------------------------------------------
+
+
+class ApiKeyCreateRequest(FabricGateModel):
+    """``POST /api/v1/users/me/api-keys`` request.
+
+    Scope strings are checked by the registry (``INVALID_SCOPE`` /
+    ``SCOPE_EXCEEDS_CALLER``), not here, so callers get those codes rather
+    than a generic validation error.
+    """
+
+    name: str = Field(min_length=1, max_length=128)
+    scopes: list[str] = Field(min_length=1, max_length=32)
+    expires_at: datetime | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def name_no_unsafe_html(cls, v: object) -> object:
+        """Reject HTML markup and JavaScript in the key name."""
+        if isinstance(v, str):
+            return reject_unsafe_html(v)
+        return v
+
+
+class ApiKeyUpdateRequest(FabricGateModel):
+    """``PATCH /api/v1/users/me/api-keys/{key_id}`` — only the fields sent change.
+
+    ``expires_at: null`` removes the expiry. Scopes cannot change (issue a new key).
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    expires_at: datetime | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def name_no_unsafe_html(cls, v: object) -> object:
+        """Reject HTML markup and JavaScript in the key name."""
+        if isinstance(v, str):
+            return reject_unsafe_html(v)
+        return v
 
 
 # ---------------------------------------------------------------------------
