@@ -106,6 +106,9 @@
   `403 NAMESPACE_SUSPENDED` as before. The wire format is unchanged
   (`ErrorDetail.code` is a plain string); only code that references the enum
   member breaks.
+  - OpenAPI: the `GET /api/v1/namespaces/{namespace}/stats` description no
+    longer says "public for non-private namespaces" (regenerated; no schema
+    change).
 
 ### Fixed
 - `POST /api/v1/oauth/token` success body: the client now reads the standard
