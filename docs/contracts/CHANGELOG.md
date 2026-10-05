@@ -100,6 +100,12 @@
   and no client calls this endpoint (the CLI/SDK never did). The endpoint also
   accepted an existing namespace's name as a new username, which granted write
   access to that namespace. The registry now answers `404`.
+- **BREAKING (models)**: `ErrorCode.STATS_PRIVATE` is removed (registry #1020).
+  The registry has no private namespaces and never returned this code; the
+  download-stats routes are public, and a suspended namespace answers
+  `403 NAMESPACE_SUSPENDED` as before. The wire format is unchanged
+  (`ErrorDetail.code` is a plain string); only code that references the enum
+  member breaks.
 
 ### Fixed
 - `POST /api/v1/oauth/token` success body: the client now reads the standard
