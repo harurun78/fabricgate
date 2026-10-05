@@ -36,8 +36,17 @@ def _parse_expires(expires: str | None) -> str | None:
         dt = datetime.now(tz=UTC) + timedelta(days=days)
         return dt.isoformat()
 
-    # Assume ISO 8601 — let the server validate
-    return expires
+    # ISO 8601 date or datetime; the registry needs an offset, so a bare one is UTC.
+    try:
+        dt = datetime.fromisoformat(expires)
+    except ValueError:
+        raise SDKError(
+            f"Invalid --expires value '{expires}': use an ISO 8601 date/datetime or e.g. 90d.",
+            code=ExitKind.INVALID,
+        ) from None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +211,7 @@ def token_list(
             expires_at=k.expires_at,
             last_used_at=k.last_used_at,
             created_at=k.created_at,
+            revoked_at=k.revoked_at,
         )
         for k in resp.api_keys
     ]

@@ -1231,6 +1231,34 @@ def test_token_list_text_output(monkeypatch) -> None:
     assert "NAME" in result.output
 
 
+def test_token_list_shows_revoked_and_expired_status(monkeypatch) -> None:
+    """token list — revoked / expired keys are told apart from active ones."""
+    items = [
+        TokenInfo(id=1, name="live", scopes=["public:read"], created_at=datetime(2026, 1, 1, tzinfo=UTC)),
+        TokenInfo(
+            id=2,
+            name="gone",
+            scopes=["public:read"],
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            revoked_at=datetime(2026, 2, 1, tzinfo=UTC),
+        ),
+        TokenInfo(
+            id=3,
+            name="old",
+            scopes=["public:read"],
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            expires_at=datetime(2026, 1, 2, tzinfo=UTC),
+        ),
+    ]
+    monkeypatch.setattr("fabricgate.cli.commands.token.sdk_api.token_list", lambda **_kwargs: items)
+    result = CliRunner().invoke(main, ["token", "list"])
+    assert result.exit_code == 0
+    lines = {line.split()[1]: line for line in result.output.splitlines()[1:]}
+    assert " active " in lines["live"]
+    assert " revoked " in lines["gone"]
+    assert " expired " in lines["old"]
+
+
 def test_token_list_json_output(monkeypatch) -> None:
     """token list — JSON出力。"""
 
@@ -2901,23 +2929,24 @@ def test_exit_code_table_covers_every_failure_kind() -> None:
 
 
 class TestUnsupportedCommandsAreHidden:
-    """token / webhook call registry endpoints that do not exist yet (issue #6).
+    """webhook calls registry endpoints that do not exist yet (issue #6).
 
-    They stay importable so the implementation is not lost, but they must not
-    appear in `--help`, where they would advertise a surface that 404s.
+    It stays importable so the implementation is not lost, but it must not
+    appear in `--help`, where it would advertise a surface that 404s. token is
+    listed again now that the registry implements API keys (registry #821).
     """
 
     def test_hidden_from_help(self):
         result = CliRunner().invoke(main, ["--help"])
         assert result.exit_code == 0, result.output
-        assert "token" not in result.output
+        assert "token" in result.output
         assert "webhook" not in result.output
 
     def test_still_registered(self):
         from fabricgate.cli.commands.token import token_group
         from fabricgate.cli.commands.webhook import webhook_group
 
-        assert token_group.hidden is True
+        assert token_group.hidden is False
         assert webhook_group.hidden is True
         assert {"token", "webhook"} <= set(main.commands)
 
