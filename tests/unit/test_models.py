@@ -672,6 +672,50 @@ def _pynq_manifest_data() -> dict:
     }
 
 
+class TestApiKeyRequests:
+    """API key request models (registry #821)."""
+
+    def test_create_requires_name_and_scopes(self) -> None:
+        from fabricgate.models.api.requests import ApiKeyCreateRequest
+
+        with pytest.raises(ValidationError):
+            ApiKeyCreateRequest.model_validate({"name": "", "scopes": ["public:read"]})
+        with pytest.raises(ValidationError):
+            ApiKeyCreateRequest.model_validate({"name": "ci", "scopes": []})
+        req = ApiKeyCreateRequest.model_validate({"name": "ci", "scopes": ["ns:alice:write"]})
+        assert req.expires_at is None
+
+    @pytest.mark.parametrize(
+        "model,extra",
+        [("ApiKeyCreateRequest", {"scopes": ["public:read"]}), ("ApiKeyUpdateRequest", {})],
+    )
+    def test_name_rejects_unsafe_html(self, model: str, extra: dict[str, object]) -> None:
+        from fabricgate.models.api import requests
+
+        with pytest.raises(ValidationError, match="HTML tags and unsafe content"):
+            getattr(requests, model).model_validate({"name": "<b>ci</b>", **extra})
+
+    def test_expires_at_accepts_iso_strings_from_parsed_json(self) -> None:
+        """FastAPI validates the parsed dict, so the field must take the ISO string (strict models reject it)."""
+        from fabricgate.models.api.requests import ApiKeyCreateRequest, ApiKeyUpdateRequest
+
+        raw = {"name": "ci", "scopes": ["public:read"], "expires_at": "2027-03-27T00:00:00+00:00"}
+        assert ApiKeyCreateRequest.model_validate(raw).expires_at == datetime(2027, 3, 27, tzinfo=UTC)
+        assert ApiKeyUpdateRequest.model_validate({"expires_at": "2027-03-27T00:00:00Z"}).expires_at is not None
+
+    def test_update_distinguishes_null_expiry_from_unset(self) -> None:
+        from fabricgate.models.api.requests import ApiKeyUpdateRequest
+
+        assert "expires_at" in ApiKeyUpdateRequest.model_validate({"expires_at": None}).model_fields_set
+        assert "expires_at" not in ApiKeyUpdateRequest.model_validate({"name": "ci"}).model_fields_set
+
+    def test_update_rejects_scopes(self) -> None:
+        from fabricgate.models.api.requests import ApiKeyUpdateRequest
+
+        with pytest.raises(ValidationError):
+            ApiKeyUpdateRequest.model_validate({"scopes": ["public:read"]})
+
+
 class TestPynqManifest:
     def test_valid(self):
         m = PynqManifest.model_validate(_pynq_manifest_data())

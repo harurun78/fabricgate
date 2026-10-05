@@ -22,6 +22,18 @@
   成功に変わる方向のみの変化。由来は `fallback_from`（加算的 optional）で観測可能。
   根拠: `docs/specs/client-behavior.md` §6。
 
+- **BREAKING (Registry API)**: request-validation errors (`422`, FastAPI's
+  `RequestValidationError`) now use the standard envelope
+  `{"error": {"code": "SCHEMA_VALIDATION_FAILED", "message": "query.page: ..."}}`
+  instead of `{"detail": [...]}` (registry #1049). The message joins up to ten
+  `location: message` pairs and never echoes the input value.
+  - OpenAPI: every 422 that referenced `HTTPValidationError` now references
+    `ErrorResponse`; the `HTTPValidationError` and `ValidationError` schemas are
+    removed (regenerated).
+  - Released SDKs could not parse the old body and raised `NetworkError`
+    (`FailureKind.INFRA`); they now raise `RegistryError` with
+    `FailureKind.INVALID`, as for other 422s.
+
 ### Added
 - `fabricgate.models.api.responses.UserProfileResponse` (`username`,
   `namespace`, `email`, `created_at`) and the `GET /users/me` success-response
@@ -91,6 +103,14 @@
   `design-index.schema.json`, `platform-manifest.schema.json`, `board-db.schema.json`.
   Generated from the Pydantic models via `scripts/extract_schemas.py`;
   drift-gated in CI. Enables new-language SDK codegen against the file formats.
+
+- API keys (registry #821, spec §3.9): `POST` / `GET` / `PATCH` / `DELETE
+  /api/v1/users/me/api-keys` and `fabricgate.models.api.requests.ApiKeyCreateRequest`
+  / `ApiKeyUpdateRequest`. `ApiKeyInfo` gains `revoked_at` (optional, additive).
+  `ErrorCode` gains `INVALID_SCOPE`, `SCOPE_EXCEEDS_CALLER`, `API_KEY_NOT_ALLOWED`,
+  `API_KEY_NOT_FOUND` and `API_KEY_LIMIT_EXCEEDED`. All four endpoints need
+  interactive auth; an `fgk_` key is accepted as a Bearer token for namespace
+  writes within its `ns:{namespace}:write` scopes.
 
 ### Removed
 - **BREAKING (Registry API)**: `POST /api/v1/users/me/username` and its models

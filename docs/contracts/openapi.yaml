@@ -144,7 +144,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/stats:
     get:
       tags:
@@ -190,7 +190,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}:
     get:
       tags:
@@ -228,7 +228,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - designs
@@ -285,7 +285,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - designs
@@ -338,7 +338,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/diff:
     get:
       tags:
@@ -393,7 +393,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/uploads:
     post:
       tags:
@@ -454,7 +454,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/deprecate:
     post:
       tags:
@@ -508,7 +508,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - designs
@@ -553,7 +553,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/license-check:
     get:
       tags:
@@ -613,7 +613,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}:
     get:
       tags:
@@ -663,7 +663,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - designs
@@ -728,7 +728,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}/artifacts/{filename}:
     get:
       tags:
@@ -780,7 +780,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}/dependencies:
     get:
       tags:
@@ -839,7 +839,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}/shell:
     get:
       tags:
@@ -891,7 +891,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/stats:
     get:
       tags:
@@ -919,7 +919,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/stats:
     get:
       tags:
@@ -977,7 +977,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/versions/{version}/stats:
     get:
       tags:
@@ -1041,7 +1041,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/batch-yank:
     post:
       tags:
@@ -1088,7 +1088,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/designs/{design}/batch-deprecate:
     post:
       tags:
@@ -1135,7 +1135,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/oauth/authorize:
     get:
       tags:
@@ -1162,7 +1162,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/oauth/callback:
     get:
       tags:
@@ -1196,7 +1196,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/oauth/token:
     post:
       tags:
@@ -1224,7 +1224,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/oauth/device_authorization:
     post:
       tags:
@@ -1280,7 +1280,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/oauth/revoke:
     post:
       tags:
@@ -1307,7 +1307,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/oauth/logout:
     post:
       tags:
@@ -1349,7 +1349,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/users/me/designs:
     get:
       tags:
@@ -1381,7 +1381,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces:
     get:
       tags:
@@ -1427,12 +1427,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       tags:
       - namespaces
       summary: Create Namespace
-      description: Create a new namespace. Requires authentication.
+      description: Create a new namespace. Requires interactive authentication (not
+        an API key).
       operationId: create_namespace_api_v1_namespaces_post
       parameters:
       - name: authorization
@@ -1461,7 +1462,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}:
     get:
       tags:
@@ -1488,7 +1489,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/verify:
     post:
       tags:
@@ -1521,7 +1522,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/quota:
     get:
       tags:
@@ -1548,7 +1549,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     patch:
       tags:
       - namespaces
@@ -1588,7 +1589,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/members:
     get:
       summary: List Namespace Members
@@ -1633,7 +1634,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       summary: Add Namespace Member
       description: 'Add a member to a namespace.
@@ -1702,7 +1703,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/namespaces/{namespace}/members/{user_id}:
     patch:
       summary: Update Namespace Member Role
@@ -1778,7 +1779,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       summary: Remove Namespace Member
       description: 'Remove a member from a namespace.
@@ -1837,7 +1838,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/users:
     get:
       tags:
@@ -1899,7 +1900,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/users/{username}/suspend:
     post:
       tags:
@@ -1942,7 +1943,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - admin
@@ -1976,7 +1977,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/users/{username}:
     delete:
       tags:
@@ -2007,7 +2008,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/namespaces:
     get:
       tags:
@@ -2072,7 +2073,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/namespaces/{namespace}/quota:
     patch:
       tags:
@@ -2113,7 +2114,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/storage:
     get:
       tags:
@@ -2142,7 +2143,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/namespaces/{namespace}/designs/{design}/versions/{version}/yank:
     post:
       tags:
@@ -2198,7 +2199,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - admin
@@ -2244,7 +2245,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/namespaces/{namespace}/suspend:
     post:
       tags:
@@ -2287,7 +2288,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
       - admin
@@ -2321,7 +2322,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/mirror/sync-log:
     get:
       tags:
@@ -2387,7 +2388,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/admin/mirror/sync:
     post:
       tags:
@@ -2418,7 +2419,223 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HTTPValidationError'
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/users/me/api-keys:
+    post:
+      tags:
+      - api-keys
+      summary: Create Api Key
+      description: Create an API key. The plaintext ``key`` is returned only in this
+        response.
+      operationId: create_api_key_api_v1_users_me_api_keys_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyCreateRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyCreateResponse'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Forbidden
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Bad Request
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Too Many Requests
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags:
+      - api-keys
+      summary: List Api Keys
+      description: List the caller's API keys, revoked ones included. Never returns
+        the plaintext.
+      operationId: list_api_keys_api_v1_users_me_api_keys_get
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyListResponse'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Forbidden
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/users/me/api-keys/{key_id}:
+    patch:
+      tags:
+      - api-keys
+      summary: Update Api Key
+      description: 'Rename a key or change its expiry (``expires_at: null`` removes
+        it). Scopes cannot change.'
+      operationId: update_api_key_api_v1_users_me_api_keys__key_id__patch
+      parameters:
+      - name: key_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Key Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiKeyUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyInfo'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Forbidden
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Bad Request
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+      - api-keys
+      summary: Revoke Api Key
+      description: Revoke a key at once. Revoking an already revoked key is a no-op
+        (and is not audited again).
+      operationId: revoke_api_key_api_v1_users_me_api_keys__key_id__delete
+      parameters:
+      - name: key_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Key Id
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      responses:
+        '204':
+          description: Successful Response
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Forbidden
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          description: Not Found
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     AddMemberRequest:
@@ -2600,6 +2817,155 @@ components:
       - per_page
       title: AdminUserListResponse
       description: '``GET /api/v1/admin/users`` response.'
+    ApiKeyCreateRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Name
+        scopes:
+          items:
+            type: string
+          type: array
+          maxItems: 32
+          minItems: 1
+          title: Scopes
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - scopes
+      title: ApiKeyCreateRequest
+      description: '``POST /api/v1/users/me/api-keys`` request.
+
+
+        Scope strings are checked by the registry (``INVALID_SCOPE`` /
+
+        ``SCOPE_EXCEEDS_CALLER``), not here, so callers get those codes rather
+
+        than a generic validation error.'
+    ApiKeyCreateResponse:
+      properties:
+        id:
+          type: integer
+          title: Id
+        name:
+          type: string
+          title: Name
+        key:
+          type: string
+          title: Key
+        scopes:
+          items:
+            type: string
+          type: array
+          title: Scopes
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - key
+      - scopes
+      - created_at
+      title: ApiKeyCreateResponse
+      description: '``POST /api/v1/users/me/api-keys`` — created key with plaintext
+        token.'
+    ApiKeyInfo:
+      properties:
+        id:
+          type: integer
+          title: Id
+        name:
+          type: string
+          title: Name
+        scopes:
+          items:
+            type: string
+          type: array
+          title: Scopes
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        last_used_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Used At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        revoked_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Revoked At
+      type: object
+      required:
+      - id
+      - name
+      - scopes
+      - created_at
+      title: ApiKeyInfo
+      description: Single API key entry (no plaintext token).
+    ApiKeyListResponse:
+      properties:
+        api_keys:
+          items:
+            $ref: '#/components/schemas/ApiKeyInfo'
+          type: array
+          title: Api Keys
+      type: object
+      required:
+      - api_keys
+      title: ApiKeyListResponse
+      description: '``GET /api/v1/users/me/api-keys`` response.'
+    ApiKeyUpdateRequest:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 128
+            minLength: 1
+          - type: 'null'
+          title: Name
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+      additionalProperties: false
+      type: object
+      title: ApiKeyUpdateRequest
+      description: '``PATCH /api/v1/users/me/api-keys/{key_id}`` — only the fields
+        sent change.
+
+
+        ``expires_at: null`` removes the expiry. Scopes cannot change (issue a new
+        key).'
     ApiPlatformEntry:
       properties:
         platform:
@@ -3141,15 +3507,6 @@ components:
       - error
       title: ErrorResponse
       description: Uniform error response wrapper.
-    HTTPValidationError:
-      properties:
-        detail:
-          items:
-            $ref: '#/components/schemas/ValidationError'
-          type: array
-          title: Detail
-      type: object
-      title: HTTPValidationError
     HealthResponse:
       properties:
         status:
@@ -4016,32 +4373,6 @@ components:
       - created_at
       title: UserProfileResponse
       description: '``GET /api/v1/users/me`` — the authenticated user''s profile.'
-    ValidationError:
-      properties:
-        loc:
-          items:
-            anyOf:
-            - type: string
-            - type: integer
-          type: array
-          title: Location
-        msg:
-          type: string
-          title: Message
-        type:
-          type: string
-          title: Error Type
-        input:
-          title: Input
-        ctx:
-          type: object
-          title: Context
-      type: object
-      required:
-      - loc
-      - msg
-      - type
-      title: ValidationError
     VersionDetailResponse:
       properties:
         schema:
