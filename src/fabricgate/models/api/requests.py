@@ -206,7 +206,7 @@ class ApiKeyCreateRequest(FabricGateModel):
 
     name: str = Field(min_length=1, max_length=128)
     scopes: list[str] = Field(min_length=1, max_length=32)
-    expires_at: datetime | None = None
+    expires_at: datetime | None = Field(default=None, strict=False)  # JSON sends an ISO 8601 string
 
     @field_validator("name", mode="before")
     @classmethod
@@ -224,7 +224,7 @@ class ApiKeyUpdateRequest(FabricGateModel):
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=128)
-    expires_at: datetime | None = None
+    expires_at: datetime | None = Field(default=None, strict=False)  # JSON sends an ISO 8601 string
 
     @field_validator("name", mode="before")
     @classmethod

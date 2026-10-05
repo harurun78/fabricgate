@@ -695,6 +695,14 @@ class TestApiKeyRequests:
         with pytest.raises(ValidationError, match="HTML tags and unsafe content"):
             getattr(requests, model).model_validate({"name": "<b>ci</b>", **extra})
 
+    def test_expires_at_accepts_iso_strings_from_parsed_json(self) -> None:
+        """FastAPI validates the parsed dict, so the field must take the ISO string (strict models reject it)."""
+        from fabricgate.models.api.requests import ApiKeyCreateRequest, ApiKeyUpdateRequest
+
+        raw = {"name": "ci", "scopes": ["public:read"], "expires_at": "2027-03-27T00:00:00+00:00"}
+        assert ApiKeyCreateRequest.model_validate(raw).expires_at == datetime(2027, 3, 27, tzinfo=UTC)
+        assert ApiKeyUpdateRequest.model_validate({"expires_at": "2027-03-27T00:00:00Z"}).expires_at is not None
+
     def test_update_distinguishes_null_expiry_from_unset(self) -> None:
         from fabricgate.models.api.requests import ApiKeyUpdateRequest
 
