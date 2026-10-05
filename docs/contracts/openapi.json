@@ -1387,7 +1387,7 @@
           "designs"
         ],
         "summary": "Get Namespace Stats",
-        "description": "§ 3.11 — Namespace-level download statistics (public for non-private namespaces).",
+        "description": "§ 3.11 — Namespace-level download statistics (public; no private namespaces exist).",
         "operationId": "get_namespace_stats_api_v1_namespaces__namespace__stats_get",
         "parameters": [
           {
