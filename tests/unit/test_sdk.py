@@ -2892,7 +2892,7 @@ def test_stats_permission_error_maps_to_exit_code_2(monkeypatch: pytest.MonkeyPa
         def get_namespace_stats(self, namespace):
             raise RegistryError(
                 403,
-                ErrorResponse(error=ErrorDetail(code="STATS_PRIVATE", message="forbidden")),
+                ErrorResponse(error=ErrorDetail(code="FORBIDDEN", message="forbidden")),
             )
 
     _patch_all_rc(monkeypatch, _ForbiddenClient)
