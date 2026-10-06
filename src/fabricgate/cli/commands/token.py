@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 
 import click
 
@@ -10,11 +11,7 @@ from fabricgate.cli.exit_codes import exit_code_for
 from fabricgate.sdk import api as sdk_api
 
 
-# Hidden until the registry implements the API keys endpoints: the hosted
-# service answers 404 for every call these subcommands make, so the group is
-# kept out of `--help` rather than advertising a surface that cannot work.
-# See https://github.com/harurun78/fabricgate/issues/6
-@click.group(name="token", hidden=True)
+@click.group(name="token")
 @click.pass_obj
 def token_group(obj: dict[str, object]) -> None:
     """Manage API keys for CI/CD and automation."""
@@ -23,7 +20,7 @@ def token_group(obj: dict[str, object]) -> None:
 @token_group.command(name="create")
 @click.option("--name", required=True, help="Human-readable name for the API key.")
 @click.option("--scopes", default=None, help="Comma-separated scopes (default: public:read).")
-@click.option("--expires", default=None, help="Expiry: ISO 8601 or relative (e.g. 90d).")
+@click.option("--expires", default=None, help="Expiry: ISO 8601 date/datetime (UTC if no offset) or e.g. 90d.")
 @click.pass_obj
 def token_create_cmd(
     obj: dict[str, object],
@@ -76,11 +73,18 @@ def token_list_cmd(obj: dict[str, object]) -> None:
             click.echo("No API keys found.")
             return
         # Table header
-        click.echo(f"{'ID':<5} {'NAME':<20} {'SCOPES':<30} {'EXPIRES':<16} {'LAST USED'}")
+        now = datetime.now(tz=UTC)
+        click.echo(f"{'ID':<5} {'NAME':<20} {'SCOPES':<30} {'STATUS':<8} {'EXPIRES':<16} {'LAST USED'}")
         for k in keys:
+            if k.revoked_at:
+                status = "revoked"
+            elif k.expires_at and k.expires_at <= now:
+                status = "expired"
+            else:
+                status = "active"
             expires = str(k.expires_at.date()) if k.expires_at else "(never)"
             last_used = str(k.last_used_at.date()) if k.last_used_at else "(never)"
-            click.echo(f"{k.id:<5} {k.name:<20} {', '.join(k.scopes):<30} {expires:<16} {last_used}")
+            click.echo(f"{k.id:<5} {k.name:<20} {', '.join(k.scopes):<30} {status:<8} {expires:<16} {last_used}")
 
 
 @token_group.command(name="revoke")

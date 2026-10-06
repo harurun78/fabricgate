@@ -1614,6 +1614,28 @@ def test_parse_expires_iso() -> None:
     assert _parse_expires(iso_str) == iso_str
 
 
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("2027-01-01", "2027-01-01T00:00:00+00:00"),
+        ("2027-01-01T12:30:00", "2027-01-01T12:30:00+00:00"),
+        ("2027-01-01T12:30:00+09:00", "2027-01-01T12:30:00+09:00"),
+    ],
+)
+def test_parse_expires_bare_values_are_utc(value: str, expected: str) -> None:
+    """The registry rejects datetimes without an offset (400), so a bare date/datetime is sent as UTC."""
+    from fabricgate.sdk.auth import _parse_expires
+
+    assert _parse_expires(value) == expected
+
+
+def test_parse_expires_rejects_garbage() -> None:
+    from fabricgate.sdk.auth import SDKError, _parse_expires
+
+    with pytest.raises(SDKError, match="Invalid --expires"):
+        _parse_expires("next tuesday")
+
+
 def test_parse_expires_none() -> None:
     """NoneはNoneを返す。"""
     from fabricgate.sdk.auth import _parse_expires

@@ -707,9 +707,10 @@ fabricgate/blink           1.0.0     zcu104/pynq +1         2026-03-17
 ---
 
 ### 3.8 `fabricgate token`
-> **Not available yet.** The hosted registry does not implement these endpoints, so this
-> command group is hidden from `--help` and any call returns 404. Tracked in
-> [issue #6](https://github.com/harurun78/fabricgate/issues/6).
+> The registry implements these endpoints since harurun78/fabricgate-registry#821 (they need an
+> interactive `fabricgate login`; an API key cannot manage keys). A registry that predates it
+> answers 404. Using a key from the CLI (`FABRICGATE_TOKEN` / `--token` below) is not implemented
+> yet ([#37](https://github.com/harurun78/fabricgate/issues/37)).
 
 
 API キー（machine token）の管理コマンド。CI/CD や自動化スクリプト向けの長期資格情報を作成・一覧・失効できる。
@@ -740,7 +741,7 @@ fabricgate token create --name <name> [--scopes <scope,...>] [--expires <date>]
 |---|:---:|---|
 | `--name` | ✓ | API キーの識別名（例: `ci-pipeline`） |
 | `--scopes` | — | カンマ区切りスコープ（デフォルト: `public:read`） |
-| `--expires` | — | 有効期限 ISO 8601 または相対表記（例: `90d`, `2027-01-01`） |
+| `--expires` | — | 有効期限 ISO 8601 の日付・日時、または相対表記（例: `90d`, `2027-01-01`）。オフセットの無い値は UTC として送る |
 
 **Behavior:**
 
@@ -778,9 +779,9 @@ fabricgate token list [--json]
 ```
 $ fabricgate token list
 
-ID   NAME              SCOPES                          EXPIRES        LAST USED
-1    ci-pipeline       public:read, ns:alice:write     2026-06-25     2026-03-27
-2    deploy-script     public:read                     (never)        2026-03-20
+ID   NAME              SCOPES                          STATUS   EXPIRES        LAST USED
+1    ci-pipeline       public:read, ns:alice:write     active   2026-06-25     2026-03-27
+2    deploy-script     public:read                     revoked  (never)        2026-03-20
 ```
 
 ---
@@ -812,6 +813,8 @@ Revoked.
 ---
 
 #### 環境変数による API キー認証
+
+> **未実装**（[#37](https://github.com/harurun78/fabricgate/issues/37)）。以下は予定している形。
 
 `fabricgate` コマンドへの API キーの渡し方は2通り:
 

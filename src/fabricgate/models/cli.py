@@ -164,6 +164,7 @@ class TokenInfo(FabricGateModel):
     expires_at: datetime | None = None
     last_used_at: datetime | None = None
     created_at: datetime
+    revoked_at: datetime | None = None
 
 
 class WebhookCreateResult(FabricGateModel):
