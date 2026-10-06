@@ -20,7 +20,7 @@ _log = logging.getLogger(__name__)
 
 _DEFAULT_CRED_PATH = Path.home() / ".fabricgate" / "credentials.json"
 _KEYRING_SERVICE = "fabricgate"
-_TOKEN_ENV = "FABRICGATE_TOKEN"
+TOKEN_ENV = "FABRICGATE_TOKEN"
 
 
 def _try_keyring_load(registry: str) -> Credentials | None:
@@ -90,7 +90,7 @@ def load_credentials(registry: str, path: Path | None = None) -> Credentials | N
     the stored credentials. Its scopes and expiry are known only to the
     registry, so ``scopes`` is empty and ``expires_at`` is a placeholder.
     """
-    if token := os.getenv(_TOKEN_ENV):
+    if token := os.getenv(TOKEN_ENV):
         return Credentials(
             registry=registry,
             token=token,

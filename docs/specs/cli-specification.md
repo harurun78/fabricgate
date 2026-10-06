@@ -709,8 +709,8 @@ fabricgate/blink           1.0.0     zcu104/pynq +1         2026-03-17
 ### 3.8 `fabricgate token`
 > The registry implements these endpoints since harurun78/fabricgate-registry#821 (they need an
 > interactive `fabricgate login`; an API key cannot manage keys). A registry that predates it
-> answers 404. Every command uses a key passed in `FABRICGATE_TOKEN` (below); the `--token` flag is
-> not implemented yet.
+> answers 404. The commands that use credentials (`push` / `yank` / `list --remote` / `quota` and so on)
+> use a key passed in `FABRICGATE_TOKEN` (below); the `--token` flag is not implemented yet.
 
 
 API キー（machine token）の管理コマンド。CI/CD や自動化スクリプト向けの長期資格情報を作成・一覧・失効できる。
@@ -829,14 +829,17 @@ fabricgate push ./my-design/ --token fgk_Abc123...
 |---|---|---|
 | API キー / OAuth トークン共通 | `FABRICGATE_TOKEN` | `--token`（未実装） |
 
-> **Note:** `FABRICGATE_TOKEN` が空でない値で設定されている場合、`fabricgate login` で OS キーチェーン /
+> **Note:** `FABRICGATE_TOKEN` が空でない値で設定されている場合、資格情報を使うコマンド（`push` / `yank` /
+> `list --remote` / `quota` など）は、`fabricgate login` で OS キーチェーン /
 > `~/.fabricgate/credentials.json` に保存した資格情報より優先して `Authorization: Bearer` に使う
 > （空文字は未設定と同じ扱い）。値はログ・`--json` 出力・エラーメッセージに出さない。
+> `search` / `info` / `stats` / `diff` / `watch` / `license-check` は資格情報を使わない。
 >
 > キーのスコープは CLI からは分からないため、`list --remote` / `quota` で `--namespace` を省略すると
 > namespace を決められず失敗する（exit 1）。`--namespace` を指定する。
 >
-> キー管理・namespace 作成・メンバー管理は API キーでは使えない。
+> キー管理・namespace 作成・メンバー管理と、`ns:<namespace>:admin` が必要な `webhook` は API キーでは使えない
+> （`webhook` は registry が未提供のため現状は 404）。
 > `FABRICGATE_TOKEN` を設定したまま `fabricgate token ...` を実行するとキーが使われ、registry が
 > 403 `API_KEY_NOT_ALLOWED` を返す（exit 2）。キー管理は変数を外して `fabricgate login` の資格情報で行う。
 

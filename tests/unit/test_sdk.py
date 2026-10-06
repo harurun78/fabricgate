@@ -15,6 +15,7 @@ import fabricgate.client.puller as _puller_mod
 import fabricgate.sdk.auth as _sdk_auth_mod
 import fabricgate.sdk.designs as _sdk_designs_mod
 import fabricgate.sdk.webhooks as _sdk_webhooks_mod
+from fabricgate.client.auth import load_credentials as _real_load_credentials
 from fabricgate.client.puller import AttestationError, AttestationUnavailableError, IntegrityError
 from fabricgate.models.api.responses import (
     ArtifactUploadResponse,
@@ -58,6 +59,7 @@ def _no_stored_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     bodies run after autouse fixtures, so their patch wins).
     """
     monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+    monkeypatch.delenv("FABRICGATE_TOKEN", raising=False)
 
 
 def _patch_all_rc(monkeypatch: pytest.MonkeyPatch, fake_client: type) -> None:
@@ -3038,6 +3040,23 @@ def test_quota_requires_namespace_or_login(monkeypatch: pytest.MonkeyPatch) -> N
     with pytest.raises(sdk_api.SDKError) as exc_info:
         sdk_api.quota(registry="http://test")
     assert exc_info.value.code == ExitKind.GENERIC
+    assert "fabricgate login" in str(exc_info.value)
+
+
+def test_quota_without_namespace_under_token_env_asks_for_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With FABRICGATE_TOKEN set, logging in would not help (the key wins), so only --namespace is suggested."""
+    secret = "fgk_SecretKeyMustNotLeak123"
+    monkeypatch.setenv("FABRICGATE_TOKEN", secret)
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", _real_load_credentials)
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.quota(registry="http://test")
+    message = str(exc_info.value)
+    assert exc_info.value.code == ExitKind.GENERIC
+    assert "--namespace" in message
+    assert "FABRICGATE_TOKEN" in message
+    assert "login" not in message
+    assert secret not in message
 
 
 # ===========================================================================
