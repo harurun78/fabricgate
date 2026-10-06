@@ -175,6 +175,13 @@ class RegistryClient:
             # them into ``NetworkError`` so ``httpx`` stays confined to this layer;
             # ``NetworkError.kind`` is ``FailureKind.INFRA``, as before.  Parseable
             # error responses raise ``RegistryError`` (not an httpx type) and pass through.
+            if isinstance(exc, httpx.LocalProtocolError):
+                # h11 quotes the offending header, which may be the Authorization token,
+                # so neither the message nor the chained cause may carry it.
+                raise NetworkError(
+                    "Network error: the request has an invalid header value"
+                    " (does the token contain whitespace or a newline?)"
+                ) from None
             raise NetworkError(f"Network error: {exc}") from exc
 
     # ---- Discovery ----

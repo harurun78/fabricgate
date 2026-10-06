@@ -105,6 +105,25 @@ class TestErrorHandling:
         assert exc_info.value.status_code == 0
         assert exc_info.value.error is None
 
+    def test_illegal_token_header_does_not_leak_token(self) -> None:
+        """A token with a trailing newline (e.g. FABRICGATE_TOKEN from a CI secret) makes the
+        HTTP layer reject the Authorization header; the error must not echo the token."""
+        import socket
+
+        secret = "fgk_SecretKeyMustNotLeak123"
+        # A real listening socket: the header check happens in h11, which MockTransport bypasses.
+        with socket.socket() as server:
+            server.bind(("127.0.0.1", 0))
+            server.listen(1)
+            port = server.getsockname()[1]
+            with RegistryClient(base_url=f"http://127.0.0.1:{port}", token=secret + "\n", timeout=5) as client:
+                with pytest.raises(NetworkError) as exc_info:
+                    client.search_designs()
+        assert secret not in str(exc_info.value)
+        assert "whitespace" in str(exc_info.value)
+        assert exc_info.value.__cause__ is None
+        assert exc_info.value.__suppress_context__
+
 
 # ---------------------------------------------------------------------------
 # Discovery
