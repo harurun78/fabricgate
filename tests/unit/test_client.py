@@ -76,6 +76,12 @@ class TestConfig:
         assert loaded.cache_dir == "/tmp/my-cache"
 
 
+@pytest.fixture(autouse=True)
+def _no_token_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A developer's exported FABRICGATE_TOKEN must not leak into credential tests."""
+    monkeypatch.delenv("FABRICGATE_TOKEN", raising=False)
+
+
 @pytest.fixture()
 def file_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     """Force file-backed credential storage for tests that assert file behavior."""
@@ -161,6 +167,44 @@ class TestAuth:
         monkeypatch.setattr(_keyring_module, "delete_password", lambda _svc, _reg: deleted.append(_reg))
         delete_credentials("https://r.example.com")
         assert len(deleted) == 1
+
+    def test_token_env_wins_over_stored(
+        self, tmp_path: Path, file_credentials: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """FABRICGATE_TOKEN が設定されていれば保存済みの資格情報より優先する (CLI 仕様 §3.8)。"""
+        p = tmp_path / "creds.json"
+        save_credentials(self._cred(), p)
+        monkeypatch.setenv("FABRICGATE_TOKEN", "fgk_from_env")
+        loaded = load_credentials("https://r.example.com", p)
+        assert loaded is not None
+        assert loaded.token == "fgk_from_env"
+        assert loaded.registry == "https://r.example.com"
+        # A key's scopes are only known to the registry; never guess a namespace from them.
+        assert loaded.scopes == []
+
+    def test_token_env_skips_keyring(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """環境変数があるときは keyring を読まない (CI でキーチェーンのプロンプトを出さない)。"""
+        import fabricgate.client.auth as auth_module
+
+        def _boom(_registry: str) -> None:
+            raise AssertionError("keyring must not be read when FABRICGATE_TOKEN is set")
+
+        monkeypatch.setattr(auth_module, "_try_keyring_load", _boom)
+        monkeypatch.setenv("FABRICGATE_TOKEN", "fgk_from_env")
+        loaded = load_credentials("https://r.example.com")
+        assert loaded is not None
+        assert loaded.token == "fgk_from_env"
+
+    def test_empty_token_env_falls_back_to_stored(
+        self, tmp_path: Path, file_credentials: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """空文字 (CI で secret が未設定のとき) は未設定と同じ扱い。"""
+        p = tmp_path / "creds.json"
+        save_credentials(self._cred(), p)
+        monkeypatch.setenv("FABRICGATE_TOKEN", "")
+        loaded = load_credentials("https://r.example.com", p)
+        assert loaded is not None
+        assert loaded.token == "tok-abc"
 
 
 # ============================================================================

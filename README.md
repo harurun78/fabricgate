@@ -45,6 +45,25 @@ python -c "from pynq import Overlay; ol = Overlay('adder-demo/adder.bit')"
 
 `fabricgate --json` gives machine-readable output for every command.
 
+### Publishing from CI
+
+Create an API key once with an interactive login, then hand it to CI in `FABRICGATE_TOKEN`. When the variable is set (and not empty), every command sends it instead of the credentials `fabricgate login` stored, and it never shows up in logs, `--json` output or error messages.
+
+```sh
+fabricgate login
+fabricgate token create --name ci-pipeline --scopes ns:<your-namespace>:write --expires 90d
+```
+
+```yaml
+# .github/workflows/publish.yml
+- run: pip install fabricgate
+- run: fabricgate push ./my-design/
+  env:
+    FABRICGATE_TOKEN: ${{ secrets.FABRICGATE_TOKEN }}
+```
+
+An API key covers writes to its namespace (`push`, `yank`, `deprecate`); key management (`fabricgate token`) still needs `fabricgate login`. Pass `--namespace` to `list --remote` and `quota`, since the CLI cannot tell a key's namespace. The `--token` flag is not implemented yet.
+
 ## Supported boards and runtimes
 
 The bundled Board DB (`src/fabricgate/data/board-db/official.yaml`) currently knows these boards:
