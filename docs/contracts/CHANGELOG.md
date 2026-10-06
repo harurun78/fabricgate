@@ -34,6 +34,12 @@
     (`FailureKind.INFRA`); they now raise `RegistryError` with
     `FailureKind.INVALID`, as for other 422s.
 
+- **BREAKING (Registry API)**: `NamespaceMemberResponse` drops `email`
+  (registry #1083). The member list, add-member and role-change responses
+  exposed other members' email addresses to namespace admins. The field was
+  optional, so released CLI/SDK clients still parse the responses; only code
+  that read `email` loses it.
+
 ### Added
 - `fabricgate.models.api.responses.UserProfileResponse` (`username`,
   `namespace`, `email`, `created_at`) and the `GET /users/me` success-response

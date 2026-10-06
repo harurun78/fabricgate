@@ -5690,17 +5690,6 @@
             "type": "string",
             "title": "Username"
           },
-          "email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Email"
-          },
           "role": {
             "$ref": "#/components/schemas/MemberRole"
           },

@@ -24,7 +24,6 @@ class NamespaceMemberResponse(BaseModel):
 
     user_id: int
     username: str
-    email: str | None = None
     role: MemberRole
     joined_at: datetime
 
