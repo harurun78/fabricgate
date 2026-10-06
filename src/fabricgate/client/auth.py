@@ -1,14 +1,17 @@
 """Credentials read/write.
 
 Prefers OS keychain via ``keyring``; falls back to
-``~/.fabricgate/credentials.json`` (mode 0600).
+``~/.fabricgate/credentials.json`` (mode 0600). ``FABRICGATE_TOKEN``
+overrides both when reading (CLI spec §3.8).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import stat
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fabricgate.models.cli import Credentials
@@ -17,6 +20,7 @@ _log = logging.getLogger(__name__)
 
 _DEFAULT_CRED_PATH = Path.home() / ".fabricgate" / "credentials.json"
 _KEYRING_SERVICE = "fabricgate"
+TOKEN_ENV = "FABRICGATE_TOKEN"
 
 
 def _try_keyring_load(registry: str) -> Credentials | None:
@@ -80,7 +84,19 @@ def _save_creds_file(creds: dict[str, Credentials], path: Path) -> None:
 
 
 def load_credentials(registry: str, path: Path | None = None) -> Credentials | None:
-    """Load credentials for *registry*."""
+    """Load credentials for *registry*.
+
+    A non-empty ``FABRICGATE_TOKEN`` (an API key or any bearer token) wins over
+    the stored credentials. Its scopes and expiry are known only to the
+    registry, so ``scopes`` is empty and ``expires_at`` is a placeholder.
+    """
+    if token := os.getenv(TOKEN_ENV):
+        return Credentials(
+            registry=registry,
+            token=token,
+            expires_at=datetime.max.replace(tzinfo=UTC),
+            scopes=[],
+        )
     cred = _try_keyring_load(registry)
     if cred is not None:
         return cred

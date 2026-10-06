@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from fabricgate.client import auth
 from fabricgate.client.registry_client import RegistryClient, RegistryError
 from fabricgate.models.api.responses import QuotaResponse
@@ -28,6 +30,11 @@ def quota(
     if ns is None:
         ns = _default_namespace_from_scopes(creds.scopes if creds is not None else [])
         if ns is None:
+            if os.getenv(auth.TOKEN_ENV):
+                # An API key carries no namespace the CLI can read, and logging in would not help: the key wins.
+                raise SDKError(
+                    f"Namespace is required. Specify --namespace ({auth.TOKEN_ENV} is set).", code=ExitKind.GENERIC
+                )
             raise SDKError(
                 "Namespace is required. Specify --namespace or run 'fabricgate login' first.", code=ExitKind.GENERIC
             )

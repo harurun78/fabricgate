@@ -3051,3 +3051,46 @@ def test_info_json_artifact_source_absent_on_older_server(monkeypatch) -> None:
     artifact = payload["platforms"][0]["artifacts"][0]
     assert artifact["filename"] == "design.bit"
     assert artifact["source"] is None
+
+
+def test_yank_uses_fabricgate_token_env_and_never_prints_it(monkeypatch) -> None:
+    """FABRICGATE_TOKEN is sent as Bearer and appears in neither --json output nor error messages."""
+    import fabricgate.client.auth as auth_module
+    from fabricgate.client.registry_client import RegistryError
+    from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
+    from fabricgate.models.api.responses import YankResponse
+    from fabricgate.sdk.designs import lifecycle
+
+    secret = "fgk_SecretKeyMustNotLeak123"
+    monkeypatch.setenv("FABRICGATE_TOKEN", secret)
+    monkeypatch.setattr(auth_module, "_try_keyring_load", lambda _registry: None)
+    tokens: list[str | None] = []
+    fail = {"on": False}
+
+    class _FakeClient:
+        def __init__(self, base_url: str, token: str | None = None) -> None:
+            tokens.append(token)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def yank_version(self, namespace, design, version, reason):
+            if fail["on"]:
+                raise RegistryError(401, ErrorResponse(error=ErrorDetail(code="UNAUTHORIZED", message="bad key")))
+            return YankResponse(name=f"{namespace}/{design}", version=version, yanked=True, yanked_reason=reason)
+
+    monkeypatch.setattr(lifecycle, "RegistryClient", _FakeClient)
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["--json", "yank", "test-ns/blink:1.0.0", "--reason", "broken"])
+    assert result.exit_code == 0, result.output
+    assert tokens == [secret]
+    assert secret not in result.output
+
+    fail["on"] = True
+    result = runner.invoke(main, ["--json", "yank", "test-ns/blink:1.0.0"])
+    assert result.exit_code == 2
+    assert secret not in result.output
