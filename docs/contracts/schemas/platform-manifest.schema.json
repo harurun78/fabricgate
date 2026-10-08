@@ -404,7 +404,7 @@
     },
     "NanopynqArtifacts": {
       "additionalProperties": false,
-      "description": "Artifact set for the ``nanopynq`` runtime.",
+      "description": "Artifact set for the ``nanopynq`` runtime.\n\nA fabricgate / nanopynq convention, not an external standard: the manifest's\n``ips`` field stands in for ``.hwh`` (platform-manifest-schema.md §5).",
       "properties": {
         "bitstream": {
           "$ref": "#/$defs/ArtifactRef"

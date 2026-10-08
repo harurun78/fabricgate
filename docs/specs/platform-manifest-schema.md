@@ -550,6 +550,11 @@ interfaces:
 
 For MCU + external FPGA configurations (e.g., RP2040 + iCE40).
 
+> **Note — fabricgate's own convention**: the `nanopynq` artifact set (a raw `.bin` bitstream, with the
+> manifest's `ips` field standing in for `.hwh`) is a convention defined by fabricgate and the nanopynq
+> project. Unlike `pynq` (AMD/Xilinx PYNQ) and `linux-fpgamgr` (Linux FPGA Manager), it rests on no vendor or
+> kernel documentation, and no external standard for MicroPython-style FPGA runtimes was found as of 2026-06.
+
 ### 5.1 Schema
 
 ```yaml

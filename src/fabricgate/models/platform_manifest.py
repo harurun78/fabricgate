@@ -319,7 +319,11 @@ class IpBlock(FabricGateModel):
 
 
 class NanopynqArtifacts(FabricGateModel):
-    """Artifact set for the ``nanopynq`` runtime."""
+    """Artifact set for the ``nanopynq`` runtime.
+
+    A fabricgate / nanopynq convention, not an external standard: the manifest's
+    ``ips`` field stands in for ``.hwh`` (platform-manifest-schema.md §5).
+    """
 
     bitstream: ArtifactRef
 
