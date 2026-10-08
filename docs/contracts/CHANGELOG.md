@@ -3,6 +3,10 @@
 ## [Unreleased]
 
 ### Changed
+- Platform Manifest: the `NanopynqArtifacts` description now states that the
+  `nanopynq` artifact set is a fabricgate / nanopynq convention, not an external
+  standard (`docs/specs/platform-manifest-schema.md` §5). Description only; the
+  schema structure is unchanged.
 - **BREAKING (Platform Manifest)**: runtime discriminator `micropynq` renamed to
   `nanopynq` (ADR-015). No alias or deprecation period; manifests declaring
   `runtime: micropynq` are rejected. `$defs/MicropynqManifest` and related
