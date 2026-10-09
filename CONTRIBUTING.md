@@ -49,7 +49,7 @@ Boards live in `src/fabricgate/data/board-db/official.yaml` and are validated ag
 
 ## Releasing
 
-Package releases are tagged `vX.Y.Z`. In the version bump pull request, rename the `## [Unreleased]` heading of `docs/contracts/CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD` (the release version and date) and add a new, empty `## [Unreleased]` section above it. If there were no contract changes, write "No contract changes." under the new version heading.
+Package releases are tagged `vX.Y.Z`. In the version bump pull request, rename the `## [Unreleased]` heading of `docs/contracts/CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD` (the release version and the date the GitHub Release is published, in UTC) and add a new, empty `## [Unreleased]` section above it. If there were no contract changes, write "No contract changes." under the new version heading.
 
 ## Reporting bugs
 
