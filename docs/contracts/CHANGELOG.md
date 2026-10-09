@@ -6,6 +6,9 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+### Fixed
+- `fabricgate login` / `sdk.login`: a `429` from `POST /api/v1/oauth/token` while polling the device flow no longer aborts the login; the client waits for `Retry-After` (seconds or HTTP-date, never less than the poll interval; the interval when the header is missing or invalid) and fails with a clear rate-limit error (exit 3) only when that wait would outlast the device code (`expires_in`).
+
 ### Changed
 - Platform Manifest: the `NanopynqArtifacts` description now states that the
   `nanopynq` artifact set is a fabricgate / nanopynq convention, not an external

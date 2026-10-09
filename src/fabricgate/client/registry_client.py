@@ -42,10 +42,13 @@ class RegistryError(Exception):
     """Raised when the registry returns an error response."""
 
     error: ErrorResponse | None
+    retry_after: str | None = None
+    """Raw ``Retry-After`` header of the response, if any (seconds or HTTP-date)."""
 
-    def __init__(self, status_code: int, error: ErrorResponse) -> None:
+    def __init__(self, status_code: int, error: ErrorResponse, retry_after: str | None = None) -> None:
         self.status_code = status_code
         self.error = error
+        self.retry_after = retry_after
         super().__init__(f"[{status_code}] {error.error.code}: {error.error.message}")
 
     @property
@@ -167,7 +170,7 @@ class RegistryClient:
                 if err is None:
                     resp.raise_for_status()
                     raise AssertionError("unreachable: status >= 400")
-                raise RegistryError(resp.status_code, err)
+                raise RegistryError(resp.status_code, err, retry_after=resp.headers.get("Retry-After"))
             return resp
         except httpx.HTTPError as exc:
             # Transport failures (connect/DNS/timeout) and the malformed-error-body

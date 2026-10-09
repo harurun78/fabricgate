@@ -515,6 +515,102 @@ def test_login_auth_declined_raises_sdk_error(monkeypatch: pytest.MonkeyPatch) -
         sdk_api.login(registry="https://example.com/api/v1", poll_interval=0)
 
 
+_RATE_LIMITED = {"error": {"code": "RATE_LIMITED", "message": "Too many requests"}}
+_TOKEN_OK = {"access_token": "at", "expires_in": 3600, "scope": "openid", "token_type": "Bearer"}
+
+
+def _login_over_mock_http(
+    monkeypatch: pytest.MonkeyPatch,
+    token_responses: list[tuple[int, dict[str, Any], dict[str, str]]],
+    *,
+    interval: int = 5,
+    expires_in: int | None = 900,
+) -> list[float]:
+    """Run ``login`` against a mock registry; return the sleeps between polls (no real waiting)."""
+    import httpx
+
+    from fabricgate.client.registry_client import RegistryClient
+
+    device = {"device_code": "D", "user_code": "U", "verification_uri": "https://x/d", "interval": interval}
+    if expires_in is not None:
+        device["expires_in"] = expires_in
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/oauth/device_authorization"):
+            return httpx.Response(200, json=device)
+        status, body, headers = token_responses.pop(0)
+        return httpx.Response(status, json=body, headers=headers)
+
+    class _MockTransportClient(RegistryClient):
+        def __init__(self, base_url: str, token: str | None = None) -> None:
+            super().__init__(base_url=base_url, token=token)
+            self._client = httpx.Client(base_url=base_url, transport=httpx.MockTransport(handler))
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(_sdk_auth_mod, "RegistryClient", _MockTransportClient)
+    monkeypatch.setattr(_sdk_auth_mod.time, "sleep", sleeps.append)
+    monkeypatch.setattr(sdk_api.auth, "save_credentials", lambda cred, path=None: None)
+    sdk_api.login(registry="https://example.com/api/v1")
+    return sleeps
+
+
+def test_login_429_waits_retry_after_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """429 + Retry-After (seconds) → wait that long, then keep polling."""
+    sleeps = _login_over_mock_http(monkeypatch, [(429, _RATE_LIMITED, {"Retry-After": "120"}), (200, _TOKEN_OK, {})])
+    assert sleeps == [5, 120]
+
+
+def test_login_429_waits_retry_after_http_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    """429 + Retry-After (HTTP-date) → wait until that time."""
+    from datetime import timedelta
+    from email.utils import format_datetime
+
+    when = format_datetime(datetime.now(tz=UTC) + timedelta(seconds=300), usegmt=True)
+    sleeps = _login_over_mock_http(monkeypatch, [(429, _RATE_LIMITED, {"Retry-After": when}), (200, _TOKEN_OK, {})])
+    assert sleeps[0] == 5
+    assert 290 <= sleeps[1] <= 300
+
+
+@pytest.mark.parametrize("headers", [{}, {"Retry-After": "soon"}, {"Retry-After": "1"}])
+def test_login_429_without_usable_retry_after_uses_interval(
+    monkeypatch: pytest.MonkeyPatch, headers: dict[str, str]
+) -> None:
+    """429 with no / invalid / shorter-than-interval Retry-After → wait the current interval."""
+    sleeps = _login_over_mock_http(monkeypatch, [(429, _RATE_LIMITED, headers), (200, _TOKEN_OK, {})])
+    assert sleeps == [5, 5]
+
+
+def test_login_429_retry_after_beyond_device_code_lifetime_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Retry-After longer than the device code lifetime → clear error, exit kind INVALID, no long sleep."""
+    with pytest.raises(sdk_api.SDKError, match="rate-limited") as exc_info:
+        _login_over_mock_http(monkeypatch, [(429, _RATE_LIMITED, {"Retry-After": "3600"})], expires_in=900)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_login_429_without_expires_in_caps_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No expires_in → a huge Retry-After still ends in the clear error, not an OverflowError from sleep."""
+    with pytest.raises(sdk_api.SDKError, match="rate-limited"):
+        _login_over_mock_http(monkeypatch, [(429, _RATE_LIMITED, {"Retry-After": "9" * 400})], expires_in=None)
+
+
+def test_retry_after_non_ascii_digit_is_invalid() -> None:
+    """A non-ASCII digit (e.g. latin-1 \\xb2 decoded as '²') is invalid, not a crash."""
+    assert _sdk_auth_mod._retry_after_seconds("\u00b2") is None
+
+
+def test_login_slow_down_still_adds_five_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """RFC 8628 slow_down is unchanged: interval += 5 and it sticks for later polls."""
+    sleeps = _login_over_mock_http(
+        monkeypatch,
+        [
+            (400, {"error": "slow_down"}, {}),
+            (400, {"error": "authorization_pending"}, {}),
+            (200, _TOKEN_OK, {}),
+        ],
+    )
+    assert sleeps == [5, 10, 10]
+
+
 def test_login_parses_oauth_response_and_raw_pending(monkeypatch: pytest.MonkeyPatch) -> None:
     """Real client over HTTP: raw OAuth pending, enveloped pending, then an OAuth token body."""
     import httpx
