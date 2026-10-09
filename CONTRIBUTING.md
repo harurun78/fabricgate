@@ -47,6 +47,10 @@ Boards live in `src/fabricgate/data/board-db/official.yaml` and are validated ag
 - Do not add secrets, tokens or personal data to tests, fixtures or CI. The workflows in this repository run without any secrets by design.
 - Please reference issues from **this** repository only. The registry implementation is developed elsewhere; if a change here depends on a server-side change, describe it in words rather than linking an internal issue number.
 
+## Releasing
+
+Package releases are tagged `vX.Y.Z`. In the version bump pull request, rename the `## [Unreleased]` heading of `docs/contracts/CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD` (the release version and the date the GitHub Release is published, in UTC) and add a new, empty `## [Unreleased]` section above it. If there were no contract changes, write "No contract changes." under the new version heading.
+
 ## Reporting bugs
 
 Open an issue with the `fabricgate --version` output, the command you ran, and the full error text (`--verbose` helps). Security problems go to the address in [SECURITY.md](SECURITY.md), not to the issue tracker.
