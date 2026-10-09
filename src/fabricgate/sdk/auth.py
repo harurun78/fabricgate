@@ -55,7 +55,7 @@ def _retry_after_seconds(value: str | None) -> float | None:
     if not value:
         return None
     value = value.strip()
-    if value.isdigit():
+    if value.isascii() and value.isdigit():
         return float(value)
     try:
         when = parsedate_to_datetime(value)
@@ -103,8 +103,8 @@ def login(
         verification_uri: str = device_resp.get("verification_uri_complete", device_resp["verification_uri"])
         device_code: str = device_resp["device_code"]
         interval: float = float(device_resp.get("interval", poll_interval))
-        expires_in = device_resp.get("expires_in")
-        deadline = time.monotonic() + float(expires_in) if expires_in is not None else None
+        # Without expires_in (RFC 8628 requires it) assume 1800 s, the lifetime in RFC 8628 §3.2's example.
+        deadline = time.monotonic() + float(device_resp.get("expires_in", 1800))
 
         if on_user_code is not None:
             on_user_code(verification_uri, user_code)
@@ -136,7 +136,7 @@ def login(
                         # ``interval``), but only while the device code is still valid.
                         retry_after = _retry_after_seconds(exc.retry_after)
                         wait = max(retry_after, interval) if retry_after is not None else interval
-                        if deadline is not None and time.monotonic() + wait > deadline:
+                        if time.monotonic() + wait > deadline:
                             raise SDKError(
                                 f"Login polling was rate-limited by the registry (429) and the next "
                                 f"attempt in {wait:.0f}s would come after the device code expires. "

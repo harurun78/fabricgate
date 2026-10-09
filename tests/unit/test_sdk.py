@@ -587,6 +587,17 @@ def test_login_429_retry_after_beyond_device_code_lifetime_fails(monkeypatch: py
     assert exc_info.value.code == ExitKind.INVALID
 
 
+def test_login_429_without_expires_in_caps_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No expires_in → a huge Retry-After still ends in the clear error, not an OverflowError from sleep."""
+    with pytest.raises(sdk_api.SDKError, match="rate-limited"):
+        _login_over_mock_http(monkeypatch, [(429, _RATE_LIMITED, {"Retry-After": "9" * 400})], expires_in=None)
+
+
+def test_retry_after_non_ascii_digit_is_invalid() -> None:
+    """A non-ASCII digit (e.g. latin-1 \\xb2 decoded as '²') is invalid, not a crash."""
+    assert _sdk_auth_mod._retry_after_seconds("\u00b2") is None
+
+
 def test_login_slow_down_still_adds_five_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
     """RFC 8628 slow_down is unchanged: interval += 5 and it sticks for later polls."""
     sleeps = _login_over_mock_http(
