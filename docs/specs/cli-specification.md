@@ -663,6 +663,12 @@ no keychain is available.
 > Implementation: use [`keyring`](https://pypi.org/project/keyring/) library.
 > Service name: `fabricgate`, username: registry hostname.
 
+Polling follows RFC 8628: `authorization_pending` keeps polling, `slow_down` adds 5 s to the
+interval. A `429` (registry rate limit) waits for `Retry-After` (seconds or HTTP-date; never
+less than the interval, the interval if the header is missing or invalid) and polls again. If
+that wait would outlast the device code (`expires_in`), login fails with exit 3 and a
+rate-limit message.
+
 ---
 
 ### 3.7 `fabricgate list`

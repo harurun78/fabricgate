@@ -6,6 +6,7 @@ import re
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 from fabricgate.client import auth
@@ -49,6 +50,22 @@ def _parse_expires(expires: str | None) -> str | None:
     return dt.isoformat()
 
 
+def _retry_after_seconds(value: str | None) -> float | None:
+    """Parse a ``Retry-After`` header (delay-seconds or HTTP-date); ``None`` if absent or invalid."""
+    if not value:
+        return None
+    value = value.strip()
+    if value.isdigit():
+        return float(value)
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return max(0.0, (when - datetime.now(tz=UTC)).total_seconds())
+
+
 # ---------------------------------------------------------------------------
 # Public auth functions
 # ---------------------------------------------------------------------------
@@ -86,14 +103,18 @@ def login(
         verification_uri: str = device_resp.get("verification_uri_complete", device_resp["verification_uri"])
         device_code: str = device_resp["device_code"]
         interval: float = float(device_resp.get("interval", poll_interval))
+        expires_in = device_resp.get("expires_in")
+        deadline = time.monotonic() + float(expires_in) if expires_in is not None else None
 
         if on_user_code is not None:
             on_user_code(verification_uri, user_code)
 
         # Poll for token
         with RegistryClient(base_url=registry) as client:
+            wait = interval
             while True:
-                time.sleep(interval)
+                time.sleep(wait)
+                wait = interval
                 try:
                     token_resp = client.token_exchange(
                         grant_type="urn:ietf:params:oauth:grant-type:device_code",
@@ -108,6 +129,20 @@ def login(
                         continue
                     if error_code == "SLOW_DOWN":
                         interval += 5
+                        wait = interval
+                        continue
+                    if exc.status_code == 429:
+                        # Rate-limited: honour Retry-After (never poll faster than
+                        # ``interval``), but only while the device code is still valid.
+                        retry_after = _retry_after_seconds(exc.retry_after)
+                        wait = max(retry_after, interval) if retry_after is not None else interval
+                        if deadline is not None and time.monotonic() + wait > deadline:
+                            raise SDKError(
+                                f"Login polling was rate-limited by the registry (429) and the next "
+                                f"attempt in {wait:.0f}s would come after the device code expires. "
+                                "Run 'fabricgate login' again later.",
+                                code=ExitKind.INVALID,
+                            ) from exc
                         continue
                     raise
 
