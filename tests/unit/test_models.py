@@ -2725,3 +2725,51 @@ class TestArtifactInfoSource:
         assert ArtifactInfo.model_validate({**base, "source": "registry"}).source == "registry"
         with pytest.raises(ValidationError):
             ArtifactInfo.model_validate({**base, "source": "mirror"})
+
+
+class TestVersionPatternsAsciiDigitsOnly:
+    """Version patterns accept ASCII 0-9 only (``\\d`` would also match other Unicode digits)."""
+
+    # Arabic-Indic zero / one, full-width one, superscript two
+    NON_ASCII = ("1\u0660.0.0", "\u0661.0.0", "1.\uff11.0", "1.0.\u00b2")
+
+    @pytest.mark.parametrize("value", ["0.0.0", "1.2.3", "10.20.30"])
+    def test_semver_and_design_ref_accept_ascii(self, value: str) -> None:
+        from pydantic import TypeAdapter
+
+        from fabricgate.models.common import DesignRef, SemVer
+
+        assert TypeAdapter(SemVer).validate_python(value) == value
+        assert TypeAdapter(DesignRef).validate_python(f"ns/d:{value}") == f"ns/d:{value}"
+
+    @pytest.mark.parametrize("value", NON_ASCII)
+    def test_semver_and_design_ref_reject_non_ascii_digits(self, value: str) -> None:
+        from pydantic import TypeAdapter
+
+        from fabricgate.models.common import DesignRef, SemVer
+
+        with pytest.raises(ValidationError):
+            TypeAdapter(SemVer).validate_python(value)
+        with pytest.raises(ValidationError):
+            TypeAdapter(DesignRef).validate_python(f"ns/d:{value}")
+
+    @pytest.mark.parametrize("version", ["*", "1.2.3", "^1.2.3", "~0.1.0", "1.0.0 <2.0.0"])
+    def test_dependency_accepts(self, version: str) -> None:
+        from fabricgate.models.platform_manifest import Dependency
+
+        assert Dependency(name="ns/d", version=version).version == version
+
+    @pytest.mark.parametrize("version", [*NON_ASCII, "^1\u0660.0.0", "1.0.0\n<2.0.0", "1.0.0\t<2.0.0"])
+    def test_dependency_rejects_non_ascii_digits_and_non_space_separators(self, version: str) -> None:
+        from fabricgate.models.platform_manifest import Dependency
+
+        with pytest.raises(ValidationError):
+            Dependency(name="ns/d", version=version)
+
+    def test_shell_dependency(self) -> None:
+        from fabricgate.models.platform_manifest import ShellDependency
+
+        assert ShellDependency(name="ns/shell", version="=1.2.3", sha256="a" * 64).version == "=1.2.3"
+        for value in self.NON_ASCII:
+            with pytest.raises(ValidationError):
+                ShellDependency(name="ns/shell", version=f"={value}", sha256="a" * 64)

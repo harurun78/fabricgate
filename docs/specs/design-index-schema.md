@@ -69,7 +69,7 @@ Max length: 128 characters total
 Semantic versioning: `MAJOR.MINOR.PATCH`
 
 ```
-Regex: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+Regex: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
 ```
 
 Pre-release labels (`-alpha`, `-rc.1`) are NOT supported in v1.

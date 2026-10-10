@@ -102,7 +102,7 @@ class Dependency(FabricGateModel):
 
     name: DesignName
     version: str = Field(
-        pattern=r"^(\*|[~^]?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)([\s<>=!]+.+)?)$",
+        pattern=r"^(\*|[~^]?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)([ <>=!]+.+)?)$",
         max_length=256,
     )
     platform: PlatformId | None = None
@@ -129,7 +129,7 @@ class ShellDependency(FabricGateModel):
 
     name: DesignName
     version: str = Field(
-        pattern=r"^=\d+\.\d+\.\d+$",
+        pattern=r"^=[0-9]+\.[0-9]+\.[0-9]+$",
         max_length=64,
     )
     sha256: str = Field(

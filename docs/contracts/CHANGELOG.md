@@ -8,6 +8,7 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ### Fixed
 - `fabricgate login` / `sdk.login`: a `429` from `POST /api/v1/oauth/token` while polling the device flow no longer aborts the login; the client waits for `Retry-After` (seconds or HTTP-date, never less than the poll interval; the interval when the header is missing or invalid) and fails with a clear rate-limit error (exit 3) only when that wait would outlast the device code (`expires_in`).
+- Version patterns now reject non-ASCII digits. `SemVer`, `DesignRef`, the Platform Manifest `dependencies[].version` constraint and `shell_dependency.version` used `\d`, which also matches other Unicode decimal digits (e.g. `1٠.0.0` with an Arabic-Indic zero, or full-width `１`); they now use `[0-9]` (OpenAPI and JSON Schema patterns updated). The `dependencies[].version` separator after the first version is narrowed from `\s` (any whitespace, including newline and tab) to a space, matching the "space-separated" wording in `docs/specs/platform-manifest-schema.md`. The relative `<N>d` form of `fabricgate token create --expires` / the SDK likewise accepts ASCII digits only. Not a breaking change: SemVer 2.0.0 defines version numbers with the digits 0-9 only, and the registry's resolver already fails on any constraint with a trailing part, so no value that worked before is now refused.
 
 ### Changed
 - Platform Manifest: the `NanopynqArtifacts` description now states that the

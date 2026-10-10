@@ -29,7 +29,7 @@ def _parse_expires(expires: str | None) -> str | None:
     if expires is None:
         return None
 
-    match = re.fullmatch(r"(\d+)d", expires)
+    match = re.fullmatch(r"([0-9]+)d", expires)
     if match:
         days = int(match.group(1))
         if days > 3650:
