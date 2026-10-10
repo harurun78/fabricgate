@@ -92,7 +92,7 @@ SHA256Digest = Annotated[
 
 SemVer = Annotated[
     str,
-    Field(pattern=r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"),
+    Field(pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"),
 ]
 """Semantic version: ``X.Y.Z`` (no pre-release)."""
 
@@ -124,7 +124,7 @@ DesignRef = Annotated[
     Field(
         pattern=(
             r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?"
-            r":(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"
+            r":(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
         ),
     ),
 ]

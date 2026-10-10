@@ -1734,6 +1734,17 @@ def test_parse_expires_rejects_garbage() -> None:
         _parse_expires("next tuesday")
 
 
+@pytest.mark.parametrize(
+    "value", ["\u0669\u0660d", "\uff19\uff10d", "9\u00b2d"]
+)  # Arabic-Indic, full-width, superscript
+def test_parse_expires_rejects_non_ascii_digits(value: str) -> None:
+    """Only ASCII digits form a relative ``<N>d`` duration."""
+    from fabricgate.sdk.auth import SDKError, _parse_expires
+
+    with pytest.raises(SDKError):
+        _parse_expires(value)
+
+
 def test_parse_expires_none() -> None:
     """NoneはNoneを返す。"""
     from fabricgate.sdk.auth import _parse_expires

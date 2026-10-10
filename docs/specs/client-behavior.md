@@ -39,7 +39,7 @@ Parent: [registry-api.md](./registry-api.md)
 
 | 識別子 | 正規表現 / 形式 | 出典 |
 |--------|----------------|------|
-| `SemVer` | `^(0\|[1-9]\d*)\.(0\|[1-9]\d*)\.(0\|[1-9]\d*)$` | `models/common.py` |
+| `SemVer` | `^(0\|[1-9][0-9]*)\.(0\|[1-9][0-9]*)\.(0\|[1-9][0-9]*)$` | `models/common.py` |
 | `DesignName` | `namespace/design`（各セグメントは小文字英数とハイフン等） | `models/common.py` |
 | `PlatformId` | `{board_id}/{runtime}`（例 `zcu104/pynq`） | `models/common.py` |
 | `NamespaceName` | 小文字英数で始まり、英数・ハイフン | `models/common.py` |

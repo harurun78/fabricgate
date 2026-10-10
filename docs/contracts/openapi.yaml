@@ -3137,7 +3137,7 @@ components:
         versions:
           items:
             type: string
-            pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+            pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           type: array
           maxItems: 50
           minItems: 1
@@ -3151,7 +3151,7 @@ components:
         successor:
           anyOf:
           - type: string
-            pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+            pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           - type: 'null'
           title: Successor
           description: Recommended successor version (semver string).
@@ -3184,7 +3184,7 @@ components:
       properties:
         version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Version
         status:
           type: string
@@ -3204,7 +3204,7 @@ components:
         versions:
           items:
             type: string
-            pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+            pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           type: array
           maxItems: 50
           minItems: 1
@@ -3283,7 +3283,7 @@ components:
         successor:
           anyOf:
           - type: string
-            pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+            pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           - type: 'null'
           title: Successor
           description: Recommended successor version (semver string).
@@ -3300,7 +3300,7 @@ components:
           title: Name
         version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Version
         deprecated:
           type: boolean
@@ -3422,7 +3422,7 @@ components:
           title: Name
         latest_version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Latest Version
         summary:
           anyOf:
@@ -3535,7 +3535,7 @@ components:
           title: Design
         version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Version
         tool_requirements:
           items:
@@ -3887,7 +3887,7 @@ components:
           title: Name
         version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Version
         platform:
           type: string
@@ -3914,7 +3914,7 @@ components:
           title: Name
         version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Version
         platforms:
           items:
@@ -4091,7 +4091,7 @@ components:
           title: Name
         resolved_version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Resolved Version
         platform:
           type: string
@@ -4176,7 +4176,7 @@ components:
         version:
           type: string
           maxLength: 64
-          pattern: ^=\d+\.\d+\.\d+$
+          pattern: ^=[0-9]+\.[0-9]+\.[0-9]+$
           title: Version
         sha256:
           type: string
@@ -4204,7 +4204,7 @@ components:
           title: Name
         version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Version
         board:
           type: string
@@ -4381,7 +4381,7 @@ components:
           title: Name
         version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Version
         summary:
           anyOf:
@@ -4556,7 +4556,7 @@ components:
           title: Name
         version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Version
         total_downloads:
           type: integer
@@ -4587,7 +4587,7 @@ components:
       properties:
         version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Version
         platforms:
           items:
@@ -4644,7 +4644,7 @@ components:
           title: Name
         version:
           type: string
-          pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+          pattern: ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$
           title: Version
         yanked:
           type: boolean
