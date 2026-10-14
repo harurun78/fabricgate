@@ -296,7 +296,7 @@ artifacts:
     sha256: <64-hex>
 
 # Optional
-pynq_version: <version-spec>    # Minimum PYNQ version (e.g., ">=3.0.1")
+pynq_version: <version-range>   # PYNQ version range, informational (e.g., ">=3.0.1,<4"). Write an upper bound: PYNQ does not keep compatibility across majors (v4 moved to Python 3.12, removed pynq.lib.*, moved pynq.metadata). Not interpreted by the registry or the SDK
 design_portability: <string>    # "axi-only" | "board-specific" | "io-constrained" (fabricgate build auto-detected)
 status: deprecated | yanked     # Shell lifecycle. Shell manifests only (bitstream_type: shell)
 
@@ -346,7 +346,7 @@ artifacts:
     file: blink.hwh
     sha256: 11223344112233441122334411223344112233441122334411223344112233445
 
-pynq_version: ">=3.0.1"
+pynq_version: ">=3.0.1,<4"
 
 tool_requirements:
   - tool: vivado
@@ -389,7 +389,7 @@ tool_requirements:
     edition: standard
     note: "DFX flow (Partial Reconfiguration)"
 
-pynq_version: ">=3.0.1"
+pynq_version: ">=3.0.1,<4"
 
 interfaces:
   - name: fft_ip_0
