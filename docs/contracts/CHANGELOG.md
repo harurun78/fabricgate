@@ -6,6 +6,8 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-22
+
 ### Docs
 
 - `platform-manifest-schema.md`: `pynq_version` is a version range, not a minimum. Publishers should write an upper bound (e.g. `">=3.0.1,<4"`) because PYNQ v4 is not compatible with 3.x overlays. The field stays informational; no schema or model change.
