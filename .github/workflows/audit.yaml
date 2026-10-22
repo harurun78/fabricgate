@@ -1,0 +1,22 @@
+name: Scheduled audit
+
+# Daily pip-audit of the locked dependencies. CI only audits on push / pull
+# request, so an advisory published while master is quiet would otherwise go
+# unnoticed until the next change (Dependabot alerts are not always raised).
+on:
+  schedule:
+    - cron: "23 21 * * *" # 06:23 JST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: uv sync --frozen
+      - run: uv run pip-audit
