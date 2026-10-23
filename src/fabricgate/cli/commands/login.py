@@ -29,6 +29,7 @@ def login_cmd(obj: dict[str, object], registry: str | None) -> None:
             registry=reg,
             on_user_code=_on_user_code,
         )
+    # Not sdk_errors(): the "Waiting for authorization ..." line needs its " ✗" first.
     except sdk_api.SDKError as exc:
         click.echo(" ✗", err=False)
         click.echo(str(exc), err=True)
