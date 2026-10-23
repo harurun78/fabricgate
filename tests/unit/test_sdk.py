@@ -3866,8 +3866,8 @@ def test_stats_last_7d_ends_today_by_default(monkeypatch: pytest.MonkeyPatch) ->
     from datetime import datetime as _datetime
     from datetime import timedelta
 
-    import fabricgate.sdk.designs.stats as _stats_mod
-
+    # The package re-exports the stats() function under the module's name, so import the module itself.
+    _stats_mod = importlib.import_module("fabricgate.sdk.designs.stats")
     today = date(2026, 3, 31)
 
     class _FixedNow(_datetime):
