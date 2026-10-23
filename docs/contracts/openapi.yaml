@@ -1166,10 +1166,20 @@ paths:
       parameters:
       - name: code
         in: query
-        required: true
+        required: false
         schema:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Code
+      - name: error
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
       - name: state
         in: query
         required: false
@@ -1984,6 +1994,13 @@ paths:
         schema:
           type: string
           title: Username
+      - name: force
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Force
       - name: authorization
         in: header
         required: false

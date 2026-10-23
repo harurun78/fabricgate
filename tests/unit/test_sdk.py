@@ -1327,7 +1327,7 @@ def test_pull_resolves_dependencies(
     )
 
     assert result.dependencies == ["dep-ns/dep-design:0.1.0"]
-    dep_dir = tmp_path / "deps" / "dep-ns-dep-design-0.1.0"
+    dep_dir = tmp_path / "deps" / "dep-ns" / "dep-design" / "0.1.0"
     assert dep_dir.exists()
     assert (dep_dir / "manifest.yaml").exists()
     assert (dep_dir / "dep.bit").exists()
@@ -1528,7 +1528,7 @@ def test_pull_shell_auto_download(
     )
 
     assert result.shell == "shell-ns/shell-design:2.0.0"
-    shell_dir = tmp_path / "shell" / "shell-ns-shell-design-2.0.0"
+    shell_dir = tmp_path / "shell" / "shell-ns" / "shell-design" / "2.0.0"
     assert shell_dir.exists()
     assert (shell_dir / "manifest.yaml").exists()
     assert (shell_dir / "shell.bit").exists()
@@ -4053,6 +4053,57 @@ def test_resolve_and_download_deps_digest_mismatch(tmp_path: Path) -> None:
 
     with pytest.raises(IntegrityError, match="Digest mismatch for dependency artifact"):
         _resolve_and_download_deps(_Client(), "a", "b", "1.0.0", "xc7z020", "pynq", tmp_path, True)
+
+
+def test_resolve_and_download_deps_names_joined_by_hyphen_do_not_collide(tmp_path: Path) -> None:
+    """`a-b/c` と `a/b-c` の依存は別々のディレクトリに展開される(#73)。"""
+    from fabricgate.client.puller import _resolve_and_download_deps
+    from fabricgate.models.api.responses import DependenciesResponse
+
+    def _dep(name: str) -> dict[str, Any]:
+        return {
+            "name": name,
+            "resolved_version": "1.0.0",
+            "platform": "xc7z020/pynq",
+            "optional": False,
+            "depth": 1,
+            "required_by": "root/top",
+        }
+
+    class _Client:
+        def get_dependencies(self, *_a, **_kw):
+            return DependenciesResponse.model_validate(
+                {"root": "root/top:1.0.0", "platform": "xc7z020/pynq", "dependencies": [_dep("a-b/c"), _dep("a/b-c")]}
+            )
+
+        def get_platform_manifest_bytes(self, ns, design, version, *_a):
+            digest = hashlib.sha256(f"{ns}/{design}".encode()).hexdigest()
+            return "\n".join(
+                [
+                    "schema: fabricgate-platform/v1",
+                    "runtime: pynq",
+                    "board: pynq-z2",
+                    f"design_ref: {ns}/{design}:{version}",
+                    "artifacts:",
+                    "  bitstream:",
+                    "    file: dep.bit",
+                    f"    sha256: {digest}",
+                    "  hwh:",
+                    "    file: dep.hwh",
+                    f"    sha256: {digest}",
+                ]
+            ).encode("utf-8")
+
+        def download_artifact(self, ns, design, *_a):
+            return f"{ns}/{design}".encode()
+
+    refs = _resolve_and_download_deps(_Client(), "root", "top", "1.0.0", "xc7z020", "pynq", tmp_path, True)
+
+    assert refs == ["a-b/c:1.0.0", "a/b-c:1.0.0"]
+    for ns, design in (("a-b", "c"), ("a", "b-c")):
+        dep_dir = tmp_path / "deps" / ns / design / "1.0.0"
+        assert f"design_ref: {ns}/{design}:1.0.0" in (dep_dir / "manifest.yaml").read_text()
+        assert (dep_dir / "dep.bit").read_bytes() == f"{ns}/{design}".encode()
 
 
 def test_maybe_download_shell_invalid_artifact_path(tmp_path: Path) -> None:
