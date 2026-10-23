@@ -653,3 +653,13 @@ class TestBuildCmd:
         assert result.exit_code == 1
         assert "Multiple HWH files found" in result.output
         assert "--hwh" in result.output
+
+
+def test_parse_hwh_refuses_entities_as_a_parse_error(tmp_path: Path) -> None:
+    """#69: defusedxml's refusal and a missing file surface as HwhParseError, which build reports."""
+    hwh = tmp_path / "evil.hwh"
+    hwh.write_text('<?xml version="1.0"?><!DOCTYPE x [<!ENTITY e "boom">]><EDKSYSTEM>&e;</EDKSYSTEM>')
+    with pytest.raises(HwhParseError):
+        parse_hwh(hwh)
+    with pytest.raises(HwhParseError):
+        parse_hwh(tmp_path / "missing.hwh")

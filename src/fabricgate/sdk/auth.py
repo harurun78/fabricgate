@@ -17,7 +17,7 @@ from fabricgate.models.cli import (
     TokenCreateResult,
     TokenInfo,
 )
-from fabricgate.sdk._helpers import ExitKind, SDKError, _registry_error_kind
+from fabricgate.sdk._helpers import ExitKind, SDKError, _registry_error_kind, _stored_credentials
 
 # ---------------------------------------------------------------------------
 # Token management helpers
@@ -153,7 +153,15 @@ def login(
             scopes=token_resp.scopes,
             refresh_token=token_resp.refresh_token,
         )
-        stored_in = auth.save_credentials(cred)
+        try:
+            stored_in = auth.save_credentials(cred)
+        except ValueError as exc:
+            raise SDKError(
+                f"Cannot update stored credentials: {exc}. Fix or delete ~/.fabricgate/credentials.json.",
+                code=ExitKind.INVALID,
+            ) from exc
+        except OSError as exc:
+            raise SDKError(f"Cannot save credentials: {exc}", code=ExitKind.INFRA) from exc
 
         hostname = urlparse(registry).hostname or registry
         if stored_in == "keyring":
@@ -195,7 +203,7 @@ def token_create(
     registry:
         Base URL for the registry API.
     """
-    creds = auth.load_credentials(registry)
+    creds = _stored_credentials(registry)
     if creds is None:
         raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
 
@@ -224,7 +232,7 @@ def token_list(
     registry: str = "https://registry.fabricgate.dev/api/v1",
 ) -> list[TokenInfo]:
     """List all API keys for the current user."""
-    creds = auth.load_credentials(registry)
+    creds = _stored_credentials(registry)
     if creds is None:
         raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
 
@@ -262,7 +270,7 @@ def token_revoke(
     registry:
         Base URL for the registry API.
     """
-    creds = auth.load_credentials(registry)
+    creds = _stored_credentials(registry)
     if creds is None:
         raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
 

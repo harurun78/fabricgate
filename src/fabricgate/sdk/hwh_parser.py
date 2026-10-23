@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from defusedxml import ElementTree
+from defusedxml import DefusedXmlException, ElementTree
 
 # VLNV keywords identifying AXI-family interfaces
 _AXI_VLNV_KEYWORDS: frozenset[str] = frozenset(["aximm", "axi4lite", "axi4", "axis_rtl", "axi_stream", "axi_lite"])
@@ -95,8 +95,11 @@ def parse_hwh(path: Path) -> HwhInfo:
     """
     try:
         tree = ElementTree.parse(path)
-    except ElementTree.ParseError as exc:
+    except (ElementTree.ParseError, DefusedXmlException) as exc:
+        # DefusedXmlException: the file declares a DTD or entities, which are refused.
         raise HwhParseError(f"Cannot parse {path}: {exc}") from exc
+    except OSError as exc:
+        raise HwhParseError(f"Cannot read {path}: {exc}") from exc
 
     root = tree.getroot()
     boardpart: str | None = root.get("BOARDPART")  # type: ignore[union-attr]

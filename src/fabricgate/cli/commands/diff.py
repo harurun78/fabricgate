@@ -87,7 +87,7 @@ def _render_text(result: VersionDiffResponse, design_ref: str) -> None:
             click.echo(f"  (removed from {result.base})")
             continue
 
-        width = max(len(_sanitize_label(field.field)) for field in entry.fields)
+        width = max((len(_sanitize_label(field.field)) for field in entry.fields), default=0)
         for field in entry.fields:
             click.echo(_format_field(field, width))
 

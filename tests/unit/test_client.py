@@ -817,3 +817,14 @@ def test_collect_artifacts_rejects_dot_dot_bundle(tmp_path: Path) -> None:
     idx, _ = load_design_index(tmp_path)
     with pytest.raises(PublishError, match="Invalid attestation bundle filename"):
         collect_artifacts(tmp_path, idx)
+
+
+def test_cache_ignores_an_unreadable_index(tmp_path: Path) -> None:
+    """#69: a half-written index.json no longer breaks pull / list."""
+    from fabricgate.client import cache
+
+    (tmp_path / "index.json").write_text('{"entries": [')
+    assert cache.load_index(tmp_path).entries == []
+    cache.save_index(cache.load_index(tmp_path), tmp_path)
+    assert cache.load_index(tmp_path).entries == []
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["index.json"]

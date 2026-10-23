@@ -8,10 +8,11 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import TypeAdapter, ValidationError
 
+from fabricgate.client import auth
 from fabricgate.client.errors import FailureKind as FailureKind
 from fabricgate.client.registry_client import RegistryError
 from fabricgate.models.api.responses import QuotaResponse
-from fabricgate.models.cli import StatsSeriesItem
+from fabricgate.models.cli import Credentials, StatsSeriesItem
 from fabricgate.models.common import DesignName, NamespaceName, SemVer
 from fabricgate.models.platform_manifest import PlatformManifest
 
@@ -43,6 +44,18 @@ class SDKError(Exception):
     def __init__(self, message: str, code: ExitKind = ExitKind.GENERIC) -> None:
         self.code = code
         super().__init__(message)
+
+
+def _stored_credentials(registry: str) -> Credentials | None:
+    """Load stored credentials; a damaged credential store is an INVALID error, not a traceback."""
+    try:
+        return auth.load_credentials(registry)
+    except (OSError, ValueError) as exc:
+        raise SDKError(
+            f"Cannot read stored credentials: {exc}. "
+            "Fix or delete ~/.fabricgate/credentials.json, then run 'fabricgate login'.",
+            code=ExitKind.INVALID,
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
