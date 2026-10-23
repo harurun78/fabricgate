@@ -26,10 +26,10 @@ def _is_tty() -> bool:
     return sys.stdin.isatty()
 
 
-def _detect_platform_info(directory: Path) -> _PlatformInfo | None:
-    """Load the first platform entry from the design index and its manifest.
+def _detect_platforms(directory: Path) -> list[_PlatformInfo]:
+    """Load every platform entry from the design index together with its manifest.
 
-    Returns ``None`` if the directory does not contain a valid design index.
+    Returns an empty list if the directory does not contain a valid design index.
     """
     from pydantic import ValidationError
 
@@ -39,33 +39,33 @@ def _detect_platform_info(directory: Path) -> _PlatformInfo | None:
     try:
         index, _ = load_design_index(directory)
     except (PublishError, OSError):
-        return None
+        return []
 
-    if not index.platforms:
-        return None
+    infos: list[_PlatformInfo] = []
+    for entry in index.platforms:
+        platform_id = str(entry.platform)  # e.g. "custom-xczu7ev-ffvc1156/pynq"
+        if "/" not in platform_id:
+            continue
+        board_id, runtime = platform_id.split("/", 1)
+        info = _PlatformInfo(board_id=board_id, runtime=runtime, device_family=None, design_portability=None)
+        # Manifest lives at <project_dir>/<board_id>/<runtime>/manifest.yaml
+        manifest_path = directory / platform_id / "manifest.yaml"
+        if manifest_path.exists():
+            try:
+                manifest = parse_platform_manifest(manifest_path.read_text(encoding="utf-8"))
+            except (ValidationError, OSError):
+                pass
+            else:
+                info.device_family = getattr(manifest, "device_family", None)
+                info.design_portability = getattr(manifest, "design_portability", None)
+        infos.append(info)
+    return infos
 
-    platform_id = str(index.platforms[0].platform)  # e.g. "custom-xczu7ev/pynq"
-    if "/" not in platform_id:
-        return None
 
-    board_id, runtime = platform_id.split("/", 1)
-
-    # Manifest lives at <project_dir>/<board_id>/<runtime>/manifest.yaml
-    manifest_path = directory / platform_id / "manifest.yaml"
-    if not manifest_path.exists():
-        return _PlatformInfo(board_id=board_id, runtime=runtime, device_family=None, design_portability=None)
-
-    try:
-        manifest = parse_platform_manifest(manifest_path.read_text(encoding="utf-8"))
-    except (ValidationError, OSError):
-        return _PlatformInfo(board_id=board_id, runtime=runtime, device_family=None, design_portability=None)
-
-    return _PlatformInfo(
-        board_id=board_id,
-        runtime=runtime,
-        device_family=getattr(manifest, "device_family", None),
-        design_portability=getattr(manifest, "design_portability", None),
-    )
+def _family_from_custom_board(board_id: str) -> str:
+    """``custom-{device_family}-{package}`` (or ``custom-{device_family}``) → device family."""
+    rest = board_id.removeprefix("custom-")
+    return rest.rsplit("-", 1)[0] if "-" in rest else rest
 
 
 def _handle_promotion_prompt(
@@ -148,18 +148,37 @@ def push_cmd(
     board_override: str | None = None
     promoted_platform: str | None = None
 
-    info = _detect_platform_info(directory)
-    if info is not None:
-        if auto_yes and info.design_portability != "axi-only":
-            click.echo("--yes requires axi-only design", err=True)
+    infos = _detect_platforms(directory)
+    # The SDK promotes every custom-* platform, so promotion is offered only when all
+    # of them are axi-only and share one device family.
+    custom = [info for info in infos if info.board_id.startswith("custom-")]
+    families = {info.device_family or _family_from_custom_board(info.board_id) for info in custom}
+    promotable = bool(custom) and all(info.design_portability == "axi-only" for info in custom)
+    if auto_yes and infos and not (promotable or all(info.design_portability == "axi-only" for info in infos)):
+        click.echo("--yes requires axi-only design", err=True)
+        raise click.exceptions.Exit(1)
+    if promotable and len(families) > 1:
+        if auto_yes:
+            click.echo("--yes cannot promote custom-* platforms of different device families", err=True)
             raise click.exceptions.Exit(1)
+        promotable = False
+    if promotable:
+        (family,) = families
+        targets = [f"generic-{family}/{info.runtime}" for info in custom]
+        existing = {f"{info.board_id}/{info.runtime}" for info in infos if not info.board_id.startswith("custom-")}
+        if len(set(targets)) < len(targets) or existing & set(targets):
+            if auto_yes:
+                click.echo("--yes cannot promote: two platforms would share one generic-* platform", err=True)
+                raise click.exceptions.Exit(1)
+            promotable = False
 
-        if info.board_id.startswith("custom-") and info.design_portability == "axi-only":
-            # Derive device_family from board_id if not in manifest
-            device_family = info.device_family or info.board_id.split("-", 1)[1]
-            board_override = _handle_promotion_prompt(info.board_id, device_family, info.runtime, yes=auto_yes)
-            if board_override is not None:
-                promoted_platform = f"{board_override}/{info.runtime}"
+    if promotable:
+        (device_family,) = families
+        board_label = ", ".join(info.board_id for info in custom)
+        runtime_label = ", ".join(info.runtime for info in custom)
+        board_override = _handle_promotion_prompt(board_label, device_family, runtime_label, yes=auto_yes)
+        if board_override is not None:
+            promoted_platform = ", ".join(f"{board_override}/{info.runtime}" for info in custom)
 
     try:
         result = sdk_api.push(

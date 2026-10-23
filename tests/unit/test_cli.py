@@ -6,6 +6,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from fabricgate.cli.main import main
@@ -364,7 +365,7 @@ def test_push_custom_axi_yes_flag(monkeypatch, tmp_path) -> None:
         return _PUSH_RESULT
 
     monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", _fake_push)
-    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platform_info", lambda _: _CUSTOM_AXI_INFO)
+    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platforms", lambda _: [_CUSTOM_AXI_INFO])
 
     runner = CliRunner()
     result = runner.invoke(main, ["push", str(tmp_path), "--yes"])
@@ -383,7 +384,7 @@ def test_push_custom_axi_tty_prompt_yes(monkeypatch, tmp_path) -> None:
         return _PUSH_RESULT
 
     monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", _fake_push)
-    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platform_info", lambda _: _CUSTOM_AXI_INFO)
+    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platforms", lambda _: [_CUSTOM_AXI_INFO])
     monkeypatch.setattr("fabricgate.cli.commands.push._is_tty", lambda: True)
 
     runner = CliRunner()
@@ -403,7 +404,7 @@ def test_push_custom_axi_tty_prompt_no(monkeypatch, tmp_path) -> None:
         return _PUSH_RESULT
 
     monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", _fake_push)
-    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platform_info", lambda _: _CUSTOM_AXI_INFO)
+    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platforms", lambda _: [_CUSTOM_AXI_INFO])
     monkeypatch.setattr("fabricgate.cli.commands.push._is_tty", lambda: True)
 
     runner = CliRunner()
@@ -423,7 +424,7 @@ def test_push_custom_axi_non_tty_auto_n(monkeypatch, tmp_path) -> None:
         return _PUSH_RESULT
 
     monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", _fake_push)
-    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platform_info", lambda _: _CUSTOM_AXI_INFO)
+    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platforms", lambda _: [_CUSTOM_AXI_INFO])
     monkeypatch.setattr("fabricgate.cli.commands.push._is_tty", lambda: False)
 
     runner = CliRunner()
@@ -446,8 +447,8 @@ def test_push_yes_flag_board_specific_error(monkeypatch, tmp_path) -> None:
 
     monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", _fake_push)
     monkeypatch.setattr(
-        "fabricgate.cli.commands.push._detect_platform_info",
-        lambda _: _CUSTOM_BOARD_SPECIFIC_INFO,
+        "fabricgate.cli.commands.push._detect_platforms",
+        lambda _: [_CUSTOM_BOARD_SPECIFIC_INFO],
     )
 
     runner = CliRunner()
@@ -467,7 +468,7 @@ def test_push_non_custom_board_no_prompt(monkeypatch, tmp_path) -> None:
         return _PUSH_RESULT
 
     monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", _fake_push)
-    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platform_info", lambda _: _REGULAR_INFO)
+    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platforms", lambda _: [_REGULAR_INFO])
 
     runner = CliRunner()
     result = runner.invoke(main, ["push", str(tmp_path)])
@@ -489,7 +490,7 @@ def test_push_custom_axi_no_device_family_fallback(monkeypatch, tmp_path) -> Non
         return _PUSH_RESULT
 
     monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", _fake_push)
-    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platform_info", lambda _: no_family_info)
+    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platforms", lambda _: [no_family_info])
 
     runner = CliRunner()
     result = runner.invoke(main, ["push", str(tmp_path), "--yes"])
@@ -499,8 +500,82 @@ def test_push_custom_axi_no_device_family_fallback(monkeypatch, tmp_path) -> Non
     assert captured_kwargs.get("board_override") == "generic-xczu7ev"
 
 
+def test_push_family_fallback_drops_the_package(monkeypatch, tmp_path) -> None:
+    """custom-{device_family}-{package} → generic-{device_family}, without the package (#64)."""
+    captured_kwargs: dict = {}
+    info = _PlatformInfo(
+        board_id="custom-xczu7ev-ffvc1156", runtime="pynq", device_family=None, design_portability="axi-only"
+    )
+    monkeypatch.setattr(
+        "fabricgate.cli.commands.push.sdk_api.push", lambda *_a, **kw: captured_kwargs.update(kw) or _PUSH_RESULT
+    )
+    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platforms", lambda _: [info])
+
+    result = CliRunner().invoke(main, ["push", str(tmp_path), "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert captured_kwargs.get("board_override") == "generic-xczu7ev"
+
+
+def test_push_promotes_when_a_later_platform_is_custom_axi(monkeypatch, tmp_path) -> None:
+    """Every platform is looked at, not only the first one (#64)."""
+    captured_kwargs: dict = {}
+    zcu104_board_specific = _PlatformInfo(
+        board_id="zcu104", runtime="pynq", device_family="xczu7ev", design_portability="board-specific"
+    )
+    monkeypatch.setattr(
+        "fabricgate.cli.commands.push.sdk_api.push", lambda *_a, **kw: captured_kwargs.update(kw) or _PUSH_RESULT
+    )
+    monkeypatch.setattr(
+        "fabricgate.cli.commands.push._detect_platforms", lambda _: [zcu104_board_specific, _CUSTOM_AXI_INFO]
+    )
+
+    result = CliRunner().invoke(main, ["push", str(tmp_path), "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert captured_kwargs.get("board_override") == "generic-xczu7ev"
+
+
+@pytest.mark.parametrize(
+    ("infos", "message"),
+    [
+        ([_CUSTOM_AXI_INFO, _CUSTOM_BOARD_SPECIFIC_INFO], "--yes requires axi-only design"),
+        (
+            [
+                _CUSTOM_AXI_INFO,
+                _PlatformInfo(
+                    board_id="custom-xc7z020-clg400",
+                    runtime="pynq",
+                    device_family="xc7z020",
+                    design_portability="axi-only",
+                ),
+            ],
+            "different device families",
+        ),
+        (
+            [
+                _CUSTOM_AXI_INFO,
+                _PlatformInfo(
+                    board_id="generic-xczu7ev", runtime="pynq", device_family="xczu7ev", design_portability="axi-only"
+                ),
+            ],
+            "would share one generic-* platform",
+        ),
+    ],
+)
+def test_push_yes_refuses_what_one_board_override_cannot_promote(monkeypatch, tmp_path, infos, message) -> None:
+    """The SDK promotes every custom-* platform with one target, so mixed cases are refused."""
+    monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", lambda *_a, **_kw: pytest.fail("pushed"))
+    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platforms", lambda _: infos)
+
+    result = CliRunner().invoke(main, ["push", str(tmp_path), "--yes"])
+
+    assert result.exit_code == 1
+    assert message in result.output + result.stderr_bytes.decode()
+
+
 # ---------------------------------------------------------------------------
-# push — direct helper tests (_is_tty, _detect_platform_info)
+# push — direct helper tests (_is_tty, _detect_platforms)
 # ---------------------------------------------------------------------------
 
 
@@ -513,33 +588,32 @@ def test_is_tty_returns_bool() -> None:
 
 
 def test_detect_platform_info_no_platforms(monkeypatch, tmp_path) -> None:
-    """platforms が空のとき None を返す (lines 43-44)。"""
-    from fabricgate.cli.commands.push import _detect_platform_info
+    """platforms が空のとき空リストを返す。"""
+    from fabricgate.cli.commands.push import _detect_platforms
 
     mock_index = type("Index", (), {"platforms": []})()
     monkeypatch.setattr("fabricgate.client.publisher.load_design_index", lambda _: (mock_index, None))
-    assert _detect_platform_info(tmp_path) is None
+    assert _detect_platforms(tmp_path) == []
 
 
 def test_detect_platform_info_no_slash(monkeypatch, tmp_path) -> None:
-    """platform に '/' がないとき None を返す (lines 47-48)。"""
-    from fabricgate.cli.commands.push import _detect_platform_info
+    """platform に '/' がない entry は飛ばす。"""
+    from fabricgate.cli.commands.push import _detect_platforms
 
     entry = type("Entry", (), {"platform": "noslash"})()
     mock_index = type("Index", (), {"platforms": [entry]})()
     monkeypatch.setattr("fabricgate.client.publisher.load_design_index", lambda _: (mock_index, None))
-    assert _detect_platform_info(tmp_path) is None
+    assert _detect_platforms(tmp_path) == []
 
 
 def test_detect_platform_info_no_manifest(monkeypatch, tmp_path) -> None:
     """manifest.yaml が存在しないとき device_family=None の _PlatformInfo を返す (line 55)。"""
-    from fabricgate.cli.commands.push import _detect_platform_info
+    from fabricgate.cli.commands.push import _detect_platforms
 
     entry = type("Entry", (), {"platform": "xczu7ev/pynq"})()
     mock_index = type("Index", (), {"platforms": [entry]})()
     monkeypatch.setattr("fabricgate.client.publisher.load_design_index", lambda _: (mock_index, None))
-    result = _detect_platform_info(tmp_path)
-    assert result is not None
+    (result,) = _detect_platforms(tmp_path)
     assert result.board_id == "xczu7ev"
     assert result.runtime == "pynq"
     assert result.device_family is None
@@ -548,7 +622,7 @@ def test_detect_platform_info_no_manifest(monkeypatch, tmp_path) -> None:
 
 def test_detect_platform_info_invalid_manifest(monkeypatch, tmp_path) -> None:
     """manifest.yaml の pydantic parse 失敗時に device_family=None の _PlatformInfo を返す (lines 59-60)。"""
-    from fabricgate.cli.commands.push import _detect_platform_info
+    from fabricgate.cli.commands.push import _detect_platforms
 
     entry = type("Entry", (), {"platform": "xczu7ev/pynq"})()
     mock_index = type("Index", (), {"platforms": [entry]})()
@@ -559,8 +633,7 @@ def test_detect_platform_info_invalid_manifest(monkeypatch, tmp_path) -> None:
     (manifest_dir / "manifest.yaml").write_text(
         "schema: fabricgate-platform/v1\nruntime: unknown-runtime\nboard: zcu104\n"
     )
-    result = _detect_platform_info(tmp_path)
-    assert result is not None
+    (result,) = _detect_platforms(tmp_path)
     assert result.device_family is None
 
 
@@ -568,7 +641,7 @@ def test_detect_platform_info_valid_manifest(monkeypatch, tmp_path) -> None:
     """有効な manifest.yaml から device_family を読み取る (lines 62-66)。"""
     from pathlib import Path as _Path
 
-    from fabricgate.cli.commands.push import _detect_platform_info
+    from fabricgate.cli.commands.push import _detect_platforms
 
     entry = type("Entry", (), {"platform": "zcu104/pynq"})()
     mock_index = type("Index", (), {"platforms": [entry]})()
@@ -577,8 +650,7 @@ def test_detect_platform_info_valid_manifest(monkeypatch, tmp_path) -> None:
     manifest_dir.mkdir(parents=True)
     fixtures = _Path(__file__).resolve().parent.parent / "fixtures"
     (manifest_dir / "manifest.yaml").write_text((fixtures / "sample_manifest.yaml").read_text())
-    result = _detect_platform_info(tmp_path)
-    assert result is not None
+    (result,) = _detect_platforms(tmp_path)
     assert result.board_id == "zcu104"
     assert result.runtime == "pynq"
     assert result.device_family == "xczu7ev"
