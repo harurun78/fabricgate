@@ -110,7 +110,7 @@ def collect_artifacts(
             )
             raise PublishError(msg)
 
-        # Convention: manifest lives at <device>/<runtime>/manifest.yaml
+        # Convention: manifest lives at <board_id>/<runtime>/manifest.yaml
         manifest_rel = f"{platform_key}/manifest.yaml"
         manifest_path = project_dir / manifest_rel
         if not manifest_path.exists():

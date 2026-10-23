@@ -50,7 +50,7 @@ def _detect_platform_info(directory: Path) -> _PlatformInfo | None:
 
     board_id, runtime = platform_id.split("/", 1)
 
-    # Manifest lives at <project_dir>/<device>/<runtime>/manifest.yaml
+    # Manifest lives at <project_dir>/<board_id>/<runtime>/manifest.yaml
     manifest_path = directory / platform_id / "manifest.yaml"
     if not manifest_path.exists():
         return _PlatformInfo(board_id=board_id, runtime=runtime, device_family=None, design_portability=None)
