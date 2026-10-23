@@ -146,6 +146,9 @@ def parse_hwh(path: Path) -> HwhInfo:
                         try:
                             base_address = hex(int(raw, 0))
                         except ValueError:
+                            # Base 0 rejects some valid-looking values (a decimal with a
+                            # leading zero such as "0100"); keep the raw text rather than
+                            # guess its base or drop the address.
                             base_address = raw
                         break
 
