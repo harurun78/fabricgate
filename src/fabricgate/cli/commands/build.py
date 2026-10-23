@@ -300,7 +300,6 @@ def build_cmd(
     # --- Step 5: Derive paths and build YAML ---
     platform_id = f"{board_id}/{runtime}"
     design_slug = design_name.split("/")[-1] if "/" in design_name else design_name
-    platform_dir_name = f"{board_id}-{runtime}"
 
     design_ref = f"{design_name}:{version}"
     manifest_interfaces = _interfaces_to_manifest(hwh_info.interfaces)
@@ -323,7 +322,8 @@ def build_cmd(
 
     # --- Step 6: Write (or preview) ---
     out_root = output_dir if output_dir is not None else Path(design_slug)
-    manifest_path = out_root / platform_dir_name / "manifest.yaml"
+    # push reads <project>/<board_id>/<runtime>/manifest.yaml
+    manifest_path = out_root / board_id / runtime / "manifest.yaml"
     index_path = out_root / "fabricgate-index.yaml"
 
     click.echo("\nGenerated:")
@@ -332,7 +332,7 @@ def build_cmd(
         click.echo(f"  (dry-run) {manifest_path}")
         click.echo("\n--- fabricgate-index.yaml ---")
         click.echo(index_yaml)
-        click.echo(f"--- {platform_dir_name}/manifest.yaml ---")
+        click.echo(f"--- {platform_id}/manifest.yaml ---")
         click.echo(manifest_yaml)
         return
 
@@ -346,7 +346,7 @@ def build_cmd(
 
     click.echo(f"  {index_path}  ✓")
     click.echo(f"  {manifest_path}  ✓")
-    click.echo(f"\nNote: Place bitstream files in {out_root / platform_dir_name}/ before publishing.")
+    click.echo(f"\nNote: Place bitstream files in {manifest_path.parent}/ before publishing.")
     click.echo(f"Run `fabricgate push {out_root}/` to publish.")
 
 
