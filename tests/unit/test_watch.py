@@ -273,6 +273,20 @@ def test_watch_network_error_exit_code_4(monkeypatch: pytest.MonkeyPatch) -> Non
     assert exc_info.value.code == sdk_api.ExitKind.INFRA
 
 
+def test_watch_client_setup_oserror_exit_code_4(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OSError from building the HTTP client (e.g. SSL_CERT_FILE pointing nowhere) is not a NetworkError."""
+
+    def _broken_client(**_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory")
+
+    _patch(monkeypatch, _broken_client)
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.watch(design_ref="test-ns/blink", registry="http://test")
+
+    assert exc_info.value.code == sdk_api.ExitKind.INFRA
+
+
 # ─────────────────────────────────────────────
 # #70: latest is chosen by semver, not by response order
 # ─────────────────────────────────────────────

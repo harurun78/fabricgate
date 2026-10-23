@@ -54,6 +54,10 @@ def watch(
             response = client.get_design(namespace, design)
     except RegistryError as exc:
         raise SDKError(str(exc), code=exc.kind) from exc
+    except OSError as exc:
+        # Not from requests (those become NetworkError) but from building the
+        # HTTP client, e.g. an SSL_CERT_FILE that does not exist.
+        raise SDKError(f"Network error: {exc}", code=ExitKind.INFRA) from exc
 
     full_name = f"{namespace}/{design}"
 
