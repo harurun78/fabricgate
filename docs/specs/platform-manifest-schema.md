@@ -665,6 +665,16 @@ interfaces:
 アーティファクトのサプライチェーン完全性を証明する Sigstore / cosign 署名バンドルフィールド。
 publish 時はオプション。`fabricgate pull --verify-attestation` 指定時に CLI が検証する。
 
+bundle は **この manifest.yaml 自体への署名** である。manifest は全アーティファクトを sha256 で固定しているので、
+1 つの署名でプラットフォームの全アーティファクトを保証できる。作成例:
+
+```bash
+cosign sign-blob manifest.yaml --bundle cosign.bundle --yes
+```
+
+署名した後に manifest.yaml を変更してはならない（変更したら署名し直す）。`fabricgate push` は bundle ファイルを
+アーティファクトと同じ方法でアップロードする。
+
 ```yaml
 attestation:
   bundle: "cosign.bundle"       # アーティファクトと同ディレクトリに配置
@@ -673,10 +683,10 @@ attestation:
 
 | フィールド | 型 | 説明 |
 |---|---|---|
-| `bundle` | string | Cosign バンドルファイル名（アーティファクトと同ディレクトリ） |
+| `bundle` | string | manifest.yaml に対する Cosign バンドルのファイル名（アーティファクトと同ディレクトリ、単一のファイル名） |
 | `transparency_log_url` | string | Rekor 互換 transparency log の URL |
 
-> **注意:** FabricGate はバンドルファイルの内容をバリデーションしない。CLI の `--verify-attestation` フラグが cosign CLI を呼び出して検証する。サーバーはバンドルファイルを他のアーティファクトと同様にストレージに保存するのみ。
+> **注意:** FabricGate はバンドルファイルの内容をバリデーションしない。CLI の `--verify-attestation` フラグが cosign CLI を呼び出し、manifest.yaml に対して検証する。サーバーはバンドルファイルを他のアーティファクトと同様にストレージに保存するのみ。
 
 ## 7. Extensibility
 

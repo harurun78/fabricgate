@@ -77,7 +77,9 @@ fabricgate pull <design-ref> [--platform <board_id/runtime>] [--output <dir>] [-
 - `--platform`: Target platform (format: `board_id/runtime`). If omitted, uses `FG_PLATFORM` env var. If neither is set and multiple platforms exist, shows selection prompt. Resolution is two-stage: exact match first; on miss, if `board_id` is a Board DB-registered real board (not `generic-*`), falls back to `generic-{device_family}/{runtime}` (family fallback, see below).
 - `--output`: Output directory (default: `./<design>-<version>/`)
 - `--verify`: Verify all artifact checksums after download (default: true)
-- `--verify-attestation`: アーティファクトの Sigstore/cosign アテステーションを検証する（cosign CLI が必要）
+- `--verify-attestation`: 各マニフェスト（ルート・依存・shell）の cosign 署名を検証する（cosign CLI が必要）。マニフェストの `attestation.bundle` を取得し、`cosign verify-blob manifest.yaml --bundle <bundle>` で検証してからアーティファクトをダウンロードする。アーティファクトはマニフェストの sha256 で検証されるため、マニフェストの署名でプラットフォーム全体が保証される。`attestation` を宣言していないマニフェストは失敗とする。下の署名者指定（鍵、または証明書 ID と OIDC issuer の組）が必須
+- `--attestation-key`: マニフェストの署名に使われた公開鍵（ファイルパスまたは KMS URI）。cosign の `--key` に渡す
+- `--certificate-identity` / `--certificate-oidc-issuer`: keyless 署名の署名者 ID と OIDC issuer。2 つとも指定する。`--attestation-key` とは併用できない。これら 3 つを `--verify-attestation` なしで指定すると exit 3
 - `--no-deps`: 依存記述を無視してルート Design のみ取得する
 - `--deps-only`: 依存 Design のみ取得し、ルートはスキップする（事前にディレクトリを用意する場合等）
 - `--include-optional-deps`: optional 依存も取得する（default: 無効）
@@ -210,7 +212,7 @@ Authorization ヘッダを自動付与し、ダウンロード統計の pull 主
 - 0: Success（deprecated 版を pull した場合も 0）
 - 1: Design / version not found
 - 2: Permission（private/access-controlled な namespace・design への 401 / 403）
-- 3: Digest mismatch / attestation failure (integrity failure)
+- 3: Digest mismatch / attestation failure (integrity failure) / 署名者指定の不足・矛盾
 - 4: Network error / ローカル書込失敗 / cosign 未導入 (`--verify-attestation` 時)
 - 5: Platform not found / dependency unresolvable (version constraint を満たすバージョンが存在しない)
 - 6: Shell not found (`bitstream_type: partial` の shell_dependency が解決不能)

@@ -159,6 +159,18 @@ def collect_artifacts(
             else:
                 files[f"platform:{platform_key}:artifact:{ref.file}"] = artifact_path.read_bytes()
 
+        # The cosign bundle signs manifest.yaml; pull fetches it like an artifact.
+        if manifest.attestation is not None:
+            bundle = manifest.attestation.bundle
+            if not _is_single_filename(bundle):
+                msg = f"Invalid attestation bundle filename in {manifest_rel}: {bundle!r}"
+                raise PublishError(msg)
+            bundle_path = artifact_dir / bundle
+            if not bundle_path.is_file():
+                msg = f"Attestation bundle not found: {bundle_path}"
+                raise PublishError(msg)
+            files[f"platform:{platform_key}:artifact:{bundle}"] = bundle_path.read_bytes()
+
     if unmatched_urls:
         msg = f"Artifact URLs for files not declared in any platform manifest: {', '.join(sorted(unmatched_urls))}"
         raise PublishError(msg)

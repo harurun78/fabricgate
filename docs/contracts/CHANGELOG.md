@@ -6,6 +6,11 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+### Changed
+
+- `attestation.bundle` (platform manifest) is defined as a cosign bundle that signs that platform's `manifest.yaml` (`cosign sign-blob manifest.yaml --bundle <bundle>`). The manifest pins every artifact by sha256, so the one signature covers the platform. `fabricgate push` uploads the bundle as an artifact part (`platform:{board_id}/{runtime}:artifact:{bundle}`) and `fabricgate pull --verify-attestation` downloads it from `artifacts/{bundle}`. No schema or wire-format change; registries must accept and serve the bundle file like an artifact.
+- `fabricgate pull --verify-attestation` now verifies each manifest (root, dependencies, shell) against a required signer: `--attestation-key`, or `--certificate-identity` with `--certificate-oidc-issuer`. A manifest without `attestation` fails verification.
+
 ## [0.4.3] - 2026-10-23
 
 No contract changes.

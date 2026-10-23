@@ -5,7 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from fabricgate.client import auth, puller
-from fabricgate.client.puller import AttestationError, AttestationUnavailableError, IntegrityError
+from fabricgate.client.puller import (
+    AttestationError,
+    AttestationSigner,
+    AttestationUnavailableError,
+    IntegrityError,
+)
 from fabricgate.client.registry_client import RegistryClient, RegistryError
 from fabricgate.client.resolver import ResolutionError
 from fabricgate.client.validator import verify_artifact
@@ -35,10 +40,30 @@ def pull(
     include_optional_deps: bool = False,
     no_shell: bool = False,
     verify_attestation: bool = False,
+    attestation_key: str | None = None,
+    certificate_identity: str | None = None,
+    certificate_oidc_issuer: str | None = None,
 ) -> PullResult:
-    """Download a platform-specific build of a design."""
+    """Download a platform-specific build of a design.
+
+    With *verify_attestation*, each manifest must be signed by the given
+    *attestation_key*, or by *certificate_identity* / *certificate_oidc_issuer*
+    (keyless).
+    """
     if no_deps and deps_only:
         raise SDKError("--no-deps and --deps-only are mutually exclusive.", code=ExitKind.INVALID)
+
+    signer: AttestationSigner | None = None
+    if verify_attestation:
+        try:
+            signer = AttestationSigner(attestation_key, certificate_identity, certificate_oidc_issuer)
+        except ValueError as exc:
+            raise SDKError(str(exc), code=ExitKind.INVALID) from exc
+    elif (attestation_key, certificate_identity, certificate_oidc_issuer) != (None, None, None):
+        raise SDKError(
+            "--attestation-key / --certificate-identity / --certificate-oidc-issuer require --verify-attestation.",
+            code=ExitKind.INVALID,
+        )
 
     namespace, design, version = _parse_design_ref(design_ref)
 
@@ -75,6 +100,7 @@ def pull(
                 include_optional_deps=include_optional_deps,
                 no_shell=no_shell,
                 verify_attestation=verify_attestation,
+                attestation_signer=signer,
             )
     except ResolutionError as exc:
         raise SDKError(str(exc), code=ExitKind.UNRESOLVABLE) from exc

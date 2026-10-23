@@ -13,7 +13,9 @@ from __future__ import annotations
 import hashlib
 import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +25,7 @@ from fabricgate.client.registry_client import RegistryClientProtocol, RegistryEr
 from fabricgate.client.resolver import resolve_platform_detailed
 from fabricgate.models.api.errors import ErrorCode
 from fabricgate.models.design_index import DesignIndex
-from fabricgate.models.platform_manifest import parse_platform_manifest
+from fabricgate.models.platform_manifest import PlatformManifest, parse_platform_manifest
 
 
 class PullError(Exception):
@@ -40,6 +42,36 @@ class AttestationError(PullError):
 
 class AttestationUnavailableError(PullError):
     """Raised when attestation is requested but cosign is not installed."""
+
+
+@dataclass(frozen=True)
+class AttestationSigner:
+    """Who must have signed a manifest: a public key, or a keyless certificate identity."""
+
+    key: str | None = None
+    certificate_identity: str | None = None
+    certificate_oidc_issuer: str | None = None
+
+    def __post_init__(self) -> None:
+        keyless = self.certificate_identity is not None or self.certificate_oidc_issuer is not None
+        if self.key is not None and keyless:
+            raise ValueError("Give either an attestation key or a certificate identity and OIDC issuer, not both.")
+        if self.key is None and not (self.certificate_identity and self.certificate_oidc_issuer):
+            raise ValueError(
+                "Attestation verification needs an attestation key, "
+                "or both a certificate identity and a certificate OIDC issuer."
+            )
+
+    def cosign_args(self) -> list[str]:
+        if self.key is not None:
+            return ["--key", self.key]
+        assert self.certificate_identity is not None and self.certificate_oidc_issuer is not None
+        return [
+            "--certificate-identity",
+            self.certificate_identity,
+            "--certificate-oidc-issuer",
+            self.certificate_oidc_issuer,
+        ]
 
 
 @dataclass
@@ -79,26 +111,56 @@ def _validate_artifact_filename(artifact_name: str, *, context: str) -> Path:
     return Path(artifact_name)
 
 
-def _write_verified(
-    path: Path,
-    data: bytes,
-    expected_sha256: str,
-    *,
-    verify: bool,
-    label: str,
-    written: list[Path] | None = None,
-) -> None:
+def _write_verified(path: Path, data: bytes, expected_sha256: str, *, verify: bool, label: str) -> None:
     """Write *data* to *path*, checking its digest first when *verify* is set.
 
     Checking before the write keeps a mismatching download from landing on disk
     under its final name or overwriting a file verified by an earlier pull.
-    *written* collects the paths so attestation can cover every artifact.
     """
     if verify and hashlib.sha256(data).hexdigest() != expected_sha256:
         raise IntegrityError(f"Digest mismatch for {label}")
     path.write_bytes(data)
-    if written is not None:
-        written.append(path)
+
+
+def _verify_manifest_attestation(
+    manifest_dir: Path,
+    manifest: PlatformManifest,
+    fetch: Callable[[str], bytes],
+    signer: AttestationSigner,
+    *,
+    label: str,
+) -> None:
+    """Check the cosign bundle that signs ``manifest_dir/manifest.yaml``.
+
+    The bundle signs the manifest, and the manifest pins every artifact by
+    sha256, so one signature covers the whole platform. Runs before any
+    artifact is downloaded so nothing is written for an unsigned manifest.
+    """
+    if manifest.attestation is None:
+        raise AttestationError(f"{label} declares no attestation bundle")
+    if not shutil.which("cosign"):
+        raise AttestationUnavailableError("cosign is not installed. Install cosign to use --verify-attestation.")
+    bundle_name = manifest.attestation.bundle
+    bundle_path = manifest_dir / _validate_artifact_filename(bundle_name, context=f"{label} attestation")
+    bundle_path.write_bytes(fetch(bundle_name))
+    try:
+        result = subprocess.run(
+            [
+                "cosign",
+                "verify-blob",
+                str(manifest_dir / "manifest.yaml"),
+                "--bundle",
+                str(bundle_path),
+                *signer.cosign_args(),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise AttestationError(f"Attestation verification timed out for {label}") from exc
+    if result.returncode != 0:
+        raise AttestationError(f"Attestation verification failed for {label}: {result.stderr.strip()}")
 
 
 def _resolve_and_download_deps(
@@ -112,7 +174,7 @@ def _resolve_and_download_deps(
     verify_digests: bool,
     *,
     include_optional: bool = False,
-    written: list[Path] | None = None,
+    signer: AttestationSigner | None = None,
 ) -> list[str]:
     """Resolve dependencies and download them into deps/ subdirectory.
 
@@ -165,6 +227,14 @@ def _resolve_and_download_deps(
         )
         (dep_dir / "manifest.yaml").write_bytes(manifest_bytes)
         manifest = parse_platform_manifest(manifest_bytes.decode("utf-8"))
+        if signer is not None:
+            _verify_manifest_attestation(
+                dep_dir,
+                manifest,
+                partial(client.download_artifact, dep_ns, dep_design, dep_version, dep_device, dep_runtime),
+                signer,
+                label=f"dependency manifest {dep_ref}",
+            )
 
         # Download artifacts
         for artifact in _extract_artifact_refs(manifest):
@@ -184,7 +254,6 @@ def _resolve_and_download_deps(
                 artifact.sha256,
                 verify=verify_digests,
                 label=f"dependency artifact {artifact_name}",
-                written=written,
             )
 
         dep_refs.append(dep_ref)
@@ -203,7 +272,7 @@ def _maybe_download_shell(
     verify_digests: bool,
     *,
     no_shell: bool = False,
-    written: list[Path] | None = None,
+    signer: AttestationSigner | None = None,
 ) -> str | None:
     """Download the static shell for a partial bitstream if applicable.
 
@@ -244,6 +313,14 @@ def _maybe_download_shell(
     )
     (shell_dir / "manifest.yaml").write_bytes(manifest_bytes)
     manifest = parse_platform_manifest(manifest_bytes.decode("utf-8"))
+    if signer is not None:
+        _verify_manifest_attestation(
+            shell_dir,
+            manifest,
+            partial(client.download_artifact, shell_ns, shell_design, shell_info.version, shell_board, shell_runtime),
+            signer,
+            label=f"shell manifest {shell_ref}",
+        )
 
     for artifact in _extract_artifact_refs(manifest):
         artifact_name = str(artifact.file)
@@ -262,31 +339,9 @@ def _maybe_download_shell(
             artifact.sha256,
             verify=verify_digests,
             label=f"shell artifact {artifact_name}",
-            written=written,
         )
 
     return shell_ref
-
-
-def _verify_attestation(target_dir: Path, artifact_files: list[str]) -> None:
-    """Verify cosign attestation for downloaded artifacts.
-
-    TODO: Add --key / --certificate-identity / --certificate-oidc-issuer
-    parameters for proper keyless or key-based verification.
-    """
-    if not shutil.which("cosign"):
-        raise AttestationUnavailableError("cosign is not installed. Install cosign to use --verify-attestation.")
-
-    for filename in artifact_files:
-        artifact_path = target_dir / filename
-        result = subprocess.run(
-            ["cosign", "verify-blob", str(artifact_path)],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode != 0:
-            raise AttestationError(f"Attestation verification failed for {filename}: {result.stderr.strip()}")
 
 
 def pull_design(
@@ -304,13 +359,23 @@ def pull_design(
     include_optional_deps: bool = False,
     no_shell: bool = False,
     verify_attestation: bool = False,
+    attestation_signer: AttestationSigner | None = None,
 ) -> PullOutcome:
     """Download a platform-specific build of a design and its dependencies.
+
+    With *verify_attestation*, every manifest (root, dependencies, shell) must
+    carry a cosign bundle signed by *attestation_signer*.
 
     Raises client-layer exceptions (:class:`PullError` subclasses,
     :class:`RegistryError`, :class:`~fabricgate.client.resolver.ResolutionError`,
     ``OSError``); callers map these to messages / exit codes.
     """
+    if verify_attestation and attestation_signer is None:
+        raise AttestationError(
+            "Attestation verification needs an attestation key, "
+            "or both a certificate identity and a certificate OIDC issuer."
+        )
+    signer = attestation_signer if verify_attestation else None
     version_detail = client.get_version(namespace, design, version)
 
     # --- Deprecated warning ---
@@ -339,6 +404,14 @@ def pull_design(
         manifest = parse_platform_manifest(manifest_bytes.decode("utf-8"))
 
         (target_dir / "manifest.yaml").write_bytes(manifest_bytes)
+        if signer is not None:
+            _verify_manifest_attestation(
+                target_dir,
+                manifest,
+                partial(client.download_artifact, namespace, design, version, board_id, runtime),
+                signer,
+                label=f"manifest {namespace}/{design}:{version}",
+            )
 
         for artifact in _extract_artifact_refs(manifest):
             artifact_name = str(artifact.file)
@@ -353,13 +426,7 @@ def pull_design(
             )
             downloaded_files.append(artifact_name)
 
-        # --- Attestation verification ---
-        if verify_attestation:
-            _verify_attestation(target_dir, downloaded_files)
-
     # --- Dependency resolution ---
-    # Dependency and shell artifacts are attested too, not only the root.
-    extra_files: list[Path] | None = [] if verify_attestation else None
     dep_refs: list[str] = []
     if not no_deps:
         dep_refs = _resolve_and_download_deps(
@@ -372,7 +439,7 @@ def pull_design(
             target_dir,
             verify_digests,
             include_optional=include_optional_deps,
-            written=extra_files,
+            signer=signer,
         )
 
     # --- Shell auto-download ---
@@ -388,11 +455,8 @@ def pull_design(
             target_dir,
             verify_digests,
             no_shell=no_shell,
-            written=extra_files,
+            signer=signer,
         )
-
-    for extra in extra_files or []:
-        _verify_attestation(extra.parent, [extra.name])
 
     if cache_dir is not None and not deps_only:
         cache.store(
