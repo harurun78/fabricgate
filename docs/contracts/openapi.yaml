@@ -2381,37 +2381,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /api/v1/admin/mirror/sync:
-    post:
-      tags:
-      - admin
-      summary: Trigger Mirror Sync
-      description: '§ 3.18 — Manually trigger a full upstream sync (admin only).
-
-
-        Runs synchronously; returns 200 OK on completion.'
-      operationId: trigger_mirror_sync_api_v1_admin_mirror_sync_post
-      parameters:
-      - name: authorization
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Authorization
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/users/me/api-keys:
     post:
       tags:
