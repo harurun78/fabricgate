@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from fabricgate.client.registry_client import RegistryClient, RegistryError
 from fabricgate.models.cli import WatchResult
-from fabricgate.sdk._helpers import ExitKind, SDKError, _parse_design_ref_optional_version, _registry_error_kind
+from fabricgate.sdk._helpers import (
+    ExitKind,
+    SDKError,
+    _parse_design_ref_optional_version,
+    _registry_error_kind,
+    _validate_semver,
+)
 
 
 def _parse_semver_tuple(version: str) -> tuple[int, int, int]:
@@ -42,6 +48,9 @@ def watch(
 
     ref = (shell or design_ref) or ""
     namespace, design, _ = _parse_design_ref_optional_version(ref)
+    if since_version:
+        # Before any request: "1.0.0-rc.1" is not a registry version and must not pass as 1.0.0.
+        _validate_semver(since_version)
 
     try:
         with RegistryClient(base_url=registry, token=token) as client:
@@ -53,9 +62,11 @@ def watch(
 
     full_name = f"{namespace}/{design}"
 
-    # Collect non-yanked versions, newest first
+    # The API does not promise an order: pick the highest semver among non-yanked versions.
     active_versions = [v for v in response.versions if not v.yanked]
-    latest_version = active_versions[0].version if active_versions else None
+    latest_version = (
+        max(active_versions, key=lambda v: _parse_semver_tuple(v.version)).version if active_versions else None
+    )
 
     if not since_version:
         # No version filter — just confirm the design exists and show latest
