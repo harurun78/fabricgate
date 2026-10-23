@@ -16,8 +16,8 @@ from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
     _quota_warning_message,
-    _registry_error_kind,
-    _stored_credentials,
+    _registry_errors,
+    _require_token,
 )
 
 
@@ -142,15 +142,7 @@ def push(
     except OSError as exc:
         raise SDKError(f"Cannot read the project files: {exc}", code=ExitKind.INFRA) from exc
 
-    # Resolve auth token
-    effective_token = token
-    if effective_token is None:
-        creds = _stored_credentials(registry)
-        if creds is not None:
-            effective_token = creds.token
-
-    if effective_token is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    effective_token = _require_token(registry, token)
 
     # Artifacts go straight to object storage; only metadata travels through
     # the API. Cloud Run caps a request at 32MiB while an artifact may be
@@ -158,22 +150,19 @@ def push(
     artifact_parts = {key: data for key, data in files.items() if ":artifact:" in key}
     metadata_files = {key: data for key, data in files.items() if key not in artifact_parts}
 
-    try:
-        with RegistryClient(base_url=registry, token=effective_token) as client:
-            if artifact_parts:
-                _upload_artifacts_directly(client, ns, design, artifact_parts)
-            response = client.publish_version(ns, design, version, metadata_files)
-            quota_warning: str | None = None
-            try:
-                quota_response = client.get_namespace_quota(ns)
-                quota_warning = _quota_warning_message(quota_response)
-            except RegistryError:
-                # The post-publish quota fetch is best-effort: a failed quota
-                # lookup (including a transport NetworkError) must not turn a
-                # successful publish into a command failure — just omit the warning.
-                quota_warning = None
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=effective_token) as client:
+        if artifact_parts:
+            _upload_artifacts_directly(client, ns, design, artifact_parts)
+        response = client.publish_version(ns, design, version, metadata_files)
+        quota_warning: str | None = None
+        try:
+            quota_response = client.get_namespace_quota(ns)
+            quota_warning = _quota_warning_message(quota_response)
+        except RegistryError:
+            # The post-publish quota fetch is best-effort: a failed quota
+            # lookup (including a transport NetworkError) must not turn a
+            # successful publish into a command failure — just omit the warning.
+            quota_warning = None
 
     return PushResult(
         name=response.name,

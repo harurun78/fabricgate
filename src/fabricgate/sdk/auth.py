@@ -17,7 +17,7 @@ from fabricgate.models.cli import (
     TokenCreateResult,
     TokenInfo,
 )
-from fabricgate.sdk._helpers import ExitKind, SDKError, _registry_error_kind, _stored_credentials
+from fabricgate.sdk._helpers import ExitKind, SDKError, _registry_errors, _require_token
 
 # ---------------------------------------------------------------------------
 # Token management helpers
@@ -95,7 +95,7 @@ def login(
     LoginResult
         Contains the registry URL and a human-readable storage label.
     """
-    try:
+    with _registry_errors():
         with RegistryClient(base_url=registry) as client:
             device_resp = client.device_authorization()
 
@@ -173,8 +173,6 @@ def login(
             registry=registry,
             storage=storage,
         )
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -203,20 +201,15 @@ def token_create(
     registry:
         Base URL for the registry API.
     """
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
     scope_list = [s.strip() for s in scopes.split(",") if s.strip()] if scopes else ["public:read"]
     if not scope_list:
         raise SDKError("At least one scope is required.", code=ExitKind.INVALID)
     expires_at = _parse_expires(expires)
 
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            resp = client.create_api_key(name, scope_list, expires_at)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        resp = client.create_api_key(name, scope_list, expires_at)
 
     return TokenCreateResult(
         id=resp.id,
@@ -232,15 +225,10 @@ def token_list(
     registry: str = "https://registry.fabricgate.dev/api/v1",
 ) -> list[TokenInfo]:
     """List all API keys for the current user."""
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            resp = client.list_api_keys()
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        resp = client.list_api_keys()
 
     return [
         TokenInfo(
@@ -270,12 +258,7 @@ def token_revoke(
     registry:
         Base URL for the registry API.
     """
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            client.delete_api_key(key_id)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        client.delete_api_key(key_id)

@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import Any
 
 from fabricgate.client import cache
-from fabricgate.client.publisher import _extract_artifact_refs, _is_single_filename
 from fabricgate.client.registry_client import RegistryClientProtocol, RegistryError
 from fabricgate.client.resolver import resolve_platform_detailed
+from fabricgate.client.validator import artifact_refs, is_single_filename
 from fabricgate.models.api.errors import ErrorCode
 from fabricgate.models.design_index import DesignIndex
 from fabricgate.models.platform_manifest import PlatformManifest, parse_platform_manifest
@@ -106,7 +106,7 @@ def _validate_artifact_filename(artifact_name: str, *, context: str) -> Path:
 
     Rejects empty, absolute, traversal, or multi-segment names.
     """
-    if not _is_single_filename(artifact_name):
+    if not is_single_filename(artifact_name):
         raise IntegrityError(f"Invalid artifact filename in {context}: {artifact_name!r}")
     return Path(artifact_name)
 
@@ -173,6 +173,56 @@ def _verify_manifest_attestation(
         raise AttestationError(f"Attestation verification failed for {label}: {result.stderr.strip()}")
 
 
+def _download_platform(
+    client: RegistryClientProtocol,
+    namespace: str,
+    design: str,
+    version: str,
+    board: str,
+    runtime: str,
+    dest: Path,
+    *,
+    verify_digests: bool,
+    signer: AttestationSigner | None,
+    kind: str = "",
+) -> list[str]:
+    """Download one platform's manifest and artifacts into *dest*; return the artifact names.
+
+    *kind* (``""``, ``"dependency"`` or ``"shell"``) only prefixes error messages.
+    The manifest is parsed before it is written, so a broken one leaves nothing on disk.
+    """
+    prefix = f"{kind} " if kind else ""
+    ref = f"{namespace}/{design}:{version}"
+    manifest_bytes = client.get_platform_manifest_bytes(namespace, design, version, board, runtime)
+    manifest = parse_platform_manifest(manifest_bytes.decode("utf-8"))
+    (dest / "manifest.yaml").write_bytes(manifest_bytes)
+    fetch = partial(client.download_artifact, namespace, design, version, board, runtime)
+    if signer is not None:
+        _verify_manifest_attestation(
+            dest,
+            manifest,
+            fetch,
+            signer,
+            label=f"{prefix}manifest {ref}",
+            expected_ref=ref,
+            expected_runtime=runtime,
+        )
+
+    names: list[str] = []
+    for artifact in artifact_refs(manifest):
+        name = str(artifact.file)
+        path = _validate_artifact_filename(name, context=f"{prefix}manifest")
+        _write_verified(
+            dest / path,
+            fetch(name),
+            artifact.sha256,
+            verify=verify_digests,
+            label=f"{prefix}artifact {name}" if kind else name,
+        )
+        names.append(name)
+    return names
+
+
 def _resolve_and_download_deps(
     client: RegistryClientProtocol,
     namespace: str,
@@ -200,10 +250,6 @@ def _resolve_and_download_deps(
             include_optional=include_optional,
         )
     except RegistryError as exc:
-        if exc.status_code == 409:
-            error_code = exc.error.error.code if exc.error else ""
-            if error_code == "DEPENDENCY_UNRESOLVABLE":
-                raise
         if exc.status_code == 404:
             # No dependencies endpoint or no deps — not an error
             return []
@@ -227,47 +273,18 @@ def _resolve_and_download_deps(
         dep_dir = deps_dir / dep_ns / dep_design / dep_version
         dep_dir.mkdir(parents=True, exist_ok=True)
 
-        # Download manifest
-        manifest_bytes = client.get_platform_manifest_bytes(
+        _download_platform(
+            client,
             dep_ns,
             dep_design,
             dep_version,
             dep_device,
             dep_runtime,
+            dep_dir,
+            verify_digests=verify_digests,
+            signer=signer,
+            kind="dependency",
         )
-        (dep_dir / "manifest.yaml").write_bytes(manifest_bytes)
-        manifest = parse_platform_manifest(manifest_bytes.decode("utf-8"))
-        if signer is not None:
-            _verify_manifest_attestation(
-                dep_dir,
-                manifest,
-                partial(client.download_artifact, dep_ns, dep_design, dep_version, dep_device, dep_runtime),
-                signer,
-                label=f"dependency manifest {dep_ref}",
-                expected_ref=dep_ref,
-                expected_runtime=dep_runtime,
-            )
-
-        # Download artifacts
-        for artifact in _extract_artifact_refs(manifest):
-            artifact_name = str(artifact.file)
-            artifact_path_obj = _validate_artifact_filename(artifact_name, context="dependency manifest")
-            artifact_bytes = client.download_artifact(
-                dep_ns,
-                dep_design,
-                dep_version,
-                dep_device,
-                dep_runtime,
-                artifact_name,
-            )
-            _write_verified(
-                dep_dir / artifact_path_obj,
-                artifact_bytes,
-                artifact.sha256,
-                verify=verify_digests,
-                label=f"dependency artifact {artifact_name}",
-            )
-
         dep_refs.append(dep_ref)
 
     return dep_refs
@@ -311,48 +328,18 @@ def _maybe_download_shell(
     shell_dir = target_dir / "shell" / shell_ns / shell_design / str(shell_info.version)
     shell_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download shell artifacts via pull_url or direct download
-    shell_board = shell_info.board
-    shell_runtime = shell_info.runtime
-
-    manifest_bytes = client.get_platform_manifest_bytes(
+    _download_platform(
+        client,
         shell_ns,
         shell_design,
-        shell_info.version,
-        shell_board,
-        shell_runtime,
+        str(shell_info.version),
+        shell_info.board,
+        shell_info.runtime,
+        shell_dir,
+        verify_digests=verify_digests,
+        signer=signer,
+        kind="shell",
     )
-    (shell_dir / "manifest.yaml").write_bytes(manifest_bytes)
-    manifest = parse_platform_manifest(manifest_bytes.decode("utf-8"))
-    if signer is not None:
-        _verify_manifest_attestation(
-            shell_dir,
-            manifest,
-            partial(client.download_artifact, shell_ns, shell_design, shell_info.version, shell_board, shell_runtime),
-            signer,
-            label=f"shell manifest {shell_ref}",
-            expected_ref=shell_ref,
-            expected_runtime=shell_runtime,
-        )
-
-    for artifact in _extract_artifact_refs(manifest):
-        artifact_name = str(artifact.file)
-        artifact_path_obj = _validate_artifact_filename(artifact_name, context="shell manifest")
-        artifact_bytes = client.download_artifact(
-            shell_ns,
-            shell_design,
-            shell_info.version,
-            shell_board,
-            shell_runtime,
-            artifact_name,
-        )
-        _write_verified(
-            shell_dir / artifact_path_obj,
-            artifact_bytes,
-            artifact.sha256,
-            verify=verify_digests,
-            label=f"shell artifact {artifact_name}",
-        )
 
     return shell_ref
 
@@ -418,33 +405,17 @@ def pull_design(
 
     # --- Download root design (unless deps_only) ---
     if not deps_only:
-        manifest_bytes = client.get_platform_manifest_bytes(namespace, design, version, board_id, runtime)
-        manifest = parse_platform_manifest(manifest_bytes.decode("utf-8"))
-
-        (target_dir / "manifest.yaml").write_bytes(manifest_bytes)
-        if signer is not None:
-            _verify_manifest_attestation(
-                target_dir,
-                manifest,
-                partial(client.download_artifact, namespace, design, version, board_id, runtime),
-                signer,
-                label=f"manifest {namespace}/{design}:{version}",
-                expected_ref=f"{namespace}/{design}:{version}",
-                expected_runtime=runtime,
-            )
-
-        for artifact in _extract_artifact_refs(manifest):
-            artifact_name = str(artifact.file)
-            artifact_path_obj = _validate_artifact_filename(artifact_name, context="manifest")
-            artifact_bytes = client.download_artifact(namespace, design, version, board_id, runtime, artifact_name)
-            _write_verified(
-                target_dir / artifact_path_obj,
-                artifact_bytes,
-                artifact.sha256,
-                verify=verify_digests,
-                label=artifact_name,
-            )
-            downloaded_files.append(artifact_name)
+        downloaded_files = _download_platform(
+            client,
+            namespace,
+            design,
+            version,
+            board_id,
+            runtime,
+            target_dir,
+            verify_digests=verify_digests,
+            signer=signer,
+        )
 
     # --- Dependency resolution ---
     dep_refs: list[str] = []

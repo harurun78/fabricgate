@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from fabricgate.client.registry_client import RegistryClient, RegistryError
+from fabricgate.client.registry_client import RegistryClient
 from fabricgate.models.cli import LicenseCheckInfo, LicenseCheckToolReq, LicenseCheckVerdict
-from fabricgate.sdk._helpers import SDKError, _parse_design_ref, _registry_error_kind
+from fabricgate.sdk._helpers import _parse_design_ref, _registry_errors
 
 
 def license_check(
@@ -34,11 +34,8 @@ def license_check(
     """
     namespace, design, version = _parse_design_ref(design_ref)
 
-    try:
-        with RegistryClient(base_url=registry) as client:
-            resp = client.license_check(namespace, design, version, tool, edition)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+    with _registry_errors(), RegistryClient(base_url=registry) as client:
+        resp = client.license_check(namespace, design, version, tool, edition)
 
     tool_reqs = [
         LicenseCheckToolReq(
