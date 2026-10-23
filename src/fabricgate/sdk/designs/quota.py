@@ -24,7 +24,8 @@ def quota(
     token: str | None = None,
 ) -> QuotaResponse:
     """Fetch quota usage for a namespace."""
-    creds = _stored_credentials(registry)
+    # An explicit token needs no stored credentials, so a damaged store does not get in its way.
+    creds = None if token else _stored_credentials(registry)
     effective_token = token or (creds.token if creds is not None else None)
 
     ns = namespace

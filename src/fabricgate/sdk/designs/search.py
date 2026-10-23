@@ -65,7 +65,8 @@ def list_remote(
     Without *namespace* the caller's own namespace is derived from the stored
     credentials; if none are stored the failure kind is ``PERMISSION``.
     """
-    creds = _stored_credentials(registry)
+    # An explicit token needs no stored credentials, so a damaged store does not get in its way.
+    creds = None if token else _stored_credentials(registry)
     effective_token = token or (creds.token if creds is not None else None)
 
     ns = namespace

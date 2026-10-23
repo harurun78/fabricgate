@@ -4155,6 +4155,20 @@ def test_corrupt_credentials_file_is_invalid(monkeypatch: pytest.MonkeyPatch, tm
     assert exc_info.value.code == ExitKind.INVALID
 
 
+def test_explicit_token_skips_a_corrupt_credentials_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """search / quota with token= do not read the store, so a damaged one does not block them."""
+    from fabricgate.client import auth as _auth
+
+    monkeypatch.undo()  # real load_credentials; the store is tmp_path
+    p = tmp_path / "credentials.json"
+    p.write_text("{")
+    monkeypatch.setattr(_auth, "_DEFAULT_CRED_PATH", p)
+    monkeypatch.setattr(_auth, "_try_keyring_load", lambda _registry: None)
+    monkeypatch.delenv("FABRICGATE_TOKEN", raising=False)
+    _patch_all_rc(monkeypatch, _FakePushRegistryClient)
+    assert sdk_api.quota(namespace="alice", token="tok", registry="http://test").namespace == "alice"
+
+
 def test_push_reraises_unexpected_index_load_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         _sdk_designs_push_mod,

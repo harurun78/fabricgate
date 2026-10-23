@@ -49,8 +49,12 @@ def save_index(index: CacheIndex, cache_dir: Path | None = None) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     # Write then rename, so an interrupted pull never leaves a half-written index.
     tmp = p.with_name(f"{p.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(index.model_dump(mode="json"), indent=2), encoding="utf-8")
-    os.replace(tmp, p)
+    try:
+        tmp.write_text(json.dumps(index.model_dump(mode="json"), indent=2), encoding="utf-8")
+        os.replace(tmp, p)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def lookup(
