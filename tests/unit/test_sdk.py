@@ -3863,10 +3863,20 @@ def test_stats_weekly_and_monthly_report_no_last_7d(monkeypatch: pytest.MonkeyPa
 
 
 def test_stats_last_7d_ends_today_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    from datetime import UTC, timedelta
     from datetime import datetime as _datetime
+    from datetime import timedelta
 
-    today = _datetime.now(UTC).date()
+    import fabricgate.sdk.designs.stats as _stats_mod
+
+    today = date(2026, 3, 31)
+
+    class _FixedNow(_datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return _datetime(2026, 3, 31, 12, tzinfo=tz)
+
+    # Pin "today" so the test cannot straddle midnight UTC.
+    monkeypatch.setattr(_stats_mod, "datetime", _FixedNow)
 
     class _TodayClient(_StatsFakeClient):
         def get_design_stats(self, namespace, design, *, period=None, from_date=None, to_date=None):
