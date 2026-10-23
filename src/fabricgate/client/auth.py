@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-import stat
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -75,11 +75,16 @@ def _load_creds_file(path: Path) -> dict[str, Credentials]:
 def _save_creds_file(creds: dict[str, Credentials], path: Path) -> None:
     text = json.dumps({k: v.model_dump(mode="json") for k, v in creds.items()}, indent=2)
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        # The mode above only applies to a new file; tighten an existing one before the token goes in.
-        path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600
-        f.write(text)
+    # mkstemp creates the file 0600. Replacing gives a new inode, so an fd opened
+    # while an older file was readable never sees the new token.
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f"{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 # ---- Public API ----

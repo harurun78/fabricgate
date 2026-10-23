@@ -237,6 +237,17 @@ class TestAuth:
         save_credentials(self._cred(), p)
         assert p.parent.stat().st_mode & 0o777 == 0o700
 
+    def test_fd_opened_while_0644_never_sees_new_token(self, tmp_path: Path, file_credentials: None) -> None:
+        """0644 の間に開かれた fd は、chmod 後も有効なので新しいトークンが見えてはいけない。"""
+        p = tmp_path / "creds.json"
+        p.write_text("{}", encoding="utf-8")
+        p.chmod(0o644)
+        with p.open(encoding="utf-8") as held:
+            save_credentials(self._cred(), p)
+            assert "tok-abc" not in held.read()
+        assert "tok-abc" in p.read_text(encoding="utf-8")
+        assert [q.name for q in tmp_path.iterdir()] == ["creds.json"]
+
     def test_multiple_registries(self, tmp_path: Path, file_credentials: None) -> None:
         p = tmp_path / "creds.json"
         save_credentials(self._cred("https://a.example.com"), p)
