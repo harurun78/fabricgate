@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.client.cache import load_index
 from fabricgate.sdk import api as sdk_api
 
@@ -52,11 +52,8 @@ def list_cmd(obj: dict[str, object], remote: bool, namespace: str | None) -> Non
 
 
 def _list_remote(obj: dict[str, object], namespace: str | None) -> None:
-    try:
+    with sdk_errors():
         designs = sdk_api.list_remote(namespace=namespace, registry=str(obj["registry"]))
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps([d.model_dump(mode="json") for d in designs], indent=2))

@@ -224,6 +224,19 @@ def test_login_sdk_error(monkeypatch) -> None:
     assert result.exit_code == 1
 
 
+@pytest.mark.parametrize(("kind", "code"), [("INVALID", 3), ("INFRA", 4), ("PERMISSION", 2)])
+def test_login_sdk_error_maps_the_kind(monkeypatch, kind: str, code: int) -> None:
+    """login exits with the code of the SDK failure kind, like every other command (#66)."""
+    from fabricgate.sdk.api import ExitKind, SDKError
+
+    def _fake_login(**_kwargs):
+        raise SDKError("device code expired", code=ExitKind[kind])
+
+    monkeypatch.setattr("fabricgate.cli.commands.login.sdk_api.login", _fake_login)
+    result = CliRunner().invoke(main, ["login"])
+    assert result.exit_code == code
+
+
 # ---------------------------------------------------------------------------
 # push
 # ---------------------------------------------------------------------------
@@ -2098,6 +2111,22 @@ def test_license_check_empty_requirements(monkeypatch) -> None:
     result = runner.invoke(main, ["license-check", "alice/counter:1.0.0"])
     assert result.exit_code == 1
     assert "No tool requirements defined." in result.output
+
+
+@pytest.mark.parametrize(
+    ("info", "args", "code"),
+    [
+        ("_LICENSE_INFO_CHECK_FAIL", ["--tool", "vivado", "--edition", "standard"], 3),
+        ("_LICENSE_INFO_EMPTY", [], 1),
+    ],
+)
+def test_license_check_json_keeps_the_exit_code(monkeypatch, info: str, args: list[str], code: int) -> None:
+    """--json prints the result and still exits like the text output (#67)."""
+    result_info = globals()[info]
+    monkeypatch.setattr("fabricgate.cli.commands.license_check.sdk_api.license_check", lambda *_a, **_kw: result_info)
+    result = CliRunner().invoke(main, ["--json", "license-check", "alice/counter:1.0.0", *args])
+    assert result.exit_code == code
+    assert json.loads(result.output)["design"] == result_info.design
 
 
 def test_license_check_error(monkeypatch) -> None:

@@ -6,7 +6,7 @@ import json
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
 
 
@@ -24,16 +24,13 @@ def yank_cmd(
     """Yank (soft-delete) one or more versions."""
     reg: str = str(obj["registry"])
     version_list = list(versions) if versions else None
-    try:
+    with sdk_errors():
         results = sdk_api.yank(
             design_ref,
             version_list,
             reason=reason,
             registry=reg,
         )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps([r.model_dump(mode="json") for r in results], indent=2))

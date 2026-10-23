@@ -6,7 +6,8 @@ import json
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import exit_with, sdk_errors
+from fabricgate.client.errors import FailureKind
 from fabricgate.sdk import api as sdk_api
 
 
@@ -24,19 +25,21 @@ def license_check_cmd(
     """Check tool requirements for a design version."""
     reg: str = str(obj["registry"])
     tool_list = list(tools) if tools else None
-    try:
+    with sdk_errors():
         result = sdk_api.license_check(
             design_ref,
             tool=tool_list,
             edition=edition,
             registry=reg,
         )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
+        # Same outcome as the text output below, so scripts can rely on the exit code (#67).
+        if not result.tool_requirements:
+            exit_with(FailureKind.GENERIC)
+        if result.check is not None and not result.check.meets_requirements:
+            exit_with(FailureKind.INVALID)
         return
 
     click.echo(f"Design:   {result.design}:{result.version}")
@@ -46,7 +49,7 @@ def license_check_cmd(
         click.echo(f"\nDisclaimer: {result.disclaimer}")
         # GENERIC: no requirements to check (ADR-008). Exit 2 is reserved for
         # PERMISSION; a missing-data signal must not collide with it.
-        raise click.exceptions.Exit(1)
+        exit_with(FailureKind.GENERIC)
 
     if result.check is not None:
         # Tool/edition check mode
@@ -73,4 +76,4 @@ def license_check_cmd(
     click.echo(f"Disclaimer: {result.disclaimer}")
 
     if result.check is not None and not result.check.meets_requirements:
-        raise click.exceptions.Exit(3)
+        exit_with(FailureKind.INVALID)

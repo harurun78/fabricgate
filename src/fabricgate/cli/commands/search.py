@@ -6,7 +6,7 @@ import json
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
 
 
@@ -28,7 +28,7 @@ def search_cmd(
     tag: str | None,
 ) -> None:
     """Search for designs in the registry."""
-    try:
+    with sdk_errors():
         results = sdk_api.search(
             query,
             platform=platform,
@@ -38,10 +38,6 @@ def search_cmd(
             tag=tag,
             registry=str(obj["registry"]),
         )
-    except sdk_api.SDKError as exc:
-        exit_code = exit_code_for(exc)
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code) from exc
 
     if obj["json"]:
         click.echo(json.dumps([result.model_dump(mode="json") for result in results], indent=2))

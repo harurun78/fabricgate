@@ -6,7 +6,7 @@ import json
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
 
 
@@ -15,11 +15,8 @@ from fabricgate.sdk import api as sdk_api
 @click.pass_obj
 def info_cmd(obj: dict[str, object], design_ref: str) -> None:
     """Show detailed metadata for a design reference."""
-    try:
+    with sdk_errors():
         result = sdk_api.info(design_ref, registry=str(obj["registry"]))
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
