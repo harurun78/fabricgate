@@ -14,10 +14,8 @@ from fabricgate.sdk._helpers import (
 
 
 def _parse_semver_tuple(version: str) -> tuple[int, int, int]:
-    """Return (major, minor, patch) for semver comparison, ignoring pre-release suffixes."""
-    # Strip pre-release/build metadata (e.g. "1.0.0-beta.1" → "1.0.0")
-    core = version.split("-")[0].split("+")[0]
-    parts = core.split(".")
+    """Return (major, minor, patch) for semver comparison."""
+    parts = version.split(".")
     try:
         return int(parts[0]), int(parts[1]), int(parts[2])
     except (ValueError, IndexError) as exc:
@@ -56,6 +54,8 @@ def watch(
         with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
             response = client.get_design(namespace, design)
     except OSError as exc:
+        # Not from requests (those become NetworkError) but from building the
+        # HTTP client, e.g. an SSL_CERT_FILE that does not exist.
         raise SDKError(f"Network error: {exc}", code=ExitKind.INFRA) from exc
 
     full_name = f"{namespace}/{design}"

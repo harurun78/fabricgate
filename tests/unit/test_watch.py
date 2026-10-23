@@ -242,17 +242,15 @@ def test_watch_yanked_versions_excluded(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 # ─────────────────────────────────────────────
-# _parse_semver_tuple — pre-release/build suffix
+# _parse_semver_tuple
 # ─────────────────────────────────────────────
 
 
-def test_parse_semver_tuple_handles_prerelease() -> None:
+def test_parse_semver_tuple() -> None:
     from fabricgate.sdk.designs.watch import _parse_semver_tuple
 
     assert _parse_semver_tuple("1.0.0") == (1, 0, 0)
-    assert _parse_semver_tuple("2.3.4-beta.1") == (2, 3, 4)
-    assert _parse_semver_tuple("1.0.0+build.42") == (1, 0, 0)
-    assert _parse_semver_tuple("3.0.0-rc.1+sha.abc") == (3, 0, 0)
+    assert _parse_semver_tuple("10.2.30") == (10, 2, 30)
 
 
 # ─────────────────────────────────────────────
@@ -268,6 +266,20 @@ def test_watch_network_error_exit_code_4(monkeypatch: pytest.MonkeyPatch) -> Non
             raise NetworkError("Network error: Connection refused")
 
     _patch(monkeypatch, _NetworkErrorClient)
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.watch(design_ref="test-ns/blink", registry="http://test")
+
+    assert exc_info.value.code == sdk_api.ExitKind.INFRA
+
+
+def test_watch_client_setup_oserror_exit_code_4(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OSError from building the HTTP client (e.g. SSL_CERT_FILE pointing nowhere) is not a NetworkError."""
+
+    def _broken_client(**_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory")
+
+    _patch(monkeypatch, _broken_client)
 
     with pytest.raises(sdk_api.SDKError) as exc_info:
         sdk_api.watch(design_ref="test-ns/blink", registry="http://test")

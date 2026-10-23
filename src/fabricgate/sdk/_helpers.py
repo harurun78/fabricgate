@@ -66,7 +66,7 @@ def _registry_errors() -> Iterator[None]:
     try:
         yield
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -171,20 +171,6 @@ def _find_manifest_path(directory: Path) -> Path:
         if path.exists():
             return path
     raise SDKError(f"Manifest not found in {directory}", code=ExitKind.INVALID)
-
-
-# ---------------------------------------------------------------------------
-# Exit code helpers
-# ---------------------------------------------------------------------------
-
-
-def _registry_error_kind(exc: RegistryError) -> FailureKind:
-    """Map a RegistryError to its semantic FailureKind (thin alias for exc.kind).
-
-    Kept for backward compatibility; classification now lives on the error
-    (client core). New code should use ``exc.kind`` directly.
-    """
-    return exc.kind
 
 
 # ---------------------------------------------------------------------------

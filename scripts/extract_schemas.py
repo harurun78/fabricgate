@@ -16,6 +16,7 @@ CI's contract-drift gate regenerates and diffs them.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from fabricgate.models.board_db import BoardDbFile
@@ -69,7 +70,7 @@ def main() -> None:
             json.dumps(schema, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-        print(f"Wrote {path.relative_to(Path.cwd())}")
+        print(f"Wrote {os.path.relpath(path)}")
 
 
 if __name__ == "__main__":

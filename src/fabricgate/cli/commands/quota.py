@@ -8,6 +8,7 @@ import click
 
 from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
+from fabricgate.sdk._helpers import _quota_warning_message
 
 _BAR_WIDTH = 32
 
@@ -47,8 +48,8 @@ def quota_cmd(obj: dict[str, object], namespace: str | None) -> None:
         return
 
     used_percent = result.storage.used_percent
-    designs_percent = (result.designs.used / result.designs.limit * 100) if result.designs.limit > 0 else 0.0
-    warning = "  ⚠ 上限に近づいています" if used_percent >= 80 or designs_percent >= 80 else ""
+    message = _quota_warning_message(result)
+    warning = f"  ⚠ {message}" if message else ""
 
     click.echo(f"Namespace: {result.namespace}")
     click.echo("")

@@ -8,7 +8,7 @@ Supports three runtimes via a discriminated union on the ``runtime`` field:
 
 import logging
 import posixpath
-from typing import Annotated, Literal, Union
+from typing import TYPE_CHECKING, Annotated, Literal, Self, Union
 
 import yaml
 from pydantic import ConfigDict, Discriminator, Field, Tag, TypeAdapter, model_validator
@@ -163,6 +163,40 @@ class Attestation(FabricGateModel):
 
 
 # ---------------------------------------------------------------------------
+# Validators shared by the runtime manifests
+# ---------------------------------------------------------------------------
+
+
+class _ManifestValidators:
+    """Model validators common to every runtime manifest.
+
+    A plain mixin rather than a base model: the fields stay declared in each
+    manifest class, so the generated JSON Schema keeps its property order.
+    """
+
+    if TYPE_CHECKING:
+        runtime: str
+        artifacts: "PynqArtifacts | LinuxFpgamgrArtifacts | NanopynqArtifacts"
+        bitstream_type: str | None
+        shell_dependency: ShellDependency | None
+
+    @model_validator(mode="after")
+    def validate_shell_dependency_consistency(self) -> Self:
+        """Validate bitstream_type / shell_dependency consistency."""
+        if self.bitstream_type == "partial" and self.shell_dependency is None:
+            raise ValueError("shell_dependency is required when bitstream_type is 'partial'")
+        if self.bitstream_type != "partial" and self.shell_dependency is not None:
+            raise ValueError("shell_dependency must not be set when bitstream_type is not 'partial'")
+        return self
+
+    @model_validator(mode="after")
+    def warn_unknown_bitstream_extension(self) -> Self:
+        """ADR-011: WARNING (not rejection) for unknown bitstream container extensions."""
+        _warn_unknown_bitstream_extension(self.runtime, self.artifacts.bitstream.file)
+        return self
+
+
+# ---------------------------------------------------------------------------
 # Runtime: pynq
 # ---------------------------------------------------------------------------
 
@@ -175,7 +209,7 @@ class PynqArtifacts(FabricGateModel):
     dtbo: ArtifactRef | None = None
 
 
-class PynqManifest(FabricGateModel):
+class PynqManifest(_ManifestValidators, FabricGateModel):
     """Platform Manifest — pynq runtime."""
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
@@ -202,21 +236,6 @@ class PynqManifest(FabricGateModel):
     attestation: Attestation | None = None
     interfaces: list[Interface] = Field(default_factory=list)
     dependencies: list[Dependency] = Field(default_factory=list, max_length=20)
-
-    @model_validator(mode="after")
-    def validate_shell_dependency_consistency(self) -> "PynqManifest":
-        """Validate bitstream_type / shell_dependency consistency."""
-        if self.bitstream_type == "partial" and self.shell_dependency is None:
-            raise ValueError("shell_dependency is required when bitstream_type is 'partial'")
-        if self.bitstream_type != "partial" and self.shell_dependency is not None:
-            raise ValueError("shell_dependency must not be set when bitstream_type is not 'partial'")
-        return self
-
-    @model_validator(mode="after")
-    def warn_unknown_bitstream_extension(self) -> "PynqManifest":
-        """ADR-011: WARNING (not rejection) for unknown bitstream container extensions."""
-        _warn_unknown_bitstream_extension(self.runtime, self.artifacts.bitstream.file)
-        return self
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +265,7 @@ class LinuxFpgamgrArtifacts(FabricGateModel):
     modules: list[KernelModule] = Field(default_factory=list)
 
 
-class LinuxFpgamgrManifest(FabricGateModel):
+class LinuxFpgamgrManifest(_ManifestValidators, FabricGateModel):
     """Platform Manifest — linux-fpgamgr runtime."""
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
@@ -274,21 +293,6 @@ class LinuxFpgamgrManifest(FabricGateModel):
     attestation: Attestation | None = None
     interfaces: list[Interface] = Field(default_factory=list)
     dependencies: list[Dependency] = Field(default_factory=list, max_length=20)
-
-    @model_validator(mode="after")
-    def validate_shell_dependency_consistency(self) -> "LinuxFpgamgrManifest":
-        """Validate bitstream_type / shell_dependency consistency."""
-        if self.bitstream_type == "partial" and self.shell_dependency is None:
-            raise ValueError("shell_dependency is required when bitstream_type is 'partial'")
-        if self.bitstream_type != "partial" and self.shell_dependency is not None:
-            raise ValueError("shell_dependency must not be set when bitstream_type is not 'partial'")
-        return self
-
-    @model_validator(mode="after")
-    def warn_unknown_bitstream_extension(self) -> "LinuxFpgamgrManifest":
-        """ADR-011: WARNING (not rejection) for unknown bitstream container extensions."""
-        _warn_unknown_bitstream_extension(self.runtime, self.artifacts.bitstream.file)
-        return self
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +332,7 @@ class NanopynqArtifacts(FabricGateModel):
     bitstream: ArtifactRef
 
 
-class NanopynqManifest(FabricGateModel):
+class NanopynqManifest(_ManifestValidators, FabricGateModel):
     """Platform Manifest — nanopynq runtime (Phase 3)."""
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
@@ -358,21 +362,6 @@ class NanopynqManifest(FabricGateModel):
     attestation: Attestation | None = None
     interfaces: list[Interface] = Field(default_factory=list)
     dependencies: list[Dependency] = Field(default_factory=list, max_length=20)
-
-    @model_validator(mode="after")
-    def validate_shell_dependency_consistency(self) -> "NanopynqManifest":
-        """Validate bitstream_type / shell_dependency consistency."""
-        if self.bitstream_type == "partial" and self.shell_dependency is None:
-            raise ValueError("shell_dependency is required when bitstream_type is 'partial'")
-        if self.bitstream_type != "partial" and self.shell_dependency is not None:
-            raise ValueError("shell_dependency must not be set when bitstream_type is not 'partial'")
-        return self
-
-    @model_validator(mode="after")
-    def warn_unknown_bitstream_extension(self) -> "NanopynqManifest":
-        """ADR-011: WARNING (not rejection) for unknown bitstream container extensions."""
-        _warn_unknown_bitstream_extension(self.runtime, self.artifacts.bitstream.file)
-        return self
 
 
 # ---------------------------------------------------------------------------
