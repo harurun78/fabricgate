@@ -166,7 +166,7 @@ Platform Manifest の `dependencies[]`（および partial の shell、§9）を
 クライアントの責務:
 
 - サーバが返す依存リストは**topological 順（依存が依存元より先）**に整列済みである。クライアントはこの順に**逐次ダウンロードすべき**であり、独自の topological sort は不要（逐次 DL ループ `client/puller.py:122-167`、呼び出し元 `:327-339`）。
-- 各依存は `target/deps/{namespace}-{design}-{version}/` に展開する（`puller.py:122-167`）。
+- 各依存は `target/deps/{namespace}/{design}/{version}/` に展開する（`puller.py:122-167`）。namespace・design・version をそれぞれ別のディレクトリ階層にする。DesignName は各セグメントにハイフンを含められるため、`{namespace}-{design}-{version}` のようにハイフンで連結すると `a-b/c:1.0.0` と `a/b-c:1.0.0` が同じディレクトリになり、manifest と成果物が上書き・混在する。
 
 サーバ側解決の保証（再実装の参考）:
 
@@ -180,7 +180,7 @@ Platform Manifest の `dependencies[]`（および partial の shell、§9）を
 
 partial bitstream には静的 shell が必要であり、クライアントは shell を自動取得すべきである（`client/puller.py:170-238`）。リファレンス実装は shell endpoint（`client.get_shell`）を呼び、registry が partial デザインには shell を返し、partial でない / full bitstream には `404` または `422`（`NOT_A_PARTIAL`）を返す → クライアントは no-op として扱う（クライアント側で `bitstream_type` を判定せず、サーバが gate する）:
 
-- shell は `target/shell/{shell_dirname}/` に展開する。
+- shell は `target/shell/{namespace}/{design}/{version}/` に展開する（理由は §8 の依存の展開先と同じ）。
 - `--no-shell` が指定された場合はスキップする（partial を shell 無しで取得）。
 - shell のアーティファクトも §10 の digest 検証の対象。
 
@@ -230,9 +230,9 @@ shell 依存の宣言形式（`name`/`version`/`board_id`/`runtime` 等）は [p
 target/
   <root artifacts>
   deps/
-    {namespace}-{design}-{version}/   # 依存ごと
+    {namespace}/{design}/{version}/   # 依存ごと（§8）
   shell/
-    {shell_dirname}/                  # partial の shell（§9）
+    {namespace}/{design}/{version}/   # partial の shell（§9）
 ```
 
 SDK は独自の配置を採ってよい。

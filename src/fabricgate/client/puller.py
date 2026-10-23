@@ -223,8 +223,8 @@ def _resolve_and_download_deps(
         dep_device, dep_runtime = str(dep.platform).split("/", 1)
         dep_ref = f"{dep.name}:{dep.resolved_version}"
 
-        dep_dirname = f"{dep_ns}-{dep_design}-{dep_version}"
-        dep_dir = deps_dir / dep_dirname
+        # One path segment per part: joining them with "-" made a-b/c and a/b-c collide.
+        dep_dir = deps_dir / dep_ns / dep_design / dep_version
         dep_dir.mkdir(parents=True, exist_ok=True)
 
         # Download manifest
@@ -307,12 +307,11 @@ def _maybe_download_shell(
     shell_info = shell_resp.shell
     shell_ref = f"{shell_info.name}:{shell_info.version}"
 
-    shell_dirname = f"{str(shell_info.name).replace('/', '-')}-{shell_info.version}"
-    shell_dir = target_dir / "shell" / shell_dirname
+    shell_ns, shell_design = str(shell_info.name).split("/", 1)
+    shell_dir = target_dir / "shell" / shell_ns / shell_design / str(shell_info.version)
     shell_dir.mkdir(parents=True, exist_ok=True)
 
     # Download shell artifacts via pull_url or direct download
-    shell_ns, shell_design = str(shell_info.name).split("/", 1)
     shell_board = shell_info.board
     shell_runtime = shell_info.runtime
 

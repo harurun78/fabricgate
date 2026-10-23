@@ -114,8 +114,9 @@ Saved to ./blink-1.0.0/
   blink.hwh
   manifest.yaml
   deps/
-    xilinx-axi-dma-1.5.2/
-    xilinx-axi-interconnect-2.0.0/
+    xilinx/
+      axi-dma/1.5.2/
+      axi-interconnect/2.0.0/
 ```
 
 **Partial Reconfiguration (PR) デザインの取得:**
@@ -141,7 +142,7 @@ Saved to ./fft-accel-1.0.0/
   fft_accel.hwh
   manifest.yaml
   shell/
-    community-zcu104-shell-1.2.0/
+    community/zcu104-shell/1.2.0/
       zcu104_shell.bit
       manifest.yaml
 ```
