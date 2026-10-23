@@ -11,7 +11,6 @@ from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
     _default_namespace_from_scopes,
-    _registry_error_kind,
     _stored_credentials,
     _validate_namespace_name,
 )
@@ -47,4 +46,4 @@ def quota(
         with RegistryClient(base_url=registry, token=effective_token) as client:
             return client.get_namespace_quota(ns)
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc

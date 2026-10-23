@@ -9,7 +9,6 @@ from fabricgate.sdk._helpers import (
     SDKError,
     _parse_design_ref,
     _parse_design_ref_optional_version,
-    _registry_error_kind,
     _stored_credentials,
     _validate_semver,
 )
@@ -80,7 +79,7 @@ def yank(
                     )
                 )
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return results
 
@@ -141,7 +140,7 @@ def deprecate(
                     )
                 )
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return results
 
@@ -191,6 +190,6 @@ def undeprecate(
                     )
                 )
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return results

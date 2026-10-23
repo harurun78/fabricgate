@@ -17,7 +17,7 @@ from fabricgate.models.cli import (
     TokenCreateResult,
     TokenInfo,
 )
-from fabricgate.sdk._helpers import ExitKind, SDKError, _registry_error_kind, _stored_credentials
+from fabricgate.sdk._helpers import ExitKind, SDKError, _stored_credentials
 
 # ---------------------------------------------------------------------------
 # Token management helpers
@@ -174,7 +174,7 @@ def login(
             storage=storage,
         )
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +216,7 @@ def token_create(
         with RegistryClient(base_url=registry, token=creds.token) as client:
             resp = client.create_api_key(name, scope_list, expires_at)
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return TokenCreateResult(
         id=resp.id,
@@ -240,7 +240,7 @@ def token_list(
         with RegistryClient(base_url=registry, token=creds.token) as client:
             resp = client.list_api_keys()
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return [
         TokenInfo(
@@ -278,4 +278,4 @@ def token_revoke(
         with RegistryClient(base_url=registry, token=creds.token) as client:
             client.delete_api_key(key_id)
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc

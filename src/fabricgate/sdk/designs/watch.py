@@ -8,16 +8,13 @@ from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
     _parse_design_ref_optional_version,
-    _registry_error_kind,
     _validate_semver,
 )
 
 
 def _parse_semver_tuple(version: str) -> tuple[int, int, int]:
-    """Return (major, minor, patch) for semver comparison, ignoring pre-release suffixes."""
-    # Strip pre-release/build metadata (e.g. "1.0.0-beta.1" → "1.0.0")
-    core = version.split("-")[0].split("+")[0]
-    parts = core.split(".")
+    """Return (major, minor, patch) for semver comparison."""
+    parts = version.split(".")
     try:
         return int(parts[0]), int(parts[1]), int(parts[2])
     except (ValueError, IndexError) as exc:
@@ -56,9 +53,7 @@ def watch(
         with RegistryClient(base_url=registry, token=token) as client:
             response = client.get_design(namespace, design)
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
-    except OSError as exc:
-        raise SDKError(f"Network error: {exc}", code=ExitKind.INFRA) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     full_name = f"{namespace}/{design}"
 

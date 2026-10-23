@@ -11,7 +11,6 @@ from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
     _parse_design_ref_optional_version,
-    _registry_error_kind,
     _sum_days,
     _validate_namespace_name,
     _validate_stats_date_range,
@@ -110,4 +109,4 @@ def stats(
                 last_30d=_recent(series, 30),
             )
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc

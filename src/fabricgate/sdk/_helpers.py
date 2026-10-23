@@ -10,7 +10,6 @@ from pydantic import TypeAdapter, ValidationError
 
 from fabricgate.client import auth
 from fabricgate.client.errors import FailureKind as FailureKind
-from fabricgate.client.registry_client import RegistryError
 from fabricgate.models.api.responses import QuotaResponse
 from fabricgate.models.cli import Credentials, StatsSeriesItem
 from fabricgate.models.common import DesignName, NamespaceName, SemVer
@@ -180,20 +179,6 @@ def _extract_artifact_refs(manifest: PlatformManifest) -> list[_ArtifactRef]:
             refs.append(value)
 
     return refs
-
-
-# ---------------------------------------------------------------------------
-# Exit code helpers
-# ---------------------------------------------------------------------------
-
-
-def _registry_error_kind(exc: RegistryError) -> FailureKind:
-    """Map a RegistryError to its semantic FailureKind (thin alias for exc.kind).
-
-    Kept for backward compatibility; classification now lives on the error
-    (client core). New code should use ``exc.kind`` directly.
-    """
-    return exc.kind
 
 
 # ---------------------------------------------------------------------------

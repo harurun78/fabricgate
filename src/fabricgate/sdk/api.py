@@ -5,7 +5,7 @@ domain submodules:
 - sdk/_helpers.py  — shared helpers and SDKError
 - sdk/auth.py      — login, token_create, token_list, token_revoke
 - sdk/webhooks.py  — webhook_create, webhook_list, webhook_delete, webhook_test, webhook_deliveries
-- sdk/designs.py   — search, list_remote, info, push, pull, verify, yank, deprecate, undeprecate,
+- sdk/designs/     — search, list_remote, info, push, pull, verify, yank, deprecate, undeprecate,
                       diff, quota, stats, license_check, watch
 """
 

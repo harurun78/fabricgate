@@ -14,15 +14,9 @@ from fabricgate.models.cli import (
 from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
-    _registry_error_kind,
     _stored_credentials,
     _validate_namespace_name,
 )
-
-# ---------------------------------------------------------------------------
-# Webhook helpers
-# ---------------------------------------------------------------------------
-
 
 # ---------------------------------------------------------------------------
 # Public webhook functions
@@ -69,7 +63,7 @@ def webhook_create(
         with RegistryClient(base_url=registry, token=creds.token) as client:
             resp = client.create_webhook(namespace, url, event_list, design)
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return WebhookCreateResult(
         id=resp.id,
@@ -97,7 +91,7 @@ def webhook_list(
         with RegistryClient(base_url=registry, token=creds.token) as client:
             resp = client.list_webhooks(namespace)
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return [
         WebhookItem(
@@ -139,7 +133,7 @@ def webhook_delete(
         with RegistryClient(base_url=registry, token=creds.token) as client:
             client.delete_webhook(namespace, webhook_id)
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
 
 def webhook_test(
@@ -168,7 +162,7 @@ def webhook_test(
         with RegistryClient(base_url=registry, token=creds.token) as client:
             resp = client.test_webhook(namespace, webhook_id)
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return WebhookTestResult(
         delivered=resp.delivered,
@@ -206,7 +200,7 @@ def webhook_deliveries(
         with RegistryClient(base_url=registry, token=creds.token) as client:
             resp = client.list_webhook_deliveries(namespace, webhook_id, limit)
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return [
         WebhookDeliveryItem(

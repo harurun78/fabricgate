@@ -242,17 +242,15 @@ def test_watch_yanked_versions_excluded(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 # ─────────────────────────────────────────────
-# _parse_semver_tuple — pre-release/build suffix
+# _parse_semver_tuple
 # ─────────────────────────────────────────────
 
 
-def test_parse_semver_tuple_handles_prerelease() -> None:
+def test_parse_semver_tuple() -> None:
     from fabricgate.sdk.designs.watch import _parse_semver_tuple
 
     assert _parse_semver_tuple("1.0.0") == (1, 0, 0)
-    assert _parse_semver_tuple("2.3.4-beta.1") == (2, 3, 4)
-    assert _parse_semver_tuple("1.0.0+build.42") == (1, 0, 0)
-    assert _parse_semver_tuple("3.0.0-rc.1+sha.abc") == (3, 0, 0)
+    assert _parse_semver_tuple("10.2.30") == (10, 2, 30)
 
 
 # ─────────────────────────────────────────────

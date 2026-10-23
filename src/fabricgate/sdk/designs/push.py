@@ -16,7 +16,6 @@ from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
     _quota_warning_message,
-    _registry_error_kind,
     _stored_credentials,
 )
 
@@ -173,7 +172,7 @@ def push(
                 # successful publish into a command failure — just omit the warning.
                 quota_warning = None
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return PushResult(
         name=response.name,

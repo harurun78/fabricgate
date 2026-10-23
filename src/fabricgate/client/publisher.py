@@ -38,7 +38,7 @@ class PublishError(Exception):
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     if not isinstance(data, dict):
         msg = f"{path} is not a valid YAML mapping"

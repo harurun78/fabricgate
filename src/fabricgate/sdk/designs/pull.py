@@ -25,7 +25,6 @@ from fabricgate.sdk._helpers import (
     _extract_artifact_refs,
     _find_manifest_path,
     _parse_design_ref,
-    _registry_error_kind,
 )
 
 
@@ -112,7 +111,7 @@ def pull(
     except (IntegrityError, AttestationError) as exc:
         raise SDKError(str(exc), code=ExitKind.INVALID) from exc
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
     except OSError as exc:
         raise SDKError(str(exc), code=ExitKind.INFRA) from exc
 

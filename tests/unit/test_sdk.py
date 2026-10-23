@@ -1804,20 +1804,20 @@ def test_token_exit_code_fallthrough_401() -> None:
     """401 + 非SCOPE_NOT_ALLOWED → return 1 のフォールスルー。"""
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
-    from fabricgate.sdk._helpers import ExitKind, _registry_error_kind
+    from fabricgate.sdk._helpers import ExitKind
 
     exc = RegistryError(401, ErrorResponse(error=ErrorDetail(code="UNAUTHORIZED", message="401")))
-    assert _registry_error_kind(exc) == ExitKind.PERMISSION
+    assert exc.kind == ExitKind.PERMISSION
 
 
 def test_token_exit_code_server_error_500() -> None:
     """500 → return 4。"""
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
-    from fabricgate.sdk._helpers import ExitKind, _registry_error_kind
+    from fabricgate.sdk._helpers import ExitKind
 
     exc = RegistryError(500, ErrorResponse(error=ErrorDetail(code="INTERNAL_ERROR", message="server error")))
-    assert _registry_error_kind(exc) == ExitKind.INFRA
+    assert exc.kind == ExitKind.INFRA
 
 
 def test_exitkind_is_failurekind_alias() -> None:
@@ -1825,15 +1825,6 @@ def test_exitkind_is_failurekind_alias() -> None:
     from fabricgate.sdk._helpers import ExitKind
 
     assert ExitKind is FailureKind
-
-
-def test_registry_error_kind_delegates_to_property() -> None:
-    from fabricgate.client.registry_client import RegistryError
-    from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
-    from fabricgate.sdk._helpers import _registry_error_kind
-
-    exc = RegistryError(404, ErrorResponse(error=ErrorDetail(code="X", message="m")))
-    assert _registry_error_kind(exc) is exc.kind
 
 
 def test_token_create_empty_scopes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2357,9 +2348,8 @@ def test_webhook_exit_code_401() -> None:
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
 
     exc = RegistryError(401, ErrorResponse(error=ErrorDetail(code="UNAUTHORIZED", message="unauth")))
-    from fabricgate.sdk._helpers import _registry_error_kind
 
-    assert _registry_error_kind(exc) == ExitKind.PERMISSION
+    assert exc.kind == ExitKind.PERMISSION
 
 
 def test_webhook_exit_code_404() -> None:
@@ -2368,9 +2358,8 @@ def test_webhook_exit_code_404() -> None:
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
 
     exc = RegistryError(404, ErrorResponse(error=ErrorDetail(code="NOT_FOUND", message="not found")))
-    from fabricgate.sdk._helpers import _registry_error_kind
 
-    assert _registry_error_kind(exc) == ExitKind.NOT_FOUND
+    assert exc.kind == ExitKind.NOT_FOUND
 
 
 def test_webhook_exit_code_429_rate_limited() -> None:
@@ -2382,9 +2371,8 @@ def test_webhook_exit_code_429_rate_limited() -> None:
         429,
         ErrorResponse(error=ErrorDetail(code="RATE_LIMITED", message="rate limited")),
     )
-    from fabricgate.sdk._helpers import _registry_error_kind
 
-    assert _registry_error_kind(exc) == ExitKind.INVALID
+    assert exc.kind == ExitKind.INVALID
 
 
 def test_webhook_exit_code_500() -> None:
@@ -2393,9 +2381,8 @@ def test_webhook_exit_code_500() -> None:
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
 
     exc = RegistryError(500, ErrorResponse(error=ErrorDetail(code="INTERNAL", message="internal")))
-    from fabricgate.sdk._helpers import _registry_error_kind
 
-    assert _registry_error_kind(exc) == ExitKind.INFRA
+    assert exc.kind == ExitKind.INFRA
 
 
 def test_webhook_exit_code_url_insecure() -> None:
@@ -2407,9 +2394,8 @@ def test_webhook_exit_code_url_insecure() -> None:
         400,
         ErrorResponse(error=ErrorDetail(code="WEBHOOK_URL_INSECURE", message="insecure")),
     )
-    from fabricgate.sdk._helpers import _registry_error_kind
 
-    assert _registry_error_kind(exc) == ExitKind.INVALID
+    assert exc.kind == ExitKind.INVALID
 
 
 # ===========================================================================
@@ -3420,25 +3406,23 @@ def test_extract_artifact_refs_no_artifacts() -> None:
 def test_registry_exit_code_dependency_unresolvable() -> None:
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
-    from fabricgate.sdk._helpers import _registry_error_kind
 
     exc = RegistryError(
         409,
         ErrorResponse(error=ErrorDetail(code="DEPENDENCY_UNRESOLVABLE", message="unresolvable")),
     )
-    assert _registry_error_kind(exc) == ExitKind.UNRESOLVABLE
+    assert exc.kind == ExitKind.UNRESOLVABLE
 
 
 def test_registry_exit_code_shell_not_found() -> None:
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
-    from fabricgate.sdk._helpers import _registry_error_kind
 
     exc = RegistryError(
         409,
         ErrorResponse(error=ErrorDetail(code="SHELL_NOT_FOUND", message="shell not found")),
     )
-    assert _registry_error_kind(exc) == ExitKind.SHELL_NOT_FOUND
+    assert exc.kind == ExitKind.SHELL_NOT_FOUND
 
 
 def test_default_namespace_from_scopes_multiple_namespaces() -> None:
@@ -3479,28 +3463,25 @@ def test_normalize_base_version_wrong_design() -> None:
 def test_yank_exit_code_404() -> None:
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
-    from fabricgate.sdk._helpers import _registry_error_kind
 
     exc = RegistryError(404, ErrorResponse(error=ErrorDetail(code="NOT_FOUND", message="not found")))
-    assert _registry_error_kind(exc) == ExitKind.NOT_FOUND
+    assert exc.kind == ExitKind.NOT_FOUND
 
 
 def test_deprecate_exit_code_404() -> None:
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
-    from fabricgate.sdk._helpers import _registry_error_kind
 
     exc = RegistryError(404, ErrorResponse(error=ErrorDetail(code="NOT_FOUND", message="not found")))
-    assert _registry_error_kind(exc) == ExitKind.NOT_FOUND
+    assert exc.kind == ExitKind.NOT_FOUND
 
 
 def test_license_check_exit_code_404() -> None:
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
-    from fabricgate.sdk._helpers import _registry_error_kind
 
     exc = RegistryError(404, ErrorResponse(error=ErrorDetail(code="NOT_FOUND", message="not found")))
-    assert _registry_error_kind(exc) == ExitKind.NOT_FOUND
+    assert exc.kind == ExitKind.NOT_FOUND
 
 
 def test_info_registry_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4212,12 +4193,9 @@ def test_maybe_download_shell_digest_mismatch(tmp_path: Path) -> None:
 def test_yank_deprecate_license_exit_code_server_error() -> None:
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
-    from fabricgate.sdk._helpers import _registry_error_kind
 
     exc = RegistryError(500, ErrorResponse(error=ErrorDetail(code="E", message="m")))
-    assert _registry_error_kind(exc) == ExitKind.INFRA
-    assert _registry_error_kind(exc) == ExitKind.INFRA
-    assert _registry_error_kind(exc) == ExitKind.INFRA
+    assert exc.kind == ExitKind.INFRA
 
 
 def test_search_registry_error(monkeypatch: pytest.MonkeyPatch) -> None:

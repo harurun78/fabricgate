@@ -10,7 +10,6 @@ from fabricgate.sdk._helpers import (
     SDKError,
     _default_namespace_from_scopes,
     _parse_design_ref,
-    _registry_error_kind,
     _stored_credentials,
     _validate_namespace_name,
 )
@@ -41,7 +40,7 @@ def search(
                 tag=tag,
             )
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return [
         SearchResult(
@@ -93,7 +92,7 @@ def list_remote(
                     break
                 page += 1
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
     return designs
 
 
@@ -109,7 +108,7 @@ def info(
         with RegistryClient(base_url=registry, token=token) as client:
             response = client.get_version(namespace, design, version)
     except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+        raise SDKError(str(exc), code=exc.kind) from exc
 
     return DesignInfo(
         name=response.name,
