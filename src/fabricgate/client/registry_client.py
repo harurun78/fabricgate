@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from urllib.parse import quote
 
 import httpx
 
@@ -95,6 +96,18 @@ class NetworkError(RegistryError):
         # Transport failure has no HTTP status (status_code == 0); classify
         # directly rather than falling through the base classifier to GENERIC.
         return FailureKind.INFRA
+
+
+def _seg(value: str | int) -> str:
+    """Percent-encode one URL path segment.
+
+    ``quote`` leaves ``.`` and ``..`` as they are and httpx removes them as dot
+    segments, so they would move the request to another route; reject them.
+    """
+    text = str(value)
+    if text in ("", ".", ".."):
+        raise ValueError(f"Invalid URL path segment: {text!r}")
+    return quote(text, safe="")
 
 
 def _oauth_error_response(resp: httpx.Response) -> ErrorResponse | None:
@@ -220,7 +233,7 @@ class RegistryClient:
         return SearchResponse.model_validate_json(resp.content)
 
     def get_design(self, namespace: str, design: str) -> DesignDetailResponse:
-        resp = self._request("GET", f"/namespaces/{namespace}/designs/{design}")
+        resp = self._request("GET", f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}")
         return DesignDetailResponse.model_validate_json(resp.content)
 
     def get_version(
@@ -231,7 +244,7 @@ class RegistryClient:
     ) -> VersionDetailResponse:
         resp = self._request(
             "GET",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}",
         )
         return VersionDetailResponse.model_validate_json(resp.content)
 
@@ -246,7 +259,7 @@ class RegistryClient:
         """Download a Platform Manifest as raw bytes."""
         resp = self._request(
             "GET",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/platforms/{_seg(board_id)}/{_seg(runtime)}",
         )
         return resp.content
 
@@ -262,8 +275,8 @@ class RegistryClient:
         """Download an artifact file (follows redirects)."""
         resp = self._request(
             "GET",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}"
-            f"/platforms/{board_id}/{runtime}/artifacts/{filename}",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}"
+            f"/platforms/{_seg(board_id)}/{_seg(runtime)}/artifacts/{_seg(filename)}",
             follow_redirects=True,
         )
         return resp.content
@@ -310,7 +323,7 @@ class RegistryClient:
         """
         resp = self._request(
             "POST",
-            f"/namespaces/{namespace}/designs/{design}/uploads",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/uploads",
             json={"artifacts": artifacts},
         )
         return ArtifactUploadResponse.model_validate_json(resp.content)
@@ -358,7 +371,7 @@ class RegistryClient:
         multipart_files = [(k, (k, v, _part_content_type(k))) for k, v in files.items() if k not in url_fields]
         resp = self._request(
             "POST",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}",
             data=url_fields,
             files=multipart_files,
         )
@@ -375,7 +388,7 @@ class RegistryClient:
     ) -> YankResponse:
         resp = self._request(
             "DELETE",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}",
             json={"reason": reason},
         )
         return YankResponse.model_validate_json(resp.content)
@@ -394,7 +407,7 @@ class RegistryClient:
             body["successor"] = successor
         resp = self._request(
             "POST",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}/deprecate",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/deprecate",
             json=body,
         )
         return DeprecateResponse.model_validate_json(resp.content)
@@ -408,7 +421,7 @@ class RegistryClient:
         """Clear deprecated state from a design version."""
         resp = self._request(
             "DELETE",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}/deprecate",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/deprecate",
         )
         return DeprecateResponse.model_validate_json(resp.content)
 
@@ -419,7 +432,7 @@ class RegistryClient:
         return [NamespaceResponse.model_validate(ns) for ns in resp.json()]
 
     def get_namespace(self, namespace: str) -> NamespaceResponse:
-        resp = self._request("GET", f"/namespaces/{namespace}")
+        resp = self._request("GET", f"/namespaces/{_seg(namespace)}")
         return NamespaceResponse.model_validate_json(resp.content)
 
     # ---- Dependencies ----
@@ -440,7 +453,7 @@ class RegistryClient:
             params["include_optional"] = "true"
         resp = self._request(
             "GET",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}/dependencies",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/platforms/{_seg(board_id)}/{_seg(runtime)}/dependencies",
             params=params,
         )
         return DependenciesResponse.model_validate_json(resp.content)
@@ -458,7 +471,7 @@ class RegistryClient:
         """Fetch the static shell design for a partial bitstream."""
         resp = self._request(
             "GET",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}/platforms/{board_id}/{runtime}/shell",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/platforms/{_seg(board_id)}/{_seg(runtime)}/shell",
         )
         return ShellResponse.model_validate_json(resp.content)
 
@@ -484,7 +497,7 @@ class RegistryClient:
 
     def delete_api_key(self, key_id: int) -> None:
         """Revoke an API key."""
-        self._request("DELETE", f"/users/me/api-keys/{key_id}")
+        self._request("DELETE", f"/users/me/api-keys/{_seg(key_id)}")
 
     # ---- Webhooks ----
 
@@ -502,23 +515,23 @@ class RegistryClient:
         }
         if design:
             body["design"] = design
-        resp = self._request("POST", f"/namespaces/{namespace}/webhooks", json=body)
+        resp = self._request("POST", f"/namespaces/{_seg(namespace)}/webhooks", json=body)
         return WebhookCreateResponse.model_validate_json(resp.content)
 
     def list_webhooks(self, namespace: str) -> WebhookListResponse:
         """List all webhooks for a namespace."""
-        resp = self._request("GET", f"/namespaces/{namespace}/webhooks")
+        resp = self._request("GET", f"/namespaces/{_seg(namespace)}/webhooks")
         return WebhookListResponse.model_validate_json(resp.content)
 
     def delete_webhook(self, namespace: str, webhook_id: int) -> None:
         """Delete a webhook."""
-        self._request("DELETE", f"/namespaces/{namespace}/webhooks/{webhook_id}")
+        self._request("DELETE", f"/namespaces/{_seg(namespace)}/webhooks/{_seg(webhook_id)}")
 
     def test_webhook(self, namespace: str, webhook_id: int) -> WebhookTestResponse:
         """Send a test delivery to a webhook."""
         resp = self._request(
             "POST",
-            f"/namespaces/{namespace}/webhooks/{webhook_id}/test",
+            f"/namespaces/{_seg(namespace)}/webhooks/{_seg(webhook_id)}/test",
         )
         return WebhookTestResponse.model_validate_json(resp.content)
 
@@ -534,7 +547,7 @@ class RegistryClient:
             params["limit"] = limit
         resp = self._request(
             "GET",
-            f"/namespaces/{namespace}/webhooks/{webhook_id}/deliveries",
+            f"/namespaces/{_seg(namespace)}/webhooks/{_seg(webhook_id)}/deliveries",
             params=params,
         )
         return WebhookDeliveriesResponse.model_validate_json(resp.content)
@@ -555,7 +568,7 @@ class RegistryClient:
             params["platform"] = platform
         resp = self._request(
             "GET",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}/diff",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/diff",
             params=params,
         )
         return VersionDiffResponse.model_validate_json(resp.content)
@@ -578,7 +591,7 @@ class RegistryClient:
             params["edition"] = edition
         resp = self._request(
             "GET",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}/license-check",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/license-check",
             params=params,
         )
         return LicenseCheckResponse.model_validate_json(resp.content)
@@ -604,7 +617,7 @@ class RegistryClient:
             params["to"] = to_date
         resp = self._request(
             "GET",
-            f"/namespaces/{namespace}/designs/{design}/stats",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/stats",
             params=params,
         )
         return DesignStatsResponse.model_validate_json(resp.content)
@@ -629,19 +642,19 @@ class RegistryClient:
             params["to"] = to_date
         resp = self._request(
             "GET",
-            f"/namespaces/{namespace}/designs/{design}/versions/{version}/stats",
+            f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/stats",
             params=params,
         )
         return VersionStatsResponse.model_validate_json(resp.content)
 
     def get_namespace_stats(self, namespace: str) -> NamespaceStatsResponse:
         """Fetch namespace-level download summary."""
-        resp = self._request("GET", f"/namespaces/{namespace}/stats")
+        resp = self._request("GET", f"/namespaces/{_seg(namespace)}/stats")
         return NamespaceStatsResponse.model_validate_json(resp.content)
 
     def get_namespace_quota(self, namespace: str) -> QuotaResponse:
         """Fetch namespace quota usage."""
-        resp = self._request("GET", f"/namespaces/{namespace}/quota")
+        resp = self._request("GET", f"/namespaces/{_seg(namespace)}/quota")
         return QuotaResponse.model_validate_json(resp.content)
 
 

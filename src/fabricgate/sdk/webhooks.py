@@ -12,7 +12,7 @@ from fabricgate.models.cli import (
     WebhookItem,
     WebhookTestResult,
 )
-from fabricgate.sdk._helpers import ExitKind, SDKError, _registry_error_kind
+from fabricgate.sdk._helpers import ExitKind, SDKError, _registry_error_kind, _validate_namespace_name
 
 # ---------------------------------------------------------------------------
 # Webhook helpers
@@ -47,6 +47,7 @@ def webhook_create(
     registry:
         Base URL for the registry API.
     """
+    _validate_namespace_name(namespace)
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.hostname:
         raise SDKError("Webhook URL must use HTTPS.", code=ExitKind.INVALID)
@@ -82,6 +83,7 @@ def webhook_list(
     registry: str = "https://registry.fabricgate.dev/api/v1",
 ) -> list[WebhookItem]:
     """List all webhooks for a namespace."""
+    _validate_namespace_name(namespace)
     creds = auth.load_credentials(registry)
     if creds is None:
         raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
@@ -123,6 +125,7 @@ def webhook_delete(
     registry:
         Base URL for the registry API.
     """
+    _validate_namespace_name(namespace)
     creds = auth.load_credentials(registry)
     if creds is None:
         raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
@@ -151,6 +154,7 @@ def webhook_test(
     registry:
         Base URL for the registry API.
     """
+    _validate_namespace_name(namespace)
     creds = auth.load_credentials(registry)
     if creds is None:
         raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
@@ -188,6 +192,7 @@ def webhook_deliveries(
     registry:
         Base URL for the registry API.
     """
+    _validate_namespace_name(namespace)
     creds = auth.load_credentials(registry)
     if creds is None:
         raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)

@@ -10,6 +10,7 @@ maps to process exit codes (that is the caller's / CLI's concern).
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -20,7 +21,6 @@ from fabricgate.client import cache
 from fabricgate.client.publisher import _extract_artifact_refs, _is_single_filename
 from fabricgate.client.registry_client import RegistryClientProtocol, RegistryError
 from fabricgate.client.resolver import resolve_platform_detailed
-from fabricgate.client.validator import verify_artifact
 from fabricgate.models.api.errors import ErrorCode
 from fabricgate.models.design_index import DesignIndex
 from fabricgate.models.platform_manifest import parse_platform_manifest
@@ -77,6 +77,17 @@ def _validate_artifact_filename(artifact_name: str, *, context: str) -> Path:
     if not _is_single_filename(artifact_name):
         raise IntegrityError(f"Invalid artifact filename in {context}: {artifact_name!r}")
     return Path(artifact_name)
+
+
+def _write_verified(path: Path, data: bytes, expected_sha256: str, *, verify: bool, label: str) -> None:
+    """Write *data* to *path*, checking its digest first when *verify* is set.
+
+    Checking before the write keeps a mismatching download from landing on disk
+    under its final name or overwriting a file verified by an earlier pull.
+    """
+    if verify and hashlib.sha256(data).hexdigest() != expected_sha256:
+        raise IntegrityError(f"Digest mismatch for {label}")
+    path.write_bytes(data)
 
 
 def _resolve_and_download_deps(
@@ -155,10 +166,13 @@ def _resolve_and_download_deps(
                 dep_runtime,
                 artifact_name,
             )
-            artifact_path = dep_dir / artifact_path_obj
-            artifact_path.write_bytes(artifact_bytes)
-            if verify_digests and not verify_artifact(artifact_path, artifact.sha256):
-                raise IntegrityError(f"Digest mismatch for dependency artifact {artifact_name}")
+            _write_verified(
+                dep_dir / artifact_path_obj,
+                artifact_bytes,
+                artifact.sha256,
+                verify=verify_digests,
+                label=f"dependency artifact {artifact_name}",
+            )
 
         dep_refs.append(dep_ref)
 
@@ -228,10 +242,13 @@ def _maybe_download_shell(
             shell_runtime,
             artifact_name,
         )
-        artifact_path = shell_dir / artifact_path_obj
-        artifact_path.write_bytes(artifact_bytes)
-        if verify_digests and not verify_artifact(artifact_path, artifact.sha256):
-            raise IntegrityError(f"Digest mismatch for shell artifact {artifact_name}")
+        _write_verified(
+            shell_dir / artifact_path_obj,
+            artifact_bytes,
+            artifact.sha256,
+            verify=verify_digests,
+            label=f"shell artifact {artifact_name}",
+        )
 
     return shell_ref
 
@@ -312,11 +329,14 @@ def pull_design(
             artifact_name = str(artifact.file)
             artifact_path_obj = _validate_artifact_filename(artifact_name, context="manifest")
             artifact_bytes = client.download_artifact(namespace, design, version, board_id, runtime, artifact_name)
-            artifact_path = target_dir / artifact_path_obj
-            artifact_path.write_bytes(artifact_bytes)
+            _write_verified(
+                target_dir / artifact_path_obj,
+                artifact_bytes,
+                artifact.sha256,
+                verify=verify_digests,
+                label=artifact_name,
+            )
             downloaded_files.append(artifact_name)
-            if verify_digests and not verify_artifact(artifact_path, artifact.sha256):
-                raise IntegrityError(f"Digest mismatch for {artifact_name}")
 
         # --- Attestation verification ---
         if verify_attestation:

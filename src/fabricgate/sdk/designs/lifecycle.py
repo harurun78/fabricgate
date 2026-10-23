@@ -5,7 +5,14 @@ from __future__ import annotations
 from fabricgate.client import auth
 from fabricgate.client.registry_client import RegistryClient, RegistryError
 from fabricgate.models.cli import DeprecateResult, YankResult
-from fabricgate.sdk._helpers import ExitKind, SDKError, _parse_design_ref, _registry_error_kind, _validate_semver
+from fabricgate.sdk._helpers import (
+    ExitKind,
+    SDKError,
+    _parse_design_ref,
+    _parse_design_ref_optional_version,
+    _registry_error_kind,
+    _validate_semver,
+)
 
 
 def yank(
@@ -45,10 +52,7 @@ def yank(
         version_list.append(ver)
     else:
         # Multi version form: namespace/design version1 version2 ...
-        parts = design_ref.split("/", 1)
-        if len(parts) != 2:
-            raise SDKError(f"Invalid design ref: {design_ref}", code=ExitKind.INVALID)
-        namespace, design = parts
+        namespace, design, _ = _parse_design_ref_optional_version(design_ref)
 
     if versions:
         version_list.extend(versions)
@@ -102,10 +106,7 @@ def deprecate(
         namespace, design, ver = _parse_design_ref(design_ref)
         version_list.append(ver)
     else:
-        parts = design_ref.split("/", 1)
-        if len(parts) != 2:
-            raise SDKError(f"Invalid design ref: {design_ref}", code=ExitKind.INVALID)
-        namespace, design = parts
+        namespace, design, _ = _parse_design_ref_optional_version(design_ref)
 
     if versions:
         version_list.extend(versions)
@@ -161,10 +162,7 @@ def undeprecate(
         namespace, design, ver = _parse_design_ref(design_ref)
         version_list.append(ver)
     else:
-        parts = design_ref.split("/", 1)
-        if len(parts) != 2:
-            raise SDKError(f"Invalid design ref: {design_ref}", code=ExitKind.INVALID)
-        namespace, design = parts
+        namespace, design, _ = _parse_design_ref_optional_version(design_ref)
 
     if versions:
         version_list.extend(versions)

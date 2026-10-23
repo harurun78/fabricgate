@@ -51,11 +51,9 @@ class SDKError(Exception):
 
 
 def _parse_design_ref(design_ref: str) -> tuple[str, str, str]:
-    try:
-        name, version = design_ref.split(":", 1)
-        namespace, design = name.split("/", 1)
-    except ValueError as exc:
-        raise SDKError(f"Invalid design ref: {design_ref}", code=ExitKind.INVALID) from exc
+    namespace, design, version = _parse_design_ref_optional_version(design_ref)
+    if version is None:
+        raise SDKError(f"Invalid design ref: {design_ref}", code=ExitKind.INVALID)
     return namespace, design, version
 
 

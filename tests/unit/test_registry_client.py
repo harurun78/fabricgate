@@ -1109,3 +1109,38 @@ class TestPublishVersionArtifactUrl:
         assert b"https://github.com/acme/blink/design.bit" in url_part
         index_part = next(p for p in parts if b'name="index"' in p)
         assert b'filename="index"' in index_part
+
+
+# ---------------------------------------------------------------------------
+# URL path segments
+# ---------------------------------------------------------------------------
+
+
+def _capturing_client() -> tuple[RegistryClient, list[str]]:
+    paths: list[str] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.raw_path.decode())
+        return httpx.Response(204, request=request)
+
+    return _make_client(httpx.MockTransport(_handler)), paths
+
+
+def test_path_parameters_cannot_leave_their_segment() -> None:
+    client, paths = _capturing_client()
+    client.delete_webhook("x/../../users/me/api-keys/7?", 1)
+    assert paths == ["/api/v1/namespaces/x%2F..%2F..%2Fusers%2Fme%2Fapi-keys%2F7%3F/webhooks/1"]
+
+
+def test_artifact_filename_is_percent_encoded() -> None:
+    client, paths = _capturing_client()
+    client.download_artifact("ns", "d", "1.0.0", "xc7z020", "pynq", "blink#2.bit")
+    assert paths == ["/api/v1/namespaces/ns/designs/d/versions/1.0.0/platforms/xc7z020/pynq/artifacts/blink%232.bit"]
+
+
+@pytest.mark.parametrize("segment", ["..", ".", ""])
+def test_dot_and_empty_segments_are_rejected(segment: str) -> None:
+    client, paths = _capturing_client()
+    with pytest.raises(ValueError, match="Invalid URL path segment"):
+        client.delete_webhook(segment, 1)
+    assert paths == []

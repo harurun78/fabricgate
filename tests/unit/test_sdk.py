@@ -4066,6 +4066,7 @@ def test_maybe_download_shell_digest_mismatch(tmp_path: Path) -> None:
 
     with pytest.raises(IntegrityError, match="Digest mismatch for shell artifact"):
         _maybe_download_shell(_Client(), "a", "b", "1.0.0", "xc7z020", "pynq", tmp_path, True)
+    assert not any(p.read_bytes() == b"wrong" for p in tmp_path.rglob("*") if p.is_file())
 
 
 def test_yank_deprecate_license_exit_code_server_error() -> None:
@@ -4352,3 +4353,80 @@ def test_top_level_sdk_exports_list_remote() -> None:
 
     assert sdk.list_remote is _sdk_designs_mod.list_remote
     assert "list_remote" in sdk.__all__
+
+
+@pytest.mark.parametrize(
+    "design_ref",
+    ["a/b:1.0.0/../../../../../users/me/api-keys#", "a/b:", "a/b/c:1.0.0", "A/b:1.0.0"],
+)
+def test_info_rejects_invalid_design_ref(design_ref: str) -> None:
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.info(design_ref, registry="http://127.0.0.1:9")
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_webhook_delete_rejects_invalid_namespace() -> None:
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.webhook_delete(1, namespace="x/../../users/me/api-keys/7?", registry="http://127.0.0.1:9")
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_pull_digest_mismatch_does_not_overwrite_existing_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    class _MismatchClient(_FakeRegistryClientWithDeps):
+        def download_artifact(self, *_a, **_kw):
+            return b"mismatch"
+
+    (tmp_path / "design.bit").write_bytes(b"verified earlier")
+    _patch_all_rc(monkeypatch, _MismatchClient)
+    with pytest.raises(sdk_api.SDKError, match="Digest mismatch"):
+        sdk_api.pull("test-ns/blink:1.0.0", output=tmp_path, platform="xc7z020/pynq", registry="http://test")
+    assert (tmp_path / "design.bit").read_bytes() == b"verified earlier"
+    assert not any(p.read_bytes() == b"mismatch" for p in tmp_path.rglob("*") if p.is_file())
+
+
+def test_resolve_deps_digest_mismatch_writes_nothing(tmp_path: Path) -> None:
+    from fabricgate.client.puller import _resolve_and_download_deps
+    from fabricgate.models.api.responses import DependenciesResponse
+
+    class _Client:
+        def get_dependencies(self, *_a, **_kw):
+            return DependenciesResponse.model_validate(
+                {
+                    "root": "a/b:1.0.0",
+                    "platform": "xc7z020/pynq",
+                    "dependencies": [
+                        {
+                            "name": "dep-ns/dep-design",
+                            "resolved_version": "0.1.0",
+                            "platform": "xc7z020/pynq",
+                            "optional": False,
+                            "depth": 1,
+                            "required_by": "test-ns/blink",
+                        }
+                    ],
+                }
+            )
+
+        def get_platform_manifest_bytes(self, *_a, **_kw):
+            return "\n".join(
+                [
+                    "schema: fabricgate-platform/v1",
+                    "runtime: pynq",
+                    "board: pynq-z2",
+                    "design_ref: dep-ns/dep-design:0.1.0",
+                    "artifacts:",
+                    "  bitstream:",
+                    "    file: design.bit",
+                    "    sha256: " + "a" * 64,
+                    "  hwh:",
+                    "    file: design.hwh",
+                    "    sha256: " + "b" * 64,
+                ]
+            ).encode("utf-8")
+
+        def download_artifact(self, *_a, **_kw):
+            return b"wrong"
+
+    with pytest.raises(IntegrityError, match="Digest mismatch for dependency artifact"):
+        _resolve_and_download_deps(_Client(), "a", "b", "1.0.0", "xc7z020", "pynq", tmp_path, True)
+    assert not any(p.read_bytes() == b"wrong" for p in tmp_path.rglob("*") if p.is_file())
