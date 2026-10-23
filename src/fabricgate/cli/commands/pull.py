@@ -20,7 +20,15 @@ from fabricgate.sdk import api as sdk_api
 @click.option("--deps-only", is_flag=True, default=False, help="Download dependencies only, skip root design.")
 @click.option("--include-optional-deps", is_flag=True, default=False, help="Include optional dependencies.")
 @click.option("--no-shell", is_flag=True, default=False, help="Skip shell auto-download for partial bitstreams.")
-@click.option("--verify-attestation", is_flag=True, default=False, help="Verify cosign attestation for artifacts.")
+@click.option(
+    "--verify-attestation",
+    is_flag=True,
+    default=False,
+    help="Verify the cosign bundle that signs each manifest (needs a key or a certificate identity).",
+)
+@click.option("--attestation-key", default=None, help="Public key (path or KMS URI) the manifests must be signed with.")
+@click.option("--certificate-identity", default=None, help="Expected signer identity for keyless verification.")
+@click.option("--certificate-oidc-issuer", default=None, help="Expected OIDC issuer for keyless verification.")
 @click.pass_obj
 def pull_cmd(
     obj: dict[str, object],
@@ -33,6 +41,9 @@ def pull_cmd(
     include_optional_deps: bool,
     no_shell: bool,
     verify_attestation: bool,
+    attestation_key: str | None,
+    certificate_identity: str | None,
+    certificate_oidc_issuer: str | None,
 ) -> None:
     """Download a design for a specific platform."""
     effective_platform: str | None = (
@@ -55,6 +66,9 @@ def pull_cmd(
             include_optional_deps=include_optional_deps,
             no_shell=no_shell,
             verify_attestation=verify_attestation,
+            attestation_key=attestation_key,
+            certificate_identity=certificate_identity,
+            certificate_oidc_issuer=certificate_oidc_issuer,
         )
     except sdk_api.SDKError as exc:
         click.echo(str(exc), err=True)

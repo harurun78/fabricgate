@@ -850,6 +850,37 @@ def test_push_uploads_artifacts_directly_and_publishes_metadata_only(
     assert all({"filename", "sha256", "size"} <= set(item) for item in requested)
 
 
+def test_push_sends_the_attestation_bundle_through_the_api(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The bundle signs the manifest, so it cannot be pinned for the direct upload; it goes inline."""
+    captured: dict[str, object] = {}
+
+    class _RecordingClient(_FakePushRegistryClient):
+        def publish_version(self, namespace, design, version, files):
+            captured["files"] = dict(files)
+            captured["client"] = self
+            return super().publish_version(namespace, design, version, files)
+
+    _write_push_project(tmp_path)
+    manifest_path = tmp_path / "xc7z020" / "pynq" / "manifest.yaml"
+    manifest_path.write_text(
+        manifest_path.read_text()
+        + "\nattestation:\n  bundle: cosign.bundle\n  transparency_log_url: https://rekor.sigstore.dev\n"
+    )
+    (manifest_path.parent / "cosign.bundle").write_bytes(b"bundle-bytes")
+    index_path = tmp_path / "fabricgate-index.yaml"
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    index_path.write_text(index_path.read_text().rsplit("digest: ", 1)[0] + f"digest: sha256:{digest}")
+    _patch_all_rc(monkeypatch, _RecordingClient)
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+
+    sdk_api.push(tmp_path, token="tok")
+
+    files = captured["files"]
+    assert files["platform:xc7z020/pynq:attestation:cosign.bundle"] == b"bundle-bytes"
+    client = captured["client"]
+    assert all(item["filename"] != "cosign.bundle" for item in client.upload_requests[0])
+
+
 def test_push_skips_upload_when_registry_already_stores_the_content(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -3440,28 +3471,6 @@ def test_normalize_base_version_wrong_design() -> None:
         _normalize_base_version("ns", "design", "other/design:1.0.0")
 
 
-def test_verify_attestation_cosign_not_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: None)
-
-    with pytest.raises(AttestationUnavailableError, match="cosign is not installed"):
-        _puller_mod._verify_attestation(tmp_path, ["design.bit"])
-
-
-def test_verify_attestation_cosign_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from unittest.mock import MagicMock
-
-    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: "/usr/bin/cosign")
-    mock_result = MagicMock()
-    mock_result.returncode = 1
-    mock_result.stderr = "verification failed"
-    monkeypatch.setattr(_puller_mod.subprocess, "run", lambda *_a, **_kw: mock_result)
-
-    artifact = tmp_path / "design.bit"
-    artifact.write_bytes(b"fake")
-    with pytest.raises(AttestationError, match="Attestation verification failed"):
-        _puller_mod._verify_attestation(tmp_path, ["design.bit"])
-
-
 # ===========================================================================
 # designs.py additional coverage tests
 # ===========================================================================
@@ -3603,21 +3612,6 @@ def test_pull_deprecated_with_successor_and_message(monkeypatch: pytest.MonkeyPa
         registry="http://test",
     )
     assert result.deprecated_warning is not None
-
-
-def test_pull_verify_attestation_cosign_not_installed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    _patch_all_rc(monkeypatch, _FakeRegistryClientWithDeps)
-    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
-    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: None)
-
-    with pytest.raises(sdk_api.SDKError, match="cosign is not installed"):
-        sdk_api.pull(
-            "test-ns/blink:1.0.0",
-            output=tmp_path,
-            platform="xc7z020/pynq",
-            verify_attestation=True,
-            registry="http://test",
-        )
 
 
 def test_verify_invalid_artifact_path(tmp_path: Path) -> None:
@@ -4441,26 +4435,292 @@ def test_resolve_deps_digest_mismatch_writes_nothing(tmp_path: Path) -> None:
     assert not any(p.read_bytes() == b"wrong" for p in tmp_path.rglob("*") if p.is_file())
 
 
+# ---------------------------------------------------------------------------
+# attestation: the cosign bundle signs each manifest
+# ---------------------------------------------------------------------------
+
+_ATTESTATION_YAML = "\nattestation:\n  bundle: cosign.bundle\n  transparency_log_url: https://rekor.sigstore.dev\n"
+
+
+class _FakeAttestedClient(_FakeRegistryClientWithDeps):
+    """Every manifest (root, dependency, shell) declares a cosign bundle."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.manifest_bytes += _ATTESTATION_YAML.encode()
+        self.dep_manifest_bytes += _ATTESTATION_YAML.encode()
+        self.shell_manifest_bytes += _ATTESTATION_YAML.encode()
+
+    def download_artifact(self, namespace, design, *args):
+        if args[-1] == "cosign.bundle":
+            return f"bundle-for-{design}".encode()
+        return super().download_artifact(namespace, design, *args)
+
+
+def _attested_manifest(tmp_path: Path):
+    from fabricgate.models.platform_manifest import parse_platform_manifest
+
+    text = _FakeAttestedClient().manifest_bytes.decode()
+    (tmp_path / "manifest.yaml").write_text(text, encoding="utf-8")
+    return parse_platform_manifest(text)
+
+
+def _cosign_result(returncode: int, stderr: str = ""):
+    from unittest.mock import MagicMock
+
+    result = MagicMock()
+    result.returncode = returncode
+    result.stderr = stderr
+    return result
+
+
+def test_verify_manifest_attestation_runs_cosign_on_the_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: "/usr/bin/cosign")
+    monkeypatch.setattr(_puller_mod.subprocess, "run", lambda cmd, **_kw: calls.append(cmd) or _cosign_result(0))
+
+    _puller_mod._verify_manifest_attestation(
+        tmp_path,
+        _attested_manifest(tmp_path),
+        lambda name: b"bundle-bytes",
+        _puller_mod.AttestationSigner(key="cosign.pub"),
+        label="manifest a/b:1.0.0",
+        expected_ref="test-ns/blink:1.0.0",
+        expected_runtime="pynq",
+    )
+    assert calls == [
+        [
+            "cosign",
+            "verify-blob",
+            str(tmp_path / "manifest.yaml"),
+            "--bundle",
+            str(tmp_path / "cosign.bundle"),
+            "--key",
+            "cosign.pub",
+        ]
+    ]
+    assert (tmp_path / "cosign.bundle").read_bytes() == b"bundle-bytes"
+
+
+def test_verify_manifest_attestation_keyless_args(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: "/usr/bin/cosign")
+    monkeypatch.setattr(_puller_mod.subprocess, "run", lambda cmd, **_kw: calls.append(cmd) or _cosign_result(0))
+
+    signer = _puller_mod.AttestationSigner(
+        certificate_identity="https://github.com/acme/blink/.github/workflows/release.yml@refs/heads/main",
+        certificate_oidc_issuer="https://token.actions.githubusercontent.com",
+    )
+    _puller_mod._verify_manifest_attestation(
+        tmp_path,
+        _attested_manifest(tmp_path),
+        lambda name: b"b",
+        signer,
+        label="manifest",
+        expected_ref="test-ns/blink:1.0.0",
+        expected_runtime="pynq",
+    )
+    assert calls[0][-4:] == [
+        "--certificate-identity",
+        "https://github.com/acme/blink/.github/workflows/release.yml@refs/heads/main",
+        "--certificate-oidc-issuer",
+        "https://token.actions.githubusercontent.com",
+    ]
+
+
+def test_verify_manifest_attestation_cosign_not_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: None)
+    with pytest.raises(AttestationUnavailableError, match="cosign is not installed"):
+        _puller_mod._verify_manifest_attestation(
+            tmp_path,
+            _attested_manifest(tmp_path),
+            lambda name: b"b",
+            _puller_mod.AttestationSigner(key="cosign.pub"),
+            label="manifest",
+            expected_ref="test-ns/blink:1.0.0",
+            expected_runtime="pynq",
+        )
+
+
+def test_verify_manifest_attestation_cosign_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: "/usr/bin/cosign")
+    monkeypatch.setattr(_puller_mod.subprocess, "run", lambda *_a, **_kw: _cosign_result(1, "bad signature"))
+    with pytest.raises(AttestationError, match="Attestation verification failed for manifest: bad signature"):
+        _puller_mod._verify_manifest_attestation(
+            tmp_path,
+            _attested_manifest(tmp_path),
+            lambda name: b"b",
+            _puller_mod.AttestationSigner(key="cosign.pub"),
+            label="manifest",
+            expected_ref="test-ns/blink:1.0.0",
+            expected_runtime="pynq",
+        )
+
+
+def test_verify_manifest_attestation_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    def _timeout(*_a, **_kw):
+        raise subprocess.TimeoutExpired("cosign", 60)
+
+    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: "/usr/bin/cosign")
+    monkeypatch.setattr(_puller_mod.subprocess, "run", _timeout)
+    with pytest.raises(AttestationError, match="timed out"):
+        _puller_mod._verify_manifest_attestation(
+            tmp_path,
+            _attested_manifest(tmp_path),
+            lambda name: b"b",
+            _puller_mod.AttestationSigner(key="cosign.pub"),
+            label="manifest",
+            expected_ref="test-ns/blink:1.0.0",
+            expected_runtime="pynq",
+        )
+
+
+def test_verify_manifest_attestation_requires_a_bundle(tmp_path: Path) -> None:
+    from fabricgate.models.platform_manifest import parse_platform_manifest
+
+    manifest = parse_platform_manifest(_FakeRegistryClientWithDeps().manifest_bytes.decode())
+    with pytest.raises(AttestationError, match="declares no attestation bundle"):
+        _puller_mod._verify_manifest_attestation(
+            tmp_path,
+            manifest,
+            lambda name: b"b",
+            _puller_mod.AttestationSigner(key="cosign.pub"),
+            label="manifest",
+            expected_ref="test-ns/blink:1.0.0",
+            expected_runtime="pynq",
+        )
+
+
 @pytest.mark.parametrize(
     ("deps_only", "expected"),
     [
-        (False, {"design.bit", "design.hwh", "dep.bit", "dep.hwh", "shell.bit", "shell.hwh"}),
-        (True, {"dep.bit", "dep.hwh"}),
+        (
+            False,
+            [
+                "manifest test-ns/blink:1.0.0",
+                "dependency manifest dep-ns/dep-design:0.1.0",
+                "shell manifest shell-ns/shell-design:2.0.0",
+            ],
+        ),
+        (True, ["dependency manifest dep-ns/dep-design:0.1.0"]),
     ],
 )
-def test_pull_verify_attestation_covers_dependencies_and_shell(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, deps_only: bool, expected: set[str]
+def test_pull_verify_attestation_checks_every_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, deps_only: bool, expected: list[str]
 ) -> None:
-    attested: list[str] = []
-    _patch_all_rc(monkeypatch, _FakeRegistryClientWithDeps)
-    monkeypatch.setattr(_puller_mod, "_verify_attestation", lambda _dir, names: attested.extend(names))
+    checked: list[str] = []
+    _patch_all_rc(monkeypatch, _FakeAttestedClient)
+    monkeypatch.setattr(_puller_mod, "_verify_manifest_attestation", lambda *_a, label, **_kw: checked.append(label))
 
     sdk_api.pull(
         "test-ns/blink:1.0.0",
         output=tmp_path,
         platform="xc7z020/pynq",
         verify_attestation=True,
+        attestation_key="cosign.pub",
         deps_only=deps_only,
         registry="http://test",
     )
-    assert set(attested) == expected
+    assert checked == expected
+
+
+def test_pull_attestation_failure_writes_no_artifacts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _patch_all_rc(monkeypatch, _FakeAttestedClient)
+    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: "/usr/bin/cosign")
+    monkeypatch.setattr(_puller_mod.subprocess, "run", lambda *_a, **_kw: _cosign_result(1, "bad signature"))
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.pull(
+            "test-ns/blink:1.0.0",
+            output=tmp_path,
+            platform="xc7z020/pynq",
+            verify_attestation=True,
+            attestation_key="cosign.pub",
+            registry="http://test",
+        )
+    assert exc_info.value.code == ExitKind.INVALID
+    assert not (tmp_path / "design.bit").exists()
+    assert not (tmp_path / "design.hwh").exists()
+
+
+def test_pull_verify_attestation_cosign_not_installed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _patch_all_rc(monkeypatch, _FakeAttestedClient)
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: None)
+
+    with pytest.raises(sdk_api.SDKError, match="cosign is not installed") as exc_info:
+        sdk_api.pull(
+            "test-ns/blink:1.0.0",
+            output=tmp_path,
+            platform="xc7z020/pynq",
+            verify_attestation=True,
+            attestation_key="cosign.pub",
+            registry="http://test",
+        )
+    assert exc_info.value.code == ExitKind.INFRA
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"verify_attestation": True},
+        {"verify_attestation": True, "certificate_identity": "id"},
+        {
+            "verify_attestation": True,
+            "attestation_key": "k",
+            "certificate_identity": "id",
+            "certificate_oidc_issuer": "i",
+        },
+        {"attestation_key": "k"},
+        {"certificate_identity": "id", "certificate_oidc_issuer": "i"},
+    ],
+)
+def test_pull_rejects_inconsistent_attestation_options(kwargs: dict[str, object]) -> None:
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.pull("test-ns/blink:1.0.0", registry="http://127.0.0.1:9", **kwargs)  # type: ignore[arg-type]
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+@pytest.mark.parametrize(
+    ("expected_ref", "expected_runtime"),
+    [("other-ns/old:0.0.1", "pynq"), ("test-ns/blink:0.9.0", "pynq"), ("test-ns/blink:1.0.0", "linux-fpgamgr")],
+)
+def test_verify_manifest_attestation_rejects_a_manifest_for_something_else(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, expected_ref: str, expected_runtime: str
+) -> None:
+    """同じ署名者の別マニフェスト(旧版・別 design)に差し替えられても通さない。"""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: "/usr/bin/cosign")
+    monkeypatch.setattr(_puller_mod.subprocess, "run", lambda cmd, **_kw: calls.append(cmd) or _cosign_result(0))
+    with pytest.raises(AttestationError, match="expected"):
+        _puller_mod._verify_manifest_attestation(
+            tmp_path,
+            _attested_manifest(tmp_path),
+            lambda name: b"b",
+            _puller_mod.AttestationSigner(key="cosign.pub"),
+            label="manifest",
+            expected_ref=expected_ref,
+            expected_runtime=expected_runtime,
+        )
+    assert calls == []
+
+
+def test_pull_attestation_rejects_no_verify(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """署名はマニフェストだけを保証するので、digest 照合を切った pull では使えない。"""
+    _patch_all_rc(monkeypatch, _FakeAttestedClient)
+    with pytest.raises(sdk_api.SDKError, match="requires digest verification") as exc_info:
+        sdk_api.pull(
+            "test-ns/blink:1.0.0",
+            output=tmp_path,
+            platform="xc7z020/pynq",
+            verify_digests=False,
+            verify_attestation=True,
+            attestation_key="cosign.pub",
+            registry="http://test",
+        )
+    assert exc_info.value.code == ExitKind.INVALID
+    assert not (tmp_path / "design.bit").exists()

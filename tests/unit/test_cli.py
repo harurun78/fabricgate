@@ -1045,6 +1045,42 @@ def test_pull_no_deps_option(monkeypatch, tmp_path) -> None:
     assert captured_kwargs["no_deps"] is True
 
 
+def test_pull_attestation_options(monkeypatch, tmp_path) -> None:
+    """署名者の指定が SDK に渡される。"""
+    captured_kwargs: dict = {}
+
+    def _fake_pull(*_args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return PullResult(
+            name="test-ns/blink",
+            version="1.0.0",
+            platform="xc7z020/pynq",
+            path="/tmp/out",
+            artifacts=["design.bit"],
+            cached=False,
+        )
+
+    monkeypatch.setattr("fabricgate.cli.commands.pull.sdk_api.pull", _fake_pull)
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "pull",
+            "--verify-attestation",
+            "--certificate-identity",
+            "release@example.com",
+            "--certificate-oidc-issuer",
+            "https://token.actions.githubusercontent.com",
+            "test-ns/blink:1.0.0",
+        ],
+    )
+    assert result.exit_code == 0
+    assert captured_kwargs["verify_attestation"] is True
+    assert captured_kwargs["attestation_key"] is None
+    assert captured_kwargs["certificate_identity"] == "release@example.com"
+    assert captured_kwargs["certificate_oidc_issuer"] == "https://token.actions.githubusercontent.com"
+
+
 def test_pull_deps_only_option(monkeypatch, tmp_path) -> None:
     """--deps-onlyがSDKに渡される。"""
     captured_kwargs: dict = {}
