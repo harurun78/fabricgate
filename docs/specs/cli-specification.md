@@ -814,6 +814,7 @@ Revoked.
 
 **Options:**
 - `--force`: 確認プロンプトをスキップ
+- `--json` 指定時も確認プロンプトを出さない(`--force` と同じ)。`--json` はスクリプトからの非対話利用を想定しており、プロンプトは stdin 待ちで止まるうえ stdout の JSON を壊すため
 
 **Exit codes:**
 - 0: Success
@@ -1024,6 +1025,7 @@ Deleted.
 
 **Options:**
 - `--force`: 確認プロンプトをスキップ
+- `--json` 指定時も確認プロンプトを出さない(`--force` と同じ)。`--json` はスクリプトからの非対話利用を想定しており、プロンプトは stdin 待ちで止まるうえ stdout の JSON を壊すため
 
 ---
 

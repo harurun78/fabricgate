@@ -128,6 +128,8 @@ def login(
                     if error_code == "AUTHORIZATION_PENDING":
                         continue
                     if error_code == "SLOW_DOWN":
+                        # RFC 8628 §3.5: on slow_down, add 5 seconds to the interval for
+                        # this and all later requests.
                         interval += 5
                         wait = interval
                         continue

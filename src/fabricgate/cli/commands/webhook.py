@@ -93,6 +93,8 @@ def webhook_delete_cmd(
     force: bool,
 ) -> None:
     """Delete a webhook."""
+    # --json implies --force: it is meant for scripts, where a prompt would block on
+    # stdin and its text would corrupt the JSON on stdout.
     if not force and not obj["json"]:
         if not click.confirm(f"Delete webhook (id: {webhook_id})?", default=False):
             raise click.exceptions.Exit(0)  # declined at the prompt: not a failure

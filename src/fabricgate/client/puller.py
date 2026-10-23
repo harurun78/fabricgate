@@ -24,7 +24,7 @@ from fabricgate.client.publisher import _extract_artifact_refs, _is_single_filen
 from fabricgate.client.registry_client import RegistryClientProtocol, RegistryError
 from fabricgate.client.resolver import resolve_platform_detailed
 from fabricgate.models.api.errors import ErrorCode
-from fabricgate.models.design_index import DesignIndex
+from fabricgate.models.design_index import DesignIndex, PlatformEntry
 from fabricgate.models.platform_manifest import PlatformManifest, parse_platform_manifest
 
 
@@ -92,12 +92,11 @@ class PullOutcome:
 
 
 def _version_detail_to_index(data: dict[str, Any]) -> DesignIndex:
-    # Strip API-only enrichment fields (artifacts, attestation) that are not
-    # part of the DesignIndex schema
+    # ApiPlatformEntry adds API-only fields (artifacts, attestation, ...) that the
+    # strict PlatformEntry rejects. Keep only PlatformEntry's own fields so a field
+    # added to the API model later does not make pull fail.
     if "platforms" in data:
-        for p in data["platforms"]:
-            p.pop("artifacts", None)
-            p.pop("attestation", None)
+        data["platforms"] = [{k: v for k, v in p.items() if k in PlatformEntry.model_fields} for p in data["platforms"]]
     return DesignIndex.model_validate(data)
 
 
@@ -311,7 +310,9 @@ def _maybe_download_shell(
     shell_dir = target_dir / "shell" / shell_ns / shell_design / str(shell_info.version)
     shell_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download shell artifacts via pull_url or direct download
+    # Fetch the shell's own manifest and download the artifacts it lists. The shell may
+    # be published for a different board ID than the design, so use shell_info.board,
+    # not the design's device.
     shell_board = shell_info.board
     shell_runtime = shell_info.runtime
 
