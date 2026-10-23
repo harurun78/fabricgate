@@ -282,8 +282,9 @@ class DesignStatsInfo(FabricGateModel):
     total_downloads: int
     period: str
     series: list[StatsSeriesItem]
-    last_7d: int
-    last_30d: int
+    last_7d: int | None = None
+    """Downloads in the 7 days up to ``to_date`` (today by default); ``None`` unless the period is daily."""
+    last_30d: int | None = None
 
 
 class NamespaceStatsInfo(FabricGateModel):

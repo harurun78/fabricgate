@@ -3837,10 +3837,65 @@ def test_validate_stats_date_range_invalid_to_date() -> None:
         _validate_stats_date_range("2026-01-01", "invalid")
 
 
-def test_sum_recent_empty_series() -> None:
-    from fabricgate.sdk._helpers import _sum_recent
+def test_sum_days_counts_calendar_days_not_points() -> None:
+    """#71: a gap in the series and an earlier point outside the window are both handled by date."""
+    from fabricgate.models.cli import StatsSeriesItem
+    from fabricgate.sdk._helpers import _sum_days
 
-    assert _sum_recent([], 7) == 0
+    series = [
+        StatsSeriesItem(date="2026-03-01", downloads=100),
+        StatsSeriesItem(date="2026-03-20", downloads=5),
+        StatsSeriesItem(date="2026-03-31", downloads=7),
+    ]
+    assert _sum_days(series, 7, date(2026, 3, 31)) == 7  # 03-25..03-31
+    assert _sum_days(series, 30, date(2026, 3, 31)) == 12  # 03-02..03-31
+    assert _sum_days([], 7, date(2026, 3, 31)) == 0
+
+
+@pytest.mark.parametrize("period", ["weekly", "monthly"])
+def test_stats_weekly_and_monthly_report_no_last_7d(monkeypatch: pytest.MonkeyPatch, period: str) -> None:
+    """#71: a weekly / monthly point cannot be cut at 7 or 30 days, so no value is reported."""
+    _patch_all_rc(monkeypatch, _StatsFakeClient)
+    result = sdk_api.stats(design_ref="alice/blink", period=period, registry="http://test")  # type: ignore[arg-type]
+    assert isinstance(result, DesignStatsInfo)
+    assert result.last_7d is None
+    assert result.last_30d is None
+
+
+def test_stats_last_7d_ends_today_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import datetime as _datetime
+    from datetime import timedelta
+
+    # The package re-exports the stats() function under the module's name, so import the module itself.
+    _stats_mod = importlib.import_module("fabricgate.sdk.designs.stats")
+    today = date(2026, 3, 31)
+
+    class _FixedNow(_datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return _datetime(2026, 3, 31, 12, tzinfo=tz)
+
+    # Pin "today" so the test cannot straddle midnight UTC.
+    monkeypatch.setattr(_stats_mod, "datetime", _FixedNow)
+
+    class _TodayClient(_StatsFakeClient):
+        def get_design_stats(self, namespace, design, *, period=None, from_date=None, to_date=None):
+            return DesignStatsResponse.model_validate(
+                {
+                    "name": f"{namespace}/{design}",
+                    "total_downloads": 11,
+                    "period": "daily",
+                    "series": [
+                        {"date": today - timedelta(days=10), "downloads": 10},
+                        {"date": today, "downloads": 1},
+                    ],
+                }
+            )
+
+    _patch_all_rc(monkeypatch, _TodayClient)
+    result = sdk_api.stats(design_ref="alice/blink", registry="http://test")
+    assert isinstance(result, DesignStatsInfo)
+    assert (result.last_7d, result.last_30d) == (1, 11)
 
 
 def test_extract_artifact_refs_list_branch() -> None:

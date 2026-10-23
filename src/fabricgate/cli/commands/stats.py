@@ -88,5 +88,6 @@ def stats_cmd(
             bar = _render_ascii_bar(point.downloads, max_downloads)
             click.echo(f"  {point.date}  {bar:<40}  {point.downloads}")
 
-    click.echo("")
-    click.echo(f"  Last 7d: {result.last_7d:,}    Last 30d: {result.last_30d:,}")
+    if result.last_7d is not None and result.last_30d is not None:
+        click.echo("")
+        click.echo(f"  Last 7d: {result.last_7d:,}    Last 30d: {result.last_30d:,}")

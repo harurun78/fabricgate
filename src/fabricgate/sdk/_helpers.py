@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -139,11 +139,14 @@ def _validate_stats_date_range(from_date: str | None, to_date: str | None) -> No
 # ---------------------------------------------------------------------------
 
 
-def _sum_recent(series: list[StatsSeriesItem], size: int) -> int:
-    if not series:
-        return 0
-    ordered = sorted(series, key=lambda item: item.date)
-    return sum(item.downloads for item in ordered[-size:])
+def _sum_days(series: list[StatsSeriesItem], days: int, end: date) -> int:
+    """Downloads on the *days* calendar days up to and including *end* (daily series only).
+
+    Dates are compared, not positions: the registry may leave out days without
+    downloads, and a range in the past must not be read as "the last N points".
+    """
+    start = end - timedelta(days=days - 1)
+    return sum(item.downloads for item in series if start <= date.fromisoformat(item.date) <= end)
 
 
 # ---------------------------------------------------------------------------
