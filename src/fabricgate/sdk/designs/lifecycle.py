@@ -2,17 +2,43 @@
 
 from __future__ import annotations
 
-from fabricgate.client.registry_client import RegistryClient, RegistryError
+from fabricgate.client.registry_client import RegistryClient
 from fabricgate.models.cli import DeprecateResult, YankResult
 from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
     _parse_design_ref,
     _parse_design_ref_optional_version,
-    _registry_error_kind,
-    _stored_credentials,
+    _registry_errors,
+    _require_token,
     _validate_semver,
 )
+
+
+def _parse_versions(design_ref: str, versions: list[str] | None, operation: str) -> tuple[str, str, list[str]]:
+    """Split ``ns/design[:version]`` plus *versions* into (namespace, design, versions), validated."""
+    version_list: list[str] = []
+    if ":" in design_ref:
+        # Single version form: namespace/design:version
+        namespace, design, ver = _parse_design_ref(design_ref)
+        version_list.append(ver)
+    else:
+        # Multi version form: namespace/design version1 version2 ...
+        namespace, design, _ = _parse_design_ref_optional_version(design_ref)
+
+    if versions:
+        version_list.extend(versions)
+
+    for ver in version_list:
+        _validate_semver(ver)
+
+    if not version_list:
+        raise SDKError("No versions specified.", code=ExitKind.INVALID)
+
+    if len(version_list) > 50:
+        raise SDKError(f"Maximum 50 versions per {operation} operation.", code=ExitKind.INVALID)
+
+    return namespace, design, version_list
 
 
 def yank(
@@ -40,47 +66,22 @@ def yank(
     list[YankResult]
         Results for each yanked version.
     """
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
-    # Parse design ref
-    version_list: list[str] = []
-    if ":" in design_ref:
-        # Single version form: namespace/design:version
-        namespace, design, ver = _parse_design_ref(design_ref)
-        version_list.append(ver)
-    else:
-        # Multi version form: namespace/design version1 version2 ...
-        namespace, design, _ = _parse_design_ref_optional_version(design_ref)
-
-    if versions:
-        version_list.extend(versions)
-
-    for ver in version_list:
-        _validate_semver(ver)
-
-    if not version_list:
-        raise SDKError("No versions specified.", code=ExitKind.INVALID)
-
-    if len(version_list) > 50:
-        raise SDKError("Maximum 50 versions per yank operation.", code=ExitKind.INVALID)
+    namespace, design, version_list = _parse_versions(design_ref, versions, "yank")
 
     results: list[YankResult] = []
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            for ver in version_list:
-                resp = client.yank_version(namespace, design, ver, reason)
-                results.append(
-                    YankResult(
-                        name=resp.name,
-                        version=resp.version,
-                        yanked=resp.yanked,
-                        yanked_reason=resp.yanked_reason,
-                    )
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        for ver in version_list:
+            resp = client.yank_version(namespace, design, ver, reason)
+            results.append(
+                YankResult(
+                    name=resp.name,
+                    version=resp.version,
+                    yanked=resp.yanked,
+                    yanked_reason=resp.yanked_reason,
                 )
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+            )
 
     return results
 
@@ -94,54 +95,32 @@ def deprecate(
     registry: str = "https://registry.fabricgate.dev/api/v1",
 ) -> list[DeprecateResult]:
     """Set one or more versions to deprecated state."""
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
     if not message.strip():
         raise SDKError("--message is required unless --undo is used.", code=ExitKind.INVALID)
 
-    version_list: list[str] = []
-    if ":" in design_ref:
-        namespace, design, ver = _parse_design_ref(design_ref)
-        version_list.append(ver)
-    else:
-        namespace, design, _ = _parse_design_ref_optional_version(design_ref)
-
-    if versions:
-        version_list.extend(versions)
-
-    for ver in version_list:
-        _validate_semver(ver)
-
-    if not version_list:
-        raise SDKError("No versions specified.", code=ExitKind.INVALID)
-
-    if len(version_list) > 50:
-        raise SDKError("Maximum 50 versions per deprecate operation.", code=ExitKind.INVALID)
+    namespace, design, version_list = _parse_versions(design_ref, versions, "deprecate")
 
     results: list[DeprecateResult] = []
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            for ver in version_list:
-                resp = client.deprecate_version(
-                    namespace,
-                    design,
-                    ver,
-                    message=message,
-                    successor=successor,
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        for ver in version_list:
+            resp = client.deprecate_version(
+                namespace,
+                design,
+                ver,
+                message=message,
+                successor=successor,
+            )
+            results.append(
+                DeprecateResult(
+                    name=resp.name,
+                    version=resp.version,
+                    deprecated=resp.deprecated,
+                    deprecation_message=resp.deprecation_message,
+                    successor=resp.successor,
                 )
-                results.append(
-                    DeprecateResult(
-                        name=resp.name,
-                        version=resp.version,
-                        deprecated=resp.deprecated,
-                        deprecation_message=resp.deprecation_message,
-                        successor=resp.successor,
-                    )
-                )
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+            )
 
     return results
 
@@ -153,44 +132,22 @@ def undeprecate(
     registry: str = "https://registry.fabricgate.dev/api/v1",
 ) -> list[DeprecateResult]:
     """Clear deprecated state for one or more versions."""
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
-    version_list: list[str] = []
-    if ":" in design_ref:
-        namespace, design, ver = _parse_design_ref(design_ref)
-        version_list.append(ver)
-    else:
-        namespace, design, _ = _parse_design_ref_optional_version(design_ref)
-
-    if versions:
-        version_list.extend(versions)
-
-    for ver in version_list:
-        _validate_semver(ver)
-
-    if not version_list:
-        raise SDKError("No versions specified.", code=ExitKind.INVALID)
-
-    if len(version_list) > 50:
-        raise SDKError("Maximum 50 versions per deprecate operation.", code=ExitKind.INVALID)
+    namespace, design, version_list = _parse_versions(design_ref, versions, "deprecate")
 
     results: list[DeprecateResult] = []
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            for ver in version_list:
-                resp = client.undeprecate_version(namespace, design, ver)
-                results.append(
-                    DeprecateResult(
-                        name=resp.name,
-                        version=resp.version,
-                        deprecated=resp.deprecated,
-                        deprecation_message=resp.deprecation_message,
-                        successor=resp.successor,
-                    )
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        for ver in version_list:
+            resp = client.undeprecate_version(namespace, design, ver)
+            results.append(
+                DeprecateResult(
+                    name=resp.name,
+                    version=resp.version,
+                    deprecated=resp.deprecated,
+                    deprecation_message=resp.deprecation_message,
+                    successor=resp.successor,
                 )
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+            )
 
     return results
