@@ -6,6 +6,10 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-10-23
+
+No contract changes.
+
 ## [0.4.3] - 2026-10-23
 
 No contract changes.
