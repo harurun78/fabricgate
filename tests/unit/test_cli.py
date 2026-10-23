@@ -449,6 +449,19 @@ def test_push_custom_axi_non_tty_auto_n(monkeypatch, tmp_path) -> None:
     assert captured_kwargs.get("board_override") is None
 
 
+def test_push_json_stdout_stays_json_when_promotion_is_suggested(monkeypatch, tmp_path) -> None:
+    """Non-TTY: the promotion hint goes to stderr so --json stdout parses (#68)."""
+    monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", lambda *_a, **_kw: _PUSH_RESULT)
+    monkeypatch.setattr("fabricgate.cli.commands.push._detect_platforms", lambda _: [_CUSTOM_AXI_INFO])
+    monkeypatch.setattr("fabricgate.cli.commands.push._is_tty", lambda: False)
+
+    result = CliRunner().invoke(main, ["--json", "push", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["name"] == _PUSH_RESULT.name
+    assert "Info:" in result.stderr
+
+
 def test_push_yes_flag_board_specific_error(monkeypatch, tmp_path) -> None:
     """--yes + board-specific design → error, no SDK call."""
     push_called = False

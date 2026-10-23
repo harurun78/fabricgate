@@ -9,7 +9,8 @@ from pathlib import Path
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import exit_with, sdk_errors
+from fabricgate.client.errors import FailureKind
 from fabricgate.sdk import api as sdk_api
 
 
@@ -84,7 +85,8 @@ def _handle_promotion_prompt(
     if not _is_tty():
         click.echo(
             f"Info: design is axi-only on {board_id}; "
-            f"consider promoting to {target}/{runtime} (run with --yes to auto-promote)"
+            f"consider promoting to {target}/{runtime} (run with --yes to auto-promote)",
+            err=True,  # stdout carries the --json result
         )
         return None
 
@@ -156,11 +158,11 @@ def push_cmd(
     promotable = bool(custom) and all(info.design_portability == "axi-only" for info in custom)
     if auto_yes and infos and not (promotable or all(info.design_portability == "axi-only" for info in infos)):
         click.echo("--yes requires axi-only design", err=True)
-        raise click.exceptions.Exit(1)
+        exit_with(FailureKind.GENERIC)
     if promotable and len(families) > 1:
         if auto_yes:
             click.echo("--yes cannot promote custom-* platforms of different device families", err=True)
-            raise click.exceptions.Exit(1)
+            exit_with(FailureKind.GENERIC)
         promotable = False
     if promotable:
         (family,) = families
@@ -169,7 +171,7 @@ def push_cmd(
         if len(set(targets)) < len(targets) or existing & set(targets):
             if auto_yes:
                 click.echo("--yes cannot promote: two platforms would share one generic-* platform", err=True)
-                raise click.exceptions.Exit(1)
+                exit_with(FailureKind.GENERIC)
             promotable = False
 
     if promotable:
@@ -180,7 +182,7 @@ def push_cmd(
         if board_override is not None:
             promoted_platform = ", ".join(f"{board_override}/{info.runtime}" for info in custom)
 
-    try:
+    with sdk_errors():
         result = sdk_api.push(
             directory,
             namespace=namespace,
@@ -189,9 +191,6 @@ def push_cmd(
             skip_sha_check=skip_sha_check,
             artifact_urls=artifact_urls,
         )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
