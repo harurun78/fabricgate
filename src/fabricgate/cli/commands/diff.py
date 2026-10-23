@@ -8,7 +8,7 @@ from collections.abc import Iterable
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.models.api.responses import VersionDiffField, VersionDiffResponse
 from fabricgate.sdk import api as sdk_api
 
@@ -105,16 +105,13 @@ def diff_cmd(
 ) -> None:
     """Show metadata differences between two design versions."""
     reg: str = str(obj["registry"])
-    try:
+    with sdk_errors():
         result = sdk_api.diff(
             design_ref,
             base=base_ref,
             platform=platform,
             registry=reg,
         )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))

@@ -6,7 +6,7 @@ import json
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
 
 
@@ -35,7 +35,7 @@ def webhook_create_cmd(
 ) -> None:
     """Create a new webhook."""
     reg: str = str(obj["registry"])
-    try:
+    with sdk_errors():
         result = sdk_api.webhook_create(
             namespace=namespace,
             url=url,
@@ -43,9 +43,6 @@ def webhook_create_cmd(
             design=design,
             registry=reg,
         )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
@@ -69,11 +66,8 @@ def webhook_create_cmd(
 def webhook_list_cmd(obj: dict[str, object], namespace: str) -> None:
     """List all webhooks for a namespace."""
     reg: str = str(obj["registry"])
-    try:
+    with sdk_errors():
         webhooks = sdk_api.webhook_list(namespace=namespace, registry=reg)
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps([w.model_dump(mode="json") for w in webhooks], indent=2))
@@ -101,14 +95,11 @@ def webhook_delete_cmd(
     """Delete a webhook."""
     if not force and not obj["json"]:
         if not click.confirm(f"Delete webhook (id: {webhook_id})?", default=False):
-            raise click.exceptions.Exit(0)
+            raise click.exceptions.Exit(0)  # declined at the prompt: not a failure
 
     reg: str = str(obj["registry"])
-    try:
+    with sdk_errors():
         sdk_api.webhook_delete(webhook_id, namespace=namespace, registry=reg)
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps({"deleted": True, "id": webhook_id}))
@@ -127,11 +118,8 @@ def webhook_test_cmd(
 ) -> None:
     """Send a test delivery to a webhook."""
     reg: str = str(obj["registry"])
-    try:
+    with sdk_errors():
         result = sdk_api.webhook_test(webhook_id, namespace=namespace, registry=reg)
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
@@ -153,11 +141,8 @@ def webhook_deliveries_cmd(
 ) -> None:
     """View delivery logs for a webhook."""
     reg: str = str(obj["registry"])
-    try:
+    with sdk_errors():
         deliveries = sdk_api.webhook_deliveries(webhook_id, namespace=namespace, limit=limit, registry=reg)
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps([d.model_dump(mode="json") for d in deliveries], indent=2))

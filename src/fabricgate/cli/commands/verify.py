@@ -7,7 +7,8 @@ from pathlib import Path
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import exit_with, sdk_errors
+from fabricgate.client.errors import FailureKind
 from fabricgate.sdk import api as sdk_api
 
 
@@ -16,16 +17,13 @@ from fabricgate.sdk import api as sdk_api
 @click.pass_obj
 def verify_cmd(obj: dict[str, object], directory: Path) -> None:
     """Verify artifact digests in a pulled design directory."""
-    try:
+    with sdk_errors():
         result = sdk_api.verify(directory)
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
         if not all(artifact.verified for artifact in result.artifacts):
-            raise click.exceptions.Exit(3)
+            exit_with(FailureKind.INVALID)
         return
 
     click.echo(f"Verifying {result.design_ref} ({result.platform}) ...")
@@ -36,5 +34,5 @@ def verify_cmd(obj: dict[str, object], directory: Path) -> None:
         failed = failed or not artifact.verified
 
     if failed:
-        raise click.exceptions.Exit(3)
+        exit_with(FailureKind.INVALID)
     click.echo("All artifacts verified.")

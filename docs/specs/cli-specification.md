@@ -245,14 +245,15 @@ fabricgate push <directory> [--namespace <ns>] [--yes] [--skip-sha-check] [--art
 my-design/
   fabricgate-index.yaml           # Design Index
   README.md                       # Optional: displayed on registry web UI
-  zcu104-pynq/                    # Platform: zcu104/pynq
-    manifest.yaml                 # Platform Manifest
-    design.bit
-    design.hwh
-  zcu104-linux-fpgamgr/           # Platform: zcu104/linux-fpgamgr
-    manifest.yaml
-    design.bit
-    design.dtbo
+  zcu104/
+    pynq/                         # Platform: zcu104/pynq
+      manifest.yaml               # Platform Manifest
+      design.bit
+      design.hwh
+    linux-fpgamgr/                # Platform: zcu104/linux-fpgamgr
+      manifest.yaml
+      design.bit
+      design.dtbo
 ```
 
 **Behavior:**
@@ -320,6 +321,7 @@ Published: myns/my-design:1.0.0 (1 platform)
 | 非 TTY（CI/パイプライン） | 自動 N（プロンプトなし）、メッセージのみ出力 |
 | `fabricgate push --yes` フラグ | 強制 y（AXI-only プラットフォームのみ適用） |
 | `fabricgate push --yes` + board-specific デザイン | エラー：`--yes requires axi-only design` |
+| 複数の `custom-*` プラットフォーム | 全て axi-only かつ同じ device family のときだけ昇格を提案し、まとめて昇格する。`--yes` で family が異なる、または昇格先が他のプラットフォームと同じ ID になる場合はエラー |
 
 `custom-*` でない通常ボード、`design_portability: board-specific`、または `io-constrained` の場合はプロンプト不要。
 
@@ -433,9 +435,9 @@ Tags: dma, axi
 
 Generated:
   ./my-design/fabricgate-index.yaml              ✓
-  ./my-design/zcu104-pynq/manifest.yaml          ✓
+  ./my-design/zcu104/pynq/manifest.yaml         ✓
 
-Note: Place bitstream files in ./my-design/zcu104-pynq/ before publishing.
+Note: Place bitstream files in ./my-design/zcu104/pynq/ before publishing.
 Run `fabricgate push ./my-design/` to publish.
 ```
 

@@ -6,6 +6,7 @@ import json
 
 import click
 
+from fabricgate.cli.exit_codes import exit_code_for
 from fabricgate.sdk import api as sdk_api
 
 
@@ -28,10 +29,11 @@ def login_cmd(obj: dict[str, object], registry: str | None) -> None:
             registry=reg,
             on_user_code=_on_user_code,
         )
+    # Not sdk_errors(): the "Waiting for authorization ..." line needs its " ✗" first.
     except sdk_api.SDKError as exc:
         click.echo(" ✗", err=False)
         click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(1) from exc
+        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     click.echo(" ✓\n")
 

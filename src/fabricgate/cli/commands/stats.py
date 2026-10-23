@@ -7,7 +7,7 @@ from typing import Literal, cast
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.models.cli import NamespaceStatsInfo
 from fabricgate.sdk import api as sdk_api
 
@@ -46,7 +46,7 @@ def stats_cmd(
     if bool(design_ref) == bool(namespace):
         raise click.UsageError("Specify exactly one target: <design-ref> or --namespace <ns>.")
 
-    try:
+    with sdk_errors():
         selected_period = cast(Literal["daily", "weekly", "monthly"], period)
         result = sdk_api.stats(
             design_ref=design_ref,
@@ -57,9 +57,6 @@ def stats_cmd(
             version=version,
             registry=str(obj["registry"]),
         )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))

@@ -8,6 +8,8 @@ from pathlib import Path
 import click
 import yaml
 
+from fabricgate.cli.exit_codes import exit_with
+from fabricgate.client.errors import FailureKind
 from fabricgate.models.board_db import BoardDb
 from fabricgate.models.platform_manifest import Interface
 from fabricgate.sdk.hwh_parser import HwhInfo, HwhParseError, ParsedInterface, find_hwh_files, parse_hwh
@@ -180,7 +182,7 @@ def build_cmd(
     hwh_files = find_hwh_files(directory)
     if not hwh_files:
         click.echo(f"Error: No .hwh files found in {directory}", err=True)
-        raise click.exceptions.Exit(1)
+        exit_with(FailureKind.GENERIC)
     for f in hwh_files:
         click.echo(f"  Found: {f.relative_to(directory.parent)}")
 
@@ -194,7 +196,7 @@ def build_cmd(
                 f"\nError: Multiple HWH files found ({names}). Use --hwh to specify one.",
                 err=True,
             )
-            raise click.exceptions.Exit(1)
+            exit_with(FailureKind.GENERIC)
         else:
             click.echo("\nMultiple HWH files found. Select one:")
             for i, f in enumerate(hwh_files):
@@ -214,7 +216,7 @@ def build_cmd(
         hwh_info = parse_hwh(hwh_path)
     except HwhParseError as exc:
         click.echo(f"Error: {exc}", err=True)
-        raise click.exceptions.Exit(1) from exc
+        exit_with(FailureKind.GENERIC)
 
     if hwh_info.boardpart:
         click.echo(f"  BOARDPART: {hwh_info.boardpart}")
@@ -242,7 +244,7 @@ def build_cmd(
     except Exception as exc:
         click.echo(f"Error: Board DB load failed: {exc}", err=True)
         # INFRA: failed to load local Board DB (ADR-008 exit-code standard).
-        raise click.exceptions.Exit(4) from exc
+        exit_with(FailureKind.INFRA)
 
     board_id: str
     device_family: str | None
@@ -265,7 +267,7 @@ def build_cmd(
                     default=True,
                 ):
                     click.echo("Aborted.", err=True)
-                    raise click.exceptions.Exit(1)
+                    exit_with(FailureKind.GENERIC)
             else:
                 click.echo(f"  → Suggest: {proposed_board_id}")
                 if not click.confirm(
@@ -273,7 +275,7 @@ def build_cmd(
                     default=True,
                 ):
                     click.echo("Aborted.", err=True)
-                    raise click.exceptions.Exit(1)
+                    exit_with(FailureKind.GENERIC)
             board_id = proposed_board_id
     else:
         click.echo("  → No BOARDPART; cannot look up board")
@@ -300,7 +302,6 @@ def build_cmd(
     # --- Step 5: Derive paths and build YAML ---
     platform_id = f"{board_id}/{runtime}"
     design_slug = design_name.split("/")[-1] if "/" in design_name else design_name
-    platform_dir_name = f"{board_id}-{runtime}"
 
     design_ref = f"{design_name}:{version}"
     manifest_interfaces = _interfaces_to_manifest(hwh_info.interfaces)
@@ -323,7 +324,8 @@ def build_cmd(
 
     # --- Step 6: Write (or preview) ---
     out_root = output_dir if output_dir is not None else Path(design_slug)
-    manifest_path = out_root / platform_dir_name / "manifest.yaml"
+    # push reads <project>/<board_id>/<runtime>/manifest.yaml
+    manifest_path = out_root / board_id / runtime / "manifest.yaml"
     index_path = out_root / "fabricgate-index.yaml"
 
     click.echo("\nGenerated:")
@@ -332,7 +334,7 @@ def build_cmd(
         click.echo(f"  (dry-run) {manifest_path}")
         click.echo("\n--- fabricgate-index.yaml ---")
         click.echo(index_yaml)
-        click.echo(f"--- {platform_dir_name}/manifest.yaml ---")
+        click.echo(f"--- {platform_id}/manifest.yaml ---")
         click.echo(manifest_yaml)
         return
 
@@ -342,11 +344,11 @@ def build_cmd(
         index_path.write_text(index_yaml, encoding="utf-8")
     except OSError as exc:
         click.echo(f"Error: Write failed: {exc}", err=True)
-        raise click.exceptions.Exit(4) from exc
+        exit_with(FailureKind.INFRA)
 
     click.echo(f"  {index_path}  ✓")
     click.echo(f"  {manifest_path}  ✓")
-    click.echo(f"\nNote: Place bitstream files in {out_root / platform_dir_name}/ before publishing.")
+    click.echo(f"\nNote: Place bitstream files in {manifest_path.parent}/ before publishing.")
     click.echo(f"Run `fabricgate push {out_root}/` to publish.")
 
 

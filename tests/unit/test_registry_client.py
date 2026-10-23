@@ -80,15 +80,34 @@ class TestErrorHandling:
         assert exc_info.value.status_code == 400
         assert "VALIDATION_ERROR" in str(exc_info.value)
 
-    def test_raises_network_error_on_unparseable_error(self) -> None:
-        """A 4xx/5xx whose body is not a valid ErrorResponse surfaces as NetworkError
-        (via raise_for_status), so httpx never escapes the client layer; the SDK
-        still maps NetworkError to ExitKind.INFRA."""
-        transport = _transport(500, b"internal error", content_type="text/plain")
-        client = _make_client(transport)
+    @pytest.mark.parametrize(
+        ("status", "kind"),
+        [
+            (401, "PERMISSION"),
+            (404, "NOT_FOUND"),
+            (429, "INVALID"),
+            (500, "INFRA"),
+        ],
+    )
+    def test_unparseable_error_body_keeps_the_status(self, status: int, kind: str) -> None:
+        """A 4xx/5xx whose body is not an ErrorResponse (a proxy's HTML page) keeps its
+        status, so it is classified like a JSON error instead of a network error (#72)."""
+        from fabricgate.client.errors import FailureKind
 
-        with pytest.raises(NetworkError):
+        def _handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                status, content=b"<html>nope</html>", headers={"content-type": "text/html", "Retry-After": "7"}
+            )
+
+        client = _make_client(httpx.MockTransport(_handler))
+        with pytest.raises(RegistryError) as exc_info:
             client.search_designs()
+        err = exc_info.value
+        assert not isinstance(err, NetworkError)
+        assert err.status_code == status
+        assert err.kind == FailureKind[kind]
+        assert err.retry_after == "7"
+        assert err.error is not None and err.error.error.code == f"HTTP_{status}"
 
     def test_raises_network_error_on_transport_error(self) -> None:
         """A transport-layer failure (connect/DNS/timeout) is translated into

@@ -6,7 +6,8 @@ import json
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import exit_with, sdk_errors
+from fabricgate.client.errors import FailureKind
 from fabricgate.sdk import api as sdk_api
 
 
@@ -29,7 +30,7 @@ def watch_cmd(
     design was not found, 2 on permission errors (access-controlled resource),
     3 on invalid input, and 4 on network errors (ADR-008 exit-code standard).
     """
-    try:
+    with sdk_errors():
         result = sdk_api.watch(
             design_ref=design_ref,
             shell=shell_ref,
@@ -37,14 +38,11 @@ def watch_cmd(
             platform=platform,
             registry=str(obj["registry"]),
         )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
         if not result.new_version_found:
-            raise click.exceptions.Exit(1)
+            exit_with(FailureKind.GENERIC)
         return
 
     if result.new_version_found:
@@ -55,4 +53,4 @@ def watch_cmd(
         latest_info = f" (latest: {result.latest_version})" if result.latest_version else ""
         ref = result.design_name
         click.echo(f"No new version found for {ref}{latest_info}")
-        raise click.exceptions.Exit(1)
+        exit_with(FailureKind.GENERIC)

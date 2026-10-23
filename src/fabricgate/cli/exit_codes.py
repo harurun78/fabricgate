@@ -8,6 +8,12 @@ reuse this table rather than hard-coding numbers.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import NoReturn
+
+import click
+
 from fabricgate.client.errors import FailureKind
 from fabricgate.sdk.api import SDKError
 
@@ -26,3 +32,18 @@ EXIT_CODE: dict[FailureKind, int] = {
 def exit_code_for(exc: SDKError) -> int:
     """Return the process exit code for an SDKError's semantic kind."""
     return EXIT_CODE.get(exc.code, 1)
+
+
+def exit_with(kind: FailureKind) -> NoReturn:
+    """Exit with the code for *kind*, for outcomes decided by the command itself."""
+    raise click.exceptions.Exit(EXIT_CODE[kind])
+
+
+@contextmanager
+def sdk_errors() -> Iterator[None]:
+    """Report an SDKError raised in the block on stderr and exit with its mapped code."""
+    try:
+        yield
+    except SDKError as exc:
+        click.echo(str(exc), err=True)
+        raise click.exceptions.Exit(exit_code_for(exc)) from exc

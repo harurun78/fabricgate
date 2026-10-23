@@ -6,7 +6,7 @@ import json
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
 
 _BAR_WIDTH = 32
@@ -36,14 +36,11 @@ def _render_quota_bar(percent: float) -> str:
 @click.pass_obj
 def quota_cmd(obj: dict[str, object], namespace: str | None) -> None:
     """Show namespace quota usage."""
-    try:
+    with sdk_errors():
         result = sdk_api.quota(
             namespace=namespace,
             registry=str(obj["registry"]),
         )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))

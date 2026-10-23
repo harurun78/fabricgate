@@ -840,3 +840,26 @@ def test_cache_save_leaves_no_temp_file_on_failure(tmp_path: Path, monkeypatch: 
     with pytest.raises(OSError, match="disk full"):
         cache.save_index(cache.load_index(tmp_path), tmp_path)
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("platforms", "promotions"),
+    [
+        (
+            ["custom-xczu7ev-a/pynq", "custom-xczu7ev-b/pynq"],
+            {"custom-xczu7ev-a/pynq": "generic-xczu7ev/pynq", "custom-xczu7ev-b/pynq": "generic-xczu7ev/pynq"},
+        ),
+        (
+            ["custom-xczu7ev-a/pynq", "generic-xczu7ev/pynq"],
+            {"custom-xczu7ev-a/pynq": "generic-xczu7ev/pynq"},
+        ),
+    ],
+)
+def test_promote_platforms_refuses_a_clash(platforms: list[str], promotions: dict[str, str]) -> None:
+    """Two parts under one platform key would overwrite each other (#64)."""
+    from fabricgate.client.publisher import promote_platforms
+
+    index = yaml.safe_dump({"platforms": [{"platform": p, "digest": "sha256:" + "a" * 64} for p in platforms]})
+    files = {"index": index.encode()} | {f"platform:{p}:manifest": b"board: x\n" for p in platforms}
+    with pytest.raises(PublishError, match="more than one platform would become generic-xczu7ev/pynq"):
+        promote_platforms(files, promotions)

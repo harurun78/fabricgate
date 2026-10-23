@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from fabricgate.client.publisher import PublishError, collect_artifacts, load_design_index
+from fabricgate.client.publisher import PublishError, collect_artifacts, load_design_index, promote_platforms
 from fabricgate.client.registry_client import RegistryClient, RegistryError
 from fabricgate.models.cli import PushResult
 from fabricgate.sdk._helpers import (
@@ -109,18 +109,6 @@ def push(
     except OSError as exc:
         raise SDKError(f"Cannot read the design index: {exc}", code=ExitKind.INFRA) from exc
 
-    # Apply board promotion: replace custom-* prefix with board_override
-    if board_override is not None:
-        new_entries = []
-        for entry in index.platforms:
-            platform_id = str(entry.platform)
-            if "/" in platform_id:
-                old_board, runtime_part = platform_id.split("/", 1)
-                if old_board.startswith("custom-"):
-                    entry = entry.model_copy(update={"platform": f"{board_override}/{runtime_part}"})
-            new_entries.append(entry)
-        index = index.model_copy(update={"platforms": new_entries})
-
     # Parse namespace / design from the index name (e.g. "myns/blink")
     name_parts = str(index.name).split("/", 1)
     if len(name_parts) != 2:
@@ -138,6 +126,15 @@ def push(
             skip_sha_check=skip_sha_check,
             artifact_urls=artifact_urls,
         )
+        # Board promotion: files are collected from the custom-* directories on
+        # disk, then the parts are renamed to the generic-* platform.
+        if board_override is not None:
+            promotions = {
+                str(entry.platform): f"{board_override}/{str(entry.platform).split('/', 1)[1]}"
+                for entry in index.platforms
+                if str(entry.platform).startswith("custom-")
+            }
+            files = promote_platforms(files, promotions)
     except PublishError as exc:
         raise SDKError(str(exc), code=ExitKind.INVALID) from exc
     except (ValidationError, yaml.YAMLError) as exc:
