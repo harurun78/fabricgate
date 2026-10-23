@@ -275,6 +275,29 @@ def test_version_detail_to_index_strips_api_enrichment_fields() -> None:
     assert idx.platforms[0].platform == "xc7z020/pynq"
 
 
+def test_version_detail_to_index_drops_any_field_outside_platform_entry() -> None:
+    """A field added to ApiPlatformEntry later must not make pull fail."""
+    from fabricgate.client.puller import _version_detail_to_index
+
+    idx = _version_detail_to_index(
+        {
+            "schema": "fabricgate-index/v1",
+            "name": "test-ns/blink",
+            "version": "1.0.0",
+            "platforms": [
+                {
+                    "platform": "xc7z020/pynq",
+                    "digest": "sha256:" + "a" * 64,
+                    "size": 10,
+                    "future_api_field": {"x": 1},
+                }
+            ],
+        }
+    )
+    assert idx.platforms[0].platform == "xc7z020/pynq"
+    assert idx.platforms[0].size == 10
+
+
 def test_pull_downloads_manifest_and_artifacts(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1027,6 +1050,18 @@ def test_push_invalid_design_name(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 
 def test_push_rejects_placeholder_digest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _write_push_project(tmp_path, placeholder_digest=True)
+    _patch_all_rc(monkeypatch, _FakePushRegistryClient)
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+
+    with pytest.raises(sdk_api.SDKError, match="Placeholder digest"):
+        sdk_api.push(tmp_path, token="tok-test")
+
+
+def test_push_rejects_any_uniform_placeholder_digest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The index digest uses the same placeholder rule as artifact sha256 (not only all 'a')."""
+    _write_push_project(tmp_path, placeholder_digest=True)
+    index_path = tmp_path / "fabricgate-index.yaml"
+    index_path.write_text(index_path.read_text().replace("a" * 64, "0" * 64))
     _patch_all_rc(monkeypatch, _FakePushRegistryClient)
     monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
 

@@ -14,15 +14,14 @@ from fabricgate.client.validator import artifact_refs, is_single_filename, sha25
 from fabricgate.models.design_index import DesignIndex
 from fabricgate.models.platform_manifest import PlatformManifest, parse_platform_manifest
 
-_PLACEHOLDER_DIGEST = f"sha256:{'a' * 64}"
-
 
 def _is_placeholder_sha256(sha256: str) -> bool:
-    """Return True if *sha256* is a uniform-character placeholder (e.g. all 'a').
+    """Return True if *sha256* is 64 copies of one character, which no real hash is.
 
-    ``fabricgate build`` fills artifact sha256 fields with ``'a' * 64`` because the
-    real bitstream hash is not known at manifest-generation time.  Uploading
-    such a placeholder to the registry makes ``fabricgate pull --verify`` always fail.
+    ``fabricgate build`` fills artifact sha256 fields and the index digest with
+    ``'a' * 64`` because the real hash is not known at generation time. Any single
+    repeated character counts, so hand-written stand-ins such as ``'0' * 64`` are
+    caught too. Uploading such a placeholder makes ``fabricgate pull --verify`` always fail.
     """
     return len(sha256) == 64 and len(set(sha256)) == 1
 
@@ -102,7 +101,7 @@ def collect_artifacts(
 
     for entry in index.platforms:
         platform_key = entry.platform  # e.g. "xc7z020/pynq"
-        if str(entry.digest) == _PLACEHOLDER_DIGEST:
+        if _is_placeholder_sha256(str(entry.digest).removeprefix("sha256:")):
             msg = (
                 f"Placeholder digest detected for {platform_key}. "
                 "Update platform digests before running 'fabricgate push'."

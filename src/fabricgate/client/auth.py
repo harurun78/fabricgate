@@ -58,6 +58,9 @@ def _try_keyring_delete(registry: str) -> bool:
         keyring.delete_password(_KEYRING_SERVICE, registry)
         return True
     except Exception:
+        # No entry and no usable keyring both mean there is nothing to remove here.
+        # delete_credentials clears the file either way; False only tells it the
+        # keychain did not hold the token.
         pass
     return False
 
