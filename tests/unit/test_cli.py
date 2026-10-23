@@ -3300,3 +3300,19 @@ def test_diff_handles_an_empty_field_list(monkeypatch) -> None:
     )
     result = CliRunner().invoke(main, ["diff", "a/b:1.1.0", "--base", "1.0.0"])
     assert result.exit_code == 0, result.output
+
+
+def test_stats_weekly_omits_last_7d_line(monkeypatch) -> None:
+    """#71: weekly / monthly results carry no last_7d / last_30d, and the line is left out."""
+    monkeypatch.setattr(
+        "fabricgate.cli.commands.stats.sdk_api.stats",
+        lambda **_kw: DesignStatsInfo(
+            name="alice/fpga-uart",
+            total_downloads=200,
+            period="weekly",
+            series=[StatsSeriesItem(date="2026-03-01", downloads=200)],
+        ),
+    )
+    result = CliRunner().invoke(main, ["stats", "alice/fpga-uart", "--period", "weekly"])
+    assert result.exit_code == 0, result.output
+    assert "Last 7d" not in result.output

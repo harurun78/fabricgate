@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
 from typing import Literal
 
 from fabricgate.client.registry_client import RegistryClient, RegistryError
@@ -11,7 +12,7 @@ from fabricgate.sdk._helpers import (
     SDKError,
     _parse_design_ref_optional_version,
     _registry_error_kind,
-    _sum_recent,
+    _sum_days,
     _validate_namespace_name,
     _validate_stats_date_range,
 )
@@ -38,6 +39,13 @@ def stats(
     _validate_stats_date_range(from_date, to_date)
     if namespace:
         _validate_namespace_name(namespace)
+
+    # "Last 7d / 30d" counts calendar days up to --to (today, UTC, by default). Weekly and
+    # monthly points cannot be cut at 7 or 30 days, so those periods report no value.
+    end = date.fromisoformat(to_date) if to_date else datetime.now(UTC).date()
+
+    def _recent(series: list[StatsSeriesItem], days: int) -> int | None:
+        return _sum_days(series, days, end) if period == "daily" else None
 
     try:
         with RegistryClient(base_url=registry, token=token) as client:
@@ -78,8 +86,8 @@ def stats(
                     total_downloads=version_resp.total_downloads,
                     period=version_resp.period,
                     series=series,
-                    last_7d=_sum_recent(series, 7),
-                    last_30d=_sum_recent(series, 30),
+                    last_7d=_recent(series, 7),
+                    last_30d=_recent(series, 30),
                 )
 
             design_resp = client.get_design_stats(
@@ -98,8 +106,8 @@ def stats(
                 total_downloads=design_resp.total_downloads,
                 period=design_resp.period,
                 series=series,
-                last_7d=_sum_recent(series, 7),
-                last_30d=_sum_recent(series, 30),
+                last_7d=_recent(series, 7),
+                last_30d=_recent(series, 30),
             )
     except RegistryError as exc:
         raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc

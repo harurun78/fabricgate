@@ -1103,6 +1103,8 @@ Daily downloads — last 30 days
   Last 7d:   384    Last 30d: 1,621
 ```
 
+`Last 7d` / `Last 30d` は、`--to`(省略時は今日、UTC)を含む直近 7 日間・30 日間の日次ダウンロード数の合計である。系列の点の数ではなく日付で数えるので、ダウンロードの無い日が系列から省かれていても、過去の期間を指定しても意味は変わらない。`--period weekly` / `monthly` では 7 日・30 日で区切れないため表示しない(`--json` / SDK では `null`)。
+
 ```
 $ fabricgate stats alice/fpga-uart --version 1.2.0
 
