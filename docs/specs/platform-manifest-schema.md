@@ -673,7 +673,8 @@ cosign sign-blob manifest.yaml --bundle cosign.bundle --yes
 ```
 
 署名した後に manifest.yaml を変更してはならない（変更したら署名し直す）。`fabricgate push` は bundle ファイルを
-アーティファクトと同じ方法でアップロードする。
+publish の専用パート `platform:{board_id}/{runtime}:attestation:{bundle}` でインラインに送る（bundle は署名対象の
+manifest に sha256 を書けないため、直接アップロードは使わない）。レジストリは `artifacts/{bundle}` で配信する。
 
 ```yaml
 attestation:
@@ -686,7 +687,7 @@ attestation:
 | `bundle` | string | manifest.yaml に対する Cosign バンドルのファイル名（アーティファクトと同ディレクトリ、単一のファイル名） |
 | `transparency_log_url` | string | Rekor 互換 transparency log の URL |
 
-> **注意:** FabricGate はバンドルファイルの内容をバリデーションしない。CLI の `--verify-attestation` フラグが cosign CLI を呼び出し、manifest.yaml に対して検証する。サーバーはバンドルファイルを他のアーティファクトと同様に保存し、`artifacts/{bundle}` で配信する必要がある（`client-behavior.md` §10.2）。
+> **注意:** FabricGate はバンドルファイルの内容をバリデーションしない。CLI の `--verify-attestation` フラグが cosign CLI を呼び出し、manifest.yaml に対して検証する。サーバーはバンドルファイルを他のアーティファクトと同様に保存し、`artifacts/{bundle}` で配信する（`client-behavior.md` §10.2）。
 
 ## 7. Extensibility
 

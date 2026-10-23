@@ -850,6 +850,37 @@ def test_push_uploads_artifacts_directly_and_publishes_metadata_only(
     assert all({"filename", "sha256", "size"} <= set(item) for item in requested)
 
 
+def test_push_sends_the_attestation_bundle_through_the_api(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The bundle signs the manifest, so it cannot be pinned for the direct upload; it goes inline."""
+    captured: dict[str, object] = {}
+
+    class _RecordingClient(_FakePushRegistryClient):
+        def publish_version(self, namespace, design, version, files):
+            captured["files"] = dict(files)
+            captured["client"] = self
+            return super().publish_version(namespace, design, version, files)
+
+    _write_push_project(tmp_path)
+    manifest_path = tmp_path / "xc7z020" / "pynq" / "manifest.yaml"
+    manifest_path.write_text(
+        manifest_path.read_text()
+        + "\nattestation:\n  bundle: cosign.bundle\n  transparency_log_url: https://rekor.sigstore.dev\n"
+    )
+    (manifest_path.parent / "cosign.bundle").write_bytes(b"bundle-bytes")
+    index_path = tmp_path / "fabricgate-index.yaml"
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    index_path.write_text(index_path.read_text().rsplit("digest: ", 1)[0] + f"digest: sha256:{digest}")
+    _patch_all_rc(monkeypatch, _RecordingClient)
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+
+    sdk_api.push(tmp_path, token="tok")
+
+    files = captured["files"]
+    assert files["platform:xc7z020/pynq:attestation:cosign.bundle"] == b"bundle-bytes"
+    client = captured["client"]
+    assert all(item["filename"] != "cosign.bundle" for item in client.upload_requests[0])
+
+
 def test_push_skips_upload_when_registry_already_stores_the_content(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -796,15 +796,19 @@ def test_collect_artifacts_uploads_attestation_bundle(tmp_path: Path) -> None:
     (tmp_path / "xc7z020" / "pynq" / "cosign.bundle").write_bytes(b"bundle")
     idx, _ = load_design_index(tmp_path)
     files = collect_artifacts(tmp_path, idx)
-    assert files["platform:xc7z020/pynq:artifact:cosign.bundle"] == b"bundle"
+    # Its own part name keeps it out of the direct (presigned) upload of ":artifact:" parts.
+    assert files["platform:xc7z020/pynq:attestation:cosign.bundle"] == b"bundle"
+    assert not any(":artifact:cosign.bundle" in key for key in files)
 
 
-def test_collect_artifacts_requires_declared_bundle(tmp_path: Path) -> None:
+def test_collect_artifacts_warns_on_missing_bundle(tmp_path: Path) -> None:
     TestPublisher()._write_project(tmp_path)
     _add_attestation(tmp_path, "cosign.bundle")
     idx, _ = load_design_index(tmp_path)
-    with pytest.raises(PublishError, match="Attestation bundle not found"):
-        collect_artifacts(tmp_path, idx)
+    warnings: list[str] = []
+    files = collect_artifacts(tmp_path, idx, sha_warnings=warnings)
+    assert not any("cosign.bundle" in key for key in files)
+    assert any("Attestation bundle cosign.bundle not found" in w for w in warnings)
 
 
 def test_collect_artifacts_rejects_dot_dot_bundle(tmp_path: Path) -> None:

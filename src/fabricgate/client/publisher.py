@@ -159,17 +159,23 @@ def collect_artifacts(
             else:
                 files[f"platform:{platform_key}:artifact:{ref.file}"] = artifact_path.read_bytes()
 
-        # The cosign bundle signs manifest.yaml; pull fetches it like an artifact.
+        # The cosign bundle signs manifest.yaml, so the manifest cannot pin it by sha256
+        # and it cannot use the direct upload; it travels as its own inline part and the
+        # registry serves it from artifacts/{bundle}.
         if manifest.attestation is not None:
             bundle = manifest.attestation.bundle
             if not _is_single_filename(bundle):
                 msg = f"Invalid attestation bundle filename in {manifest_rel}: {bundle!r}"
                 raise PublishError(msg)
             bundle_path = artifact_dir / bundle
-            if not bundle_path.is_file():
-                msg = f"Attestation bundle not found: {bundle_path}"
-                raise PublishError(msg)
-            files[f"platform:{platform_key}:artifact:{bundle}"] = bundle_path.read_bytes()
+            if bundle_path.is_file():
+                files[f"platform:{platform_key}:attestation:{bundle}"] = bundle_path.read_bytes()
+            elif sha_warnings is not None:
+                # Earlier clients never uploaded the bundle, so a missing file stays a warning.
+                sha_warnings.append(
+                    f"Attestation bundle {bundle} not found next to {manifest_rel}; "
+                    "pull --verify-attestation will fail for this platform"
+                )
 
     if unmatched_urls:
         msg = f"Artifact URLs for files not declared in any platform manifest: {', '.join(sorted(unmatched_urls))}"

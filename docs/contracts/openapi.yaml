@@ -233,18 +233,13 @@ paths:
       tags:
       - designs
       summary: Publish Version
-      description: 'Publish a new version via multipart/form-data.
-
-
-        Expected parts:
-
-        - ``index``: Design Index (YAML)
-
-        - ``readme`` (optional): README markdown
-
-        - ``platform:{board_id}/{runtime}:manifest``: Platform Manifest (YAML)
-
-        - ``platform:{board_id}/{runtime}:artifact:{filename}``: artifact file'
+      description: "Publish a new version via multipart/form-data.\n\nExpected parts:\n\
+        - ``index``: Design Index (YAML)\n- ``readme`` (optional): README markdown\n\
+        - ``platform:{board_id}/{runtime}:manifest``: Platform Manifest (YAML)\n-\
+        \ ``platform:{board_id}/{runtime}:artifact:{filename}``: artifact file\n-\
+        \ ``platform:{board_id}/{runtime}:attestation:{bundle}`` (optional): the cosign\n\
+        \  bundle that signs the platform manifest (``attestation.bundle``); stored\
+        \ like an\n  inline artifact and served from ``artifacts/{bundle}``"
       operationId: publish_version_api_v1_namespaces__namespace__designs__design__versions__version__post
       parameters:
       - name: namespace
@@ -668,14 +663,11 @@ paths:
       tags:
       - designs
       summary: Add Platform
-      description: 'Add a platform to an existing version via multipart/form-data.
-
-
-        Expected parts:
-
-        - ``manifest``: Platform Manifest (YAML)
-
-        - ``artifact:{filename}``: artifact file(s)'
+      description: "Add a platform to an existing version via multipart/form-data.\n\
+        \nExpected parts:\n- ``manifest``: Platform Manifest (YAML)\n- ``artifact:{filename}``:\
+        \ artifact file(s)\n- ``attestation:{bundle}`` (optional): the cosign bundle\
+        \ that signs the platform\n  manifest (``attestation.bundle``); stored like\
+        \ an inline artifact and served from\n  ``artifacts/{bundle}``"
       operationId: add_platform_api_v1_namespaces__namespace__designs__design__versions__version__platforms__board_id___runtime__post
       parameters:
       - name: namespace
