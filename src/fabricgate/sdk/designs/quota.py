@@ -5,12 +5,13 @@ from __future__ import annotations
 import os
 
 from fabricgate.client import auth
-from fabricgate.client.registry_client import RegistryClient, RegistryError
+from fabricgate.client.registry_client import RegistryClient
 from fabricgate.models.api.responses import QuotaResponse
 from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
     _default_namespace_from_scopes,
+    _registry_errors,
     _stored_credentials,
     _validate_namespace_name,
 )
@@ -42,8 +43,5 @@ def quota(
 
     _validate_namespace_name(ns)
 
-    try:
-        with RegistryClient(base_url=registry, token=effective_token) as client:
-            return client.get_namespace_quota(ns)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=exc.kind) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=effective_token) as client:
+        return client.get_namespace_quota(ns)

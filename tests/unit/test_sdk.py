@@ -3396,7 +3396,7 @@ def test_find_manifest_path_not_found(tmp_path: Path) -> None:
 def test_extract_artifact_refs_no_artifacts() -> None:
     from unittest.mock import MagicMock
 
-    from fabricgate.sdk._helpers import _extract_artifact_refs
+    from fabricgate.client.validator import artifact_refs as _extract_artifact_refs
 
     manifest = MagicMock()
     manifest.artifacts = None
@@ -3880,7 +3880,7 @@ def test_stats_last_7d_ends_today_by_default(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_extract_artifact_refs_list_branch() -> None:
-    from fabricgate.sdk._helpers import _extract_artifact_refs
+    from fabricgate.client.validator import artifact_refs as _extract_artifact_refs
 
     class _ListItem:
         file = "a.bit"
@@ -4887,3 +4887,94 @@ def test_pull_attestation_rejects_no_verify(monkeypatch: pytest.MonkeyPatch, tmp
         )
     assert exc_info.value.code == ExitKind.INVALID
     assert not (tmp_path / "design.bit").exists()
+
+
+_PULL_MANIFEST = "\n".join(
+    [
+        "schema: fabricgate-platform/v1",
+        "runtime: pynq",
+        "board: pynq-z2",
+        "design_ref: a/b:1.0.0",
+        "artifacts:",
+        "  bitstream:",
+        "    file: design.bit",
+        "    sha256: " + hashlib.sha256(b"bit").hexdigest(),
+        "  hwh:",
+        "    file: design.hwh",
+        "    sha256: " + hashlib.sha256(b"hwh").hexdigest(),
+    ]
+).encode()
+
+
+def test_download_platform_writes_manifest_and_artifacts(tmp_path: Path) -> None:
+    from fabricgate.client.puller import _download_platform
+
+    calls: list[tuple[object, ...]] = []
+
+    class _Client:
+        def get_platform_manifest_bytes(self, *args):
+            calls.append(args)
+            return _PULL_MANIFEST
+
+        def download_artifact(self, *args):
+            calls.append(args)
+            return {"design.bit": b"bit", "design.hwh": b"hwh"}[args[-1]]
+
+    names = _download_platform(
+        _Client(), "a", "b", "1.0.0", "pynq-z2", "pynq", tmp_path, verify_digests=True, signer=None
+    )
+    assert names == ["design.bit", "design.hwh"]
+    assert (tmp_path / "manifest.yaml").read_bytes() == _PULL_MANIFEST
+    assert (tmp_path / "design.bit").read_bytes() == b"bit"
+    assert calls[1] == ("a", "b", "1.0.0", "pynq-z2", "pynq", "design.bit")
+
+
+def test_download_platform_writes_nothing_for_a_broken_manifest(tmp_path: Path) -> None:
+    from pydantic import ValidationError
+
+    from fabricgate.client.puller import _download_platform
+
+    class _Client:
+        def get_platform_manifest_bytes(self, *_a):
+            return b"schema: nope\n"
+
+    with pytest.raises(ValidationError):
+        _download_platform(
+            _Client(), "a", "b", "1.0.0", "pynq-z2", "pynq", tmp_path, verify_digests=True, signer=None, kind="shell"
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_require_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fabricgate.sdk._helpers import _require_token
+
+    assert _require_token("http://test", "explicit") == "explicit"
+    with pytest.raises(sdk_api.SDKError, match="Not authenticated") as exc_info:
+        _require_token("http://test")
+    assert exc_info.value.code == ExitKind.PERMISSION
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: _yank_creds())
+    assert _require_token("http://test") == "tok"
+
+
+def test_registry_errors_converts_to_sdk_error() -> None:
+    from fabricgate.client.registry_client import RegistryError
+    from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
+    from fabricgate.sdk._helpers import _registry_errors
+
+    error = RegistryError(404, ErrorResponse(error=ErrorDetail(code="NOT_FOUND", message="gone")))
+    with pytest.raises(sdk_api.SDKError) as exc_info, _registry_errors():
+        raise error
+    assert exc_info.value.code == ExitKind.NOT_FOUND
+    assert exc_info.value.__cause__ is error
+
+
+def test_parse_versions() -> None:
+    from fabricgate.sdk.designs.lifecycle import _parse_versions
+
+    assert _parse_versions("alice/counter:1.0.0", ["1.1.0"], "yank") == ("alice", "counter", ["1.0.0", "1.1.0"])
+    with pytest.raises(sdk_api.SDKError, match="No versions specified"):
+        _parse_versions("alice/counter", None, "yank")
+    with pytest.raises(sdk_api.SDKError, match="Invalid version"):
+        _parse_versions("alice/counter", ["latest"], "yank")
+    with pytest.raises(sdk_api.SDKError, match="Maximum 50 versions per deprecate operation"):
+        _parse_versions("alice/counter", [f"0.0.{i}" for i in range(51)], "deprecate")

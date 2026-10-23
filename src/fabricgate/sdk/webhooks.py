@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from fabricgate.client.registry_client import RegistryClient, RegistryError
+from fabricgate.client.registry_client import RegistryClient
 from fabricgate.models.cli import (
     WebhookCreateResult,
     WebhookDeliveryItem,
@@ -14,7 +14,8 @@ from fabricgate.models.cli import (
 from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
-    _stored_credentials,
+    _registry_errors,
+    _require_token,
     _validate_namespace_name,
 )
 
@@ -51,19 +52,14 @@ def webhook_create(
     if parsed.scheme != "https" or not parsed.hostname:
         raise SDKError("Webhook URL must use HTTPS.", code=ExitKind.INVALID)
 
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
     event_list = [e.strip() for e in events.split(",") if e.strip()]
     if not event_list:
         raise SDKError("At least one event type is required.", code=ExitKind.INVALID)
 
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            resp = client.create_webhook(namespace, url, event_list, design)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=exc.kind) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        resp = client.create_webhook(namespace, url, event_list, design)
 
     return WebhookCreateResult(
         id=resp.id,
@@ -83,15 +79,10 @@ def webhook_list(
 ) -> list[WebhookItem]:
     """List all webhooks for a namespace."""
     _validate_namespace_name(namespace)
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            resp = client.list_webhooks(namespace)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=exc.kind) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        resp = client.list_webhooks(namespace)
 
     return [
         WebhookItem(
@@ -125,15 +116,10 @@ def webhook_delete(
         Base URL for the registry API.
     """
     _validate_namespace_name(namespace)
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            client.delete_webhook(namespace, webhook_id)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=exc.kind) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        client.delete_webhook(namespace, webhook_id)
 
 
 def webhook_test(
@@ -154,15 +140,10 @@ def webhook_test(
         Base URL for the registry API.
     """
     _validate_namespace_name(namespace)
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            resp = client.test_webhook(namespace, webhook_id)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=exc.kind) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        resp = client.test_webhook(namespace, webhook_id)
 
     return WebhookTestResult(
         delivered=resp.delivered,
@@ -192,15 +173,10 @@ def webhook_deliveries(
         Base URL for the registry API.
     """
     _validate_namespace_name(namespace)
-    creds = _stored_credentials(registry)
-    if creds is None:
-        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    token = _require_token(registry)
 
-    try:
-        with RegistryClient(base_url=registry, token=creds.token) as client:
-            resp = client.list_webhook_deliveries(namespace, webhook_id, limit)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=exc.kind) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        resp = client.list_webhook_deliveries(namespace, webhook_id, limit)
 
     return [
         WebhookDeliveryItem(

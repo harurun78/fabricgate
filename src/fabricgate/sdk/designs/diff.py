@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from fabricgate.client.registry_client import RegistryClient, RegistryError
+from fabricgate.client.registry_client import RegistryClient
 from fabricgate.models.api.responses import VersionDiffResponse
-from fabricgate.sdk._helpers import SDKError, _normalize_base_version, _parse_design_ref
+from fabricgate.sdk._helpers import _normalize_base_version, _parse_design_ref, _registry_errors
 
 
 def diff(
@@ -18,8 +18,5 @@ def diff(
     namespace, design, version = _parse_design_ref(design_ref)
     base_version = _normalize_base_version(namespace, design, base)
 
-    try:
-        with RegistryClient(base_url=registry) as client:
-            return client.get_version_diff(namespace, design, version, base_version, platform)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=exc.kind) from exc
+    with _registry_errors(), RegistryClient(base_url=registry) as client:
+        return client.get_version_diff(namespace, design, version, base_version, platform)

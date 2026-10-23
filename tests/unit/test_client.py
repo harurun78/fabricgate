@@ -921,3 +921,41 @@ def test_promote_platforms_refuses_a_clash(platforms: list[str], promotions: dic
     files = {"index": index.encode()} | {f"platform:{p}:manifest": b"board: x\n" for p in platforms}
     with pytest.raises(PublishError, match="more than one platform would become generic-xczu7ev/pynq"):
         promote_platforms(files, promotions)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [("design.bit", True), ("", False), ("/etc/passwd", False), ("../design.bit", False), ("sub/design.bit", False)],
+)
+def test_is_single_filename(name: str, expected: bool) -> None:
+    assert validator.is_single_filename(name) is expected
+
+
+def test_artifact_refs_include_kernel_modules() -> None:
+    from fabricgate.models.platform_manifest import parse_platform_manifest
+
+    manifest = parse_platform_manifest(
+        yaml.safe_dump(
+            {
+                "schema": "fabricgate-platform/v1",
+                "runtime": "linux-fpgamgr",
+                "board": "pynq-z2",
+                "design_ref": "test-ns/blink:1.0.0",
+                "artifacts": {
+                    "bitstream": {"file": "design.bit.bin", "sha256": "a" * 64},
+                    "modules": [{"file": "blink.ko", "sha256": "b" * 64, "module_name": "blink"}],
+                },
+            }
+        )
+    )
+    assert [ref.file for ref in validator.artifact_refs(manifest)] == ["design.bit.bin", "blink.ko"]
+
+
+def test_find_index_path_prefers_yaml(tmp_path: Path) -> None:
+    from fabricgate.client.publisher import _find_index_path
+
+    assert _find_index_path(tmp_path) is None
+    (tmp_path / "fabricgate-index.yml").write_text("x")
+    assert _find_index_path(tmp_path) == tmp_path / "fabricgate-index.yml"
+    (tmp_path / "fabricgate-index.yaml").write_text("x")
+    assert _find_index_path(tmp_path) == tmp_path / "fabricgate-index.yaml"

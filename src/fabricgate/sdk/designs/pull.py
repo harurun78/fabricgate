@@ -14,17 +14,17 @@ from fabricgate.client.puller import (
     AttestationUnavailableError,
     IntegrityError,
 )
-from fabricgate.client.registry_client import RegistryClient, RegistryError
+from fabricgate.client.registry_client import RegistryClient
 from fabricgate.client.resolver import ResolutionError
-from fabricgate.client.validator import verify_artifact
+from fabricgate.client.validator import artifact_refs, is_single_filename, verify_artifact
 from fabricgate.models.cli import PullResult, VerificationItem, VerificationResult
 from fabricgate.models.platform_manifest import parse_platform_manifest
 from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
-    _extract_artifact_refs,
     _find_manifest_path,
     _parse_design_ref,
+    _registry_errors,
 )
 
 
@@ -87,7 +87,7 @@ def pull(
             effective_token = creds.token
 
     try:
-        with RegistryClient(base_url=registry, token=effective_token) as client:
+        with _registry_errors(), RegistryClient(base_url=registry, token=effective_token) as client:
             outcome = puller.pull_design(
                 client,
                 namespace,
@@ -110,8 +110,6 @@ def pull(
         raise SDKError(str(exc), code=ExitKind.INFRA) from exc
     except (IntegrityError, AttestationError) as exc:
         raise SDKError(str(exc), code=ExitKind.INVALID) from exc
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=exc.kind) from exc
     except OSError as exc:
         raise SDKError(str(exc), code=ExitKind.INFRA) from exc
 
@@ -141,22 +139,15 @@ def verify(directory: str | Path) -> VerificationResult:
         raise SDKError(f"Cannot read {manifest_path}: {exc}", code=ExitKind.INFRA) from exc
 
     results: list[VerificationItem] = []
-    for artifact in _extract_artifact_refs(manifest):
-        # Validate that artifact.file is a safe relative filename (no path traversal).
+    for artifact in artifact_refs(manifest):
         artifact_name = str(artifact.file)
-        artifact_path_obj = Path(artifact_name)
-        if (
-            not artifact_name
-            or artifact_path_obj.is_absolute()
-            or ".." in artifact_path_obj.parts
-            or len(artifact_path_obj.parts) != 1
-        ):
+        if not is_single_filename(artifact_name):
             raise SDKError(
                 f"Invalid artifact filename in manifest: {artifact_name!r}",
                 code=ExitKind.INVALID,
             )
 
-        artifact_path = target_dir / artifact_path_obj
+        artifact_path = target_dir / artifact_name
         if not artifact_path.exists():
             raise SDKError(f"Artifact not found: {artifact_name}", code=ExitKind.INVALID)
         results.append(
