@@ -552,6 +552,15 @@ def test_push_promotes_when_a_later_platform_is_custom_axi(monkeypatch, tmp_path
             ],
             "different device families",
         ),
+        (
+            [
+                _CUSTOM_AXI_INFO,
+                _PlatformInfo(
+                    board_id="generic-xczu7ev", runtime="pynq", device_family="xczu7ev", design_portability="axi-only"
+                ),
+            ],
+            "would share one generic-* platform",
+        ),
     ],
 )
 def test_push_yes_refuses_what_one_board_override_cannot_promote(monkeypatch, tmp_path, infos, message) -> None:

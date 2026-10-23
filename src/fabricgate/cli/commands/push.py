@@ -162,6 +162,15 @@ def push_cmd(
             click.echo("--yes cannot promote custom-* platforms of different device families", err=True)
             raise click.exceptions.Exit(1)
         promotable = False
+    if promotable:
+        (family,) = families
+        targets = [f"generic-{family}/{info.runtime}" for info in custom]
+        existing = {f"{info.board_id}/{info.runtime}" for info in infos if not info.board_id.startswith("custom-")}
+        if len(set(targets)) < len(targets) or existing & set(targets):
+            if auto_yes:
+                click.echo("--yes cannot promote: two platforms would share one generic-* platform", err=True)
+                raise click.exceptions.Exit(1)
+            promotable = False
 
     if promotable:
         (device_family,) = families

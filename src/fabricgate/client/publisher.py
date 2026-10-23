@@ -198,6 +198,13 @@ def promote_platforms(files: Mapping[str, bytes], promotions: Mapping[str, str])
     changes the bytes its signature covers.
     """
     index = yaml.safe_load(files["index"])
+    targets = list(promotions.values())
+    kept = {entry["platform"] for entry in index["platforms"]} - set(promotions)
+    clash = sorted({t for t in targets if targets.count(t) > 1} | (set(targets) & kept))
+    if clash:
+        # Two parts under one platform key would silently overwrite each other.
+        msg = f"Cannot promote: more than one platform would become {', '.join(clash)}"
+        raise PublishError(msg)
     promoted: dict[str, bytes] = {}
     for key, data in files.items():
         if key == "index" or not key.startswith("platform:"):
