@@ -4456,6 +4456,8 @@ def test_verify_manifest_attestation_runs_cosign_on_the_manifest(
         lambda name: b"bundle-bytes",
         _puller_mod.AttestationSigner(key="cosign.pub"),
         label="manifest a/b:1.0.0",
+        expected_ref="test-ns/blink:1.0.0",
+        expected_runtime="pynq",
     )
     assert calls == [
         [
@@ -4481,7 +4483,13 @@ def test_verify_manifest_attestation_keyless_args(tmp_path: Path, monkeypatch: p
         certificate_oidc_issuer="https://token.actions.githubusercontent.com",
     )
     _puller_mod._verify_manifest_attestation(
-        tmp_path, _attested_manifest(tmp_path), lambda name: b"b", signer, label="manifest"
+        tmp_path,
+        _attested_manifest(tmp_path),
+        lambda name: b"b",
+        signer,
+        label="manifest",
+        expected_ref="test-ns/blink:1.0.0",
+        expected_runtime="pynq",
     )
     assert calls[0][-4:] == [
         "--certificate-identity",
@@ -4500,6 +4508,8 @@ def test_verify_manifest_attestation_cosign_not_installed(tmp_path: Path, monkey
             lambda name: b"b",
             _puller_mod.AttestationSigner(key="cosign.pub"),
             label="manifest",
+            expected_ref="test-ns/blink:1.0.0",
+            expected_runtime="pynq",
         )
 
 
@@ -4513,6 +4523,8 @@ def test_verify_manifest_attestation_cosign_failure(tmp_path: Path, monkeypatch:
             lambda name: b"b",
             _puller_mod.AttestationSigner(key="cosign.pub"),
             label="manifest",
+            expected_ref="test-ns/blink:1.0.0",
+            expected_runtime="pynq",
         )
 
 
@@ -4531,6 +4543,8 @@ def test_verify_manifest_attestation_timeout(tmp_path: Path, monkeypatch: pytest
             lambda name: b"b",
             _puller_mod.AttestationSigner(key="cosign.pub"),
             label="manifest",
+            expected_ref="test-ns/blink:1.0.0",
+            expected_runtime="pynq",
         )
 
 
@@ -4540,7 +4554,13 @@ def test_verify_manifest_attestation_requires_a_bundle(tmp_path: Path) -> None:
     manifest = parse_platform_manifest(_FakeRegistryClientWithDeps().manifest_bytes.decode())
     with pytest.raises(AttestationError, match="declares no attestation bundle"):
         _puller_mod._verify_manifest_attestation(
-            tmp_path, manifest, lambda name: b"b", _puller_mod.AttestationSigner(key="cosign.pub"), label="manifest"
+            tmp_path,
+            manifest,
+            lambda name: b"b",
+            _puller_mod.AttestationSigner(key="cosign.pub"),
+            label="manifest",
+            expected_ref="test-ns/blink:1.0.0",
+            expected_runtime="pynq",
         )
 
 
@@ -4632,3 +4652,44 @@ def test_pull_rejects_inconsistent_attestation_options(kwargs: dict[str, object]
     with pytest.raises(sdk_api.SDKError) as exc_info:
         sdk_api.pull("test-ns/blink:1.0.0", registry="http://127.0.0.1:9", **kwargs)  # type: ignore[arg-type]
     assert exc_info.value.code == ExitKind.INVALID
+
+
+@pytest.mark.parametrize(
+    ("expected_ref", "expected_runtime"),
+    [("other-ns/old:0.0.1", "pynq"), ("test-ns/blink:0.9.0", "pynq"), ("test-ns/blink:1.0.0", "linux-fpgamgr")],
+)
+def test_verify_manifest_attestation_rejects_a_manifest_for_something_else(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, expected_ref: str, expected_runtime: str
+) -> None:
+    """同じ署名者の別マニフェスト(旧版・別 design)に差し替えられても通さない。"""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(_puller_mod.shutil, "which", lambda _: "/usr/bin/cosign")
+    monkeypatch.setattr(_puller_mod.subprocess, "run", lambda cmd, **_kw: calls.append(cmd) or _cosign_result(0))
+    with pytest.raises(AttestationError, match="expected"):
+        _puller_mod._verify_manifest_attestation(
+            tmp_path,
+            _attested_manifest(tmp_path),
+            lambda name: b"b",
+            _puller_mod.AttestationSigner(key="cosign.pub"),
+            label="manifest",
+            expected_ref=expected_ref,
+            expected_runtime=expected_runtime,
+        )
+    assert calls == []
+
+
+def test_pull_attestation_rejects_no_verify(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """署名はマニフェストだけを保証するので、digest 照合を切った pull では使えない。"""
+    _patch_all_rc(monkeypatch, _FakeAttestedClient)
+    with pytest.raises(sdk_api.SDKError, match="requires digest verification") as exc_info:
+        sdk_api.pull(
+            "test-ns/blink:1.0.0",
+            output=tmp_path,
+            platform="xc7z020/pynq",
+            verify_digests=False,
+            verify_attestation=True,
+            attestation_key="cosign.pub",
+            registry="http://test",
+        )
+    assert exc_info.value.code == ExitKind.INVALID
+    assert not (tmp_path / "design.bit").exists()

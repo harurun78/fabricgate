@@ -686,7 +686,7 @@ attestation:
 | `bundle` | string | manifest.yaml に対する Cosign バンドルのファイル名（アーティファクトと同ディレクトリ、単一のファイル名） |
 | `transparency_log_url` | string | Rekor 互換 transparency log の URL |
 
-> **注意:** FabricGate はバンドルファイルの内容をバリデーションしない。CLI の `--verify-attestation` フラグが cosign CLI を呼び出し、manifest.yaml に対して検証する。サーバーはバンドルファイルを他のアーティファクトと同様にストレージに保存するのみ。
+> **注意:** FabricGate はバンドルファイルの内容をバリデーションしない。CLI の `--verify-attestation` フラグが cosign CLI を呼び出し、manifest.yaml に対して検証する。サーバーはバンドルファイルを他のアーティファクトと同様に保存し、`artifacts/{bundle}` で配信する必要がある（`client-behavior.md` §10.2）。
 
 ## 7. Extensibility
 

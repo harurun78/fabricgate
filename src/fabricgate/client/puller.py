@@ -129,13 +129,23 @@ def _verify_manifest_attestation(
     signer: AttestationSigner,
     *,
     label: str,
+    expected_ref: str,
+    expected_runtime: str,
 ) -> None:
     """Check the cosign bundle that signs ``manifest_dir/manifest.yaml``.
 
     The bundle signs the manifest, and the manifest pins every artifact by
     sha256, so one signature covers the whole platform. Runs before any
     artifact is downloaded so nothing is written for an unsigned manifest.
+
+    The manifest must also name the design and runtime that were requested;
+    otherwise another manifest from the same signer (an older version, or a
+    different design) would pass in its place.
     """
+    if str(manifest.design_ref) != expected_ref or manifest.runtime != expected_runtime:
+        raise AttestationError(
+            f"{label} is for {manifest.design_ref} ({manifest.runtime}), expected {expected_ref} ({expected_runtime})"
+        )
     if manifest.attestation is None:
         raise AttestationError(f"{label} declares no attestation bundle")
     if not shutil.which("cosign"):
@@ -234,6 +244,8 @@ def _resolve_and_download_deps(
                 partial(client.download_artifact, dep_ns, dep_design, dep_version, dep_device, dep_runtime),
                 signer,
                 label=f"dependency manifest {dep_ref}",
+                expected_ref=dep_ref,
+                expected_runtime=dep_runtime,
             )
 
         # Download artifacts
@@ -320,6 +332,8 @@ def _maybe_download_shell(
             partial(client.download_artifact, shell_ns, shell_design, shell_info.version, shell_board, shell_runtime),
             signer,
             label=f"shell manifest {shell_ref}",
+            expected_ref=shell_ref,
+            expected_runtime=shell_runtime,
         )
 
     for artifact in _extract_artifact_refs(manifest):
@@ -370,6 +384,11 @@ def pull_design(
     :class:`RegistryError`, :class:`~fabricgate.client.resolver.ResolutionError`,
     ``OSError``); callers map these to messages / exit codes.
     """
+    if verify_attestation and not verify_digests:
+        # The signature covers the manifest only; artifacts are bound to it by digest.
+        raise AttestationError(
+            "Attestation verification requires digest verification (do not combine with --no-verify)."
+        )
     if verify_attestation and attestation_signer is None:
         raise AttestationError(
             "Attestation verification needs an attestation key, "
@@ -411,6 +430,8 @@ def pull_design(
                 partial(client.download_artifact, namespace, design, version, board_id, runtime),
                 signer,
                 label=f"manifest {namespace}/{design}:{version}",
+                expected_ref=f"{namespace}/{design}:{version}",
+                expected_runtime=runtime,
             )
 
         for artifact in _extract_artifact_refs(manifest):
