@@ -12,6 +12,15 @@ first shipped the change. Changes not yet in a tagged release are listed under
 - Publish (`POST .../versions/{version}`) accepts an optional part `platform:{board_id}/{runtime}:attestation:{bundle}`, and add platform accepts `attestation:{bundle}`: the bundle sent inline (it cannot be pinned by sha256 in the manifest it signs, so it does not use the direct upload). The registry stores it like an inline artifact and serves it from `artifacts/{bundle}`. Without the part, publish behaves as before. `fabricgate push` sends the part when the bundle file exists next to the manifest and warns when it does not.
 - `fabricgate pull --verify-attestation` now verifies each manifest (root, dependencies, shell) against a required signer: `--attestation-key`, or `--certificate-identity` with `--certificate-oidc-issuer`. A manifest without `attestation`, or one whose `design_ref` / `runtime` differs from what was requested, fails verification. `--verify-attestation` cannot be combined with `--no-verify`.
 
+### Removed
+- **BREAKING (Registry API)**: `POST /api/v1/admin/mirror/sync` is removed.
+  The registry drops its periodic "sync" mirror mode (full replication from an
+  upstream registry); the pull-through mirror mode stays. The endpoint was
+  admin-only, no CLI/SDK call used it, and the sync mode it triggered could not
+  replicate anything from a FabricGate upstream. The registry now answers `404`.
+  `GET /api/v1/admin/mirror/sync-log` and `MirrorSyncLogResponse` are unchanged;
+  the log keeps recording pull-through results.
+
 ## [0.4.4] - 2026-10-23
 
 No contract changes.
