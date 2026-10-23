@@ -14,6 +14,7 @@ from fabricgate.cli.commands.build import (
     _resolve_board_id,
     build_cmd,
 )
+from fabricgate.client.publisher import load_design_index
 from fabricgate.models.board_db import BoardDb, BoardEntry
 from fabricgate.sdk.hwh_parser import (
     HwhInfo,
@@ -509,7 +510,7 @@ class TestBuildCmd:
         )
         assert result.exit_code == 0, result.output
         assert (tmp_path / "my-design" / "fabricgate-index.yaml").exists()
-        assert (tmp_path / "my-design" / "zcu104-pynq" / "manifest.yaml").exists()
+        assert (tmp_path / "my-design" / "zcu104" / "pynq" / "manifest.yaml").exists()
 
     def test_exit_1_when_no_hwh(self, tmp_path: Path) -> None:
         runner = CliRunner()
@@ -581,8 +582,11 @@ class TestBuildCmd:
         assert result.exit_code == 0, result.output
         # Files written under custom_output/, not under <design_slug>/
         assert (out / "fabricgate-index.yaml").exists()
-        assert (out / "zcu104-pynq" / "manifest.yaml").exists()
+        assert (out / "zcu104" / "pynq" / "manifest.yaml").exists()
         assert not (tmp_path / "my-design").exists()
+        # The layout is the one push reads: <project>/<platform>/manifest.yaml for every index entry (#65).
+        index, _ = load_design_index(out)
+        assert all((out / str(entry.platform) / "manifest.yaml").exists() for entry in index.platforms)
 
     def test_hwh_option_selects_explicit_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         src = tmp_path / "vivado"

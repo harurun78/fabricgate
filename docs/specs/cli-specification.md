@@ -245,14 +245,15 @@ fabricgate push <directory> [--namespace <ns>] [--yes] [--skip-sha-check] [--art
 my-design/
   fabricgate-index.yaml           # Design Index
   README.md                       # Optional: displayed on registry web UI
-  zcu104-pynq/                    # Platform: zcu104/pynq
-    manifest.yaml                 # Platform Manifest
-    design.bit
-    design.hwh
-  zcu104-linux-fpgamgr/           # Platform: zcu104/linux-fpgamgr
-    manifest.yaml
-    design.bit
-    design.dtbo
+  zcu104/
+    pynq/                         # Platform: zcu104/pynq
+      manifest.yaml               # Platform Manifest
+      design.bit
+      design.hwh
+    linux-fpgamgr/                # Platform: zcu104/linux-fpgamgr
+      manifest.yaml
+      design.bit
+      design.dtbo
 ```
 
 **Behavior:**
@@ -434,9 +435,9 @@ Tags: dma, axi
 
 Generated:
   ./my-design/fabricgate-index.yaml              ✓
-  ./my-design/zcu104-pynq/manifest.yaml          ✓
+  ./my-design/zcu104/pynq/manifest.yaml         ✓
 
-Note: Place bitstream files in ./my-design/zcu104-pynq/ before publishing.
+Note: Place bitstream files in ./my-design/zcu104/pynq/ before publishing.
 Run `fabricgate push ./my-design/` to publish.
 ```
 

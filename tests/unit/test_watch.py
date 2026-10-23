@@ -273,3 +273,33 @@ def test_watch_network_error_exit_code_4(monkeypatch: pytest.MonkeyPatch) -> Non
         sdk_api.watch(design_ref="test-ns/blink", registry="http://test")
 
     assert exc_info.value.code == sdk_api.ExitKind.INFRA
+
+
+# ─────────────────────────────────────────────
+# #70: latest is chosen by semver, not by response order
+# ─────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("since_version", [None, "1.1.0"])
+def test_watch_latest_ignores_the_response_order(monkeypatch: pytest.MonkeyPatch, since_version: str | None) -> None:
+    """The API does not promise an order; ascending versions must still report 1.1.0 (#70)."""
+    _WatchFakeClient._response = _make_design_detail(
+        [_make_version_summary("1.0.0"), _make_version_summary("1.10.0", yanked=True), _make_version_summary("1.1.0")]
+    )
+    _patch(monkeypatch, _WatchFakeClient)
+
+    result = sdk_api.watch(design_ref="test-ns/blink", since_version=since_version, registry="http://test")
+
+    assert result.new_version_found is False
+    assert result.latest_version == "1.1.0"
+
+
+@pytest.mark.parametrize("since_version", ["1.0.0-rc.1", "1.0", "v1.0.0"])
+def test_watch_rejects_a_non_semver_since_version(monkeypatch: pytest.MonkeyPatch, since_version: str) -> None:
+    """--since-version must be X.Y.Z like registry versions (spec §3.8b: invalid → exit 3)."""
+    _WatchFakeClient._response = _make_design_detail([_make_version_summary("1.0.0")])
+    _patch(monkeypatch, _WatchFakeClient)
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.watch(design_ref="test-ns/blink", since_version=since_version, registry="http://test")
+    assert exc_info.value.code == sdk_api.ExitKind.INVALID
