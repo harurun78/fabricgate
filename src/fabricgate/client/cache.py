@@ -12,10 +12,14 @@ Cache layout::
 from __future__ import annotations
 
 import json
+import logging
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fabricgate.models.cli import CacheEntry, CacheIndex
+
+_log = logging.getLogger(__name__)
 
 _DEFAULT_CACHE_DIR = Path.home() / ".fabricgate" / "cache"
 
@@ -25,10 +29,17 @@ def _index_path(cache_dir: Path) -> Path:
 
 
 def load_index(cache_dir: Path | None = None) -> CacheIndex:
-    """Load or initialise the cache index."""
+    """Load or initialise the cache index.
+
+    The index only records what was pulled, so an unreadable one is replaced by
+    an empty index (with a warning) instead of failing the command.
+    """
     p = _index_path(cache_dir or _DEFAULT_CACHE_DIR)
     if p.exists():
-        return CacheIndex.model_validate_json(p.read_bytes())
+        try:
+            return CacheIndex.model_validate_json(p.read_bytes())
+        except ValueError as exc:
+            _log.warning("ignoring unreadable cache index %s: %s", p, exc)
     return CacheIndex()
 
 
@@ -36,10 +47,14 @@ def save_index(index: CacheIndex, cache_dir: Path | None = None) -> None:
     """Persist the cache index."""
     p = _index_path(cache_dir or _DEFAULT_CACHE_DIR)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(
-        json.dumps(index.model_dump(mode="json"), indent=2),
-        encoding="utf-8",
-    )
+    # Write then rename, so an interrupted pull never leaves a half-written index.
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(index.model_dump(mode="json"), indent=2), encoding="utf-8")
+        os.replace(tmp, p)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def lookup(

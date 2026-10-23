@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from fabricgate.client import auth
 from fabricgate.client.registry_client import RegistryClient, RegistryError
 from fabricgate.models.api.responses import DesignSummary
 from fabricgate.models.cli import DesignInfo, SearchResult
@@ -12,6 +11,7 @@ from fabricgate.sdk._helpers import (
     _default_namespace_from_scopes,
     _parse_design_ref,
     _registry_error_kind,
+    _stored_credentials,
     _validate_namespace_name,
 )
 
@@ -65,7 +65,8 @@ def list_remote(
     Without *namespace* the caller's own namespace is derived from the stored
     credentials; if none are stored the failure kind is ``PERMISSION``.
     """
-    creds = auth.load_credentials(registry)
+    # An explicit token needs no stored credentials, so a damaged store does not get in its way.
+    creds = None if token else _stored_credentials(registry)
     effective_token = token or (creds.token if creds is not None else None)
 
     ns = namespace

@@ -819,6 +819,29 @@ def test_collect_artifacts_rejects_dot_dot_bundle(tmp_path: Path) -> None:
         collect_artifacts(tmp_path, idx)
 
 
+def test_cache_ignores_an_unreadable_index(tmp_path: Path) -> None:
+    """#69: a half-written index.json no longer breaks pull / list."""
+    from fabricgate.client import cache
+
+    (tmp_path / "index.json").write_text('{"entries": [')
+    assert cache.load_index(tmp_path).entries == []
+    cache.save_index(cache.load_index(tmp_path), tmp_path)
+    assert cache.load_index(tmp_path).entries == []
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["index.json"]
+
+
+def test_cache_save_leaves_no_temp_file_on_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fabricgate.client import cache
+
+    def _fail(*_a: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(cache.os, "replace", _fail)
+    with pytest.raises(OSError, match="disk full"):
+        cache.save_index(cache.load_index(tmp_path), tmp_path)
+    assert list(tmp_path.iterdir()) == []
+
+
 @pytest.mark.parametrize(
     ("platforms", "promotions"),
     [

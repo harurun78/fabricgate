@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+import yaml
+from pydantic import ValidationError
 
 from fabricgate._version import __version__
 from fabricgate.cli.commands.build import build_cmd
@@ -24,7 +26,9 @@ from fabricgate.cli.commands.verify import verify_cmd
 from fabricgate.cli.commands.watch import watch_cmd
 from fabricgate.cli.commands.webhook import webhook_group
 from fabricgate.cli.commands.yank import yank_cmd
+from fabricgate.cli.exit_codes import EXIT_CODE
 from fabricgate.client.config import load_config
+from fabricgate.client.errors import FailureKind
 
 
 @click.group()
@@ -50,7 +54,11 @@ def main(
     json_output: bool,
 ) -> None:
     """FabricGate — FPGA design registry CLI."""
-    config = load_config()
+    try:
+        config = load_config()
+    except (ValidationError, yaml.YAMLError, OSError) as exc:
+        click.echo(f"Error: invalid configuration (~/.fabricgate/config.yaml or FG_* variables): {exc}", err=True)
+        raise click.exceptions.Exit(EXIT_CODE[FailureKind.INVALID]) from exc
     ctx.obj = {
         "registry": registry or config.registry,
         "platform": platform or config.platform,

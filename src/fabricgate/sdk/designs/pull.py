@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+from pydantic import ValidationError
+
 from fabricgate.client import auth, puller
 from fabricgate.client.puller import (
     AttestationError,
@@ -131,7 +134,12 @@ def verify(directory: str | Path) -> VerificationResult:
     """Verify artifact digests in a pulled design directory."""
     target_dir = Path(directory)
     manifest_path = _find_manifest_path(target_dir)
-    manifest = parse_platform_manifest(manifest_path.read_text(encoding="utf-8"))
+    try:
+        manifest = parse_platform_manifest(manifest_path.read_text(encoding="utf-8"))
+    except (ValidationError, yaml.YAMLError, UnicodeDecodeError) as exc:
+        raise SDKError(f"Invalid manifest {manifest_path}: {exc}", code=ExitKind.INVALID) from exc
+    except OSError as exc:
+        raise SDKError(f"Cannot read {manifest_path}: {exc}", code=ExitKind.INFRA) from exc
 
     results: list[VerificationItem] = []
     for artifact in _extract_artifact_refs(manifest):

@@ -4139,17 +4139,65 @@ def test_push_publish_error_from_index_load(monkeypatch: pytest.MonkeyPatch, tmp
         sdk_api.push(tmp_path, token="tok", registry="http://test")
 
 
-def test_push_validation_error_from_index_load(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    class ValidationError(Exception):
-        pass
-
-    monkeypatch.setattr(
-        _sdk_designs_push_mod,
-        "load_design_index",
-        lambda *_a, **_kw: (_ for _ in ()).throw(ValidationError("invalid index")),
-    )
-    with pytest.raises(sdk_api.SDKError, match="Invalid design index"):
+def test_push_validation_error_from_index_load(tmp_path: Path) -> None:
+    (tmp_path / "fabricgate-index.yaml").write_text("schema: fabricgate-index/v1\nname: not-a-ref\n")
+    with pytest.raises(sdk_api.SDKError, match="Invalid design index") as exc_info:
         sdk_api.push(tmp_path, token="tok", registry="http://test")
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+@pytest.mark.parametrize("index_text", ["platforms: [", "- just\n- a list\n"])
+def test_push_reports_a_broken_index_yaml(tmp_path: Path, index_text: str) -> None:
+    """#69: a YAML syntax error or a non-mapping index is INVALID, not a traceback."""
+    (tmp_path / "fabricgate-index.yaml").write_text(index_text)
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.push(tmp_path, token="tok", registry="http://test")
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_push_reports_a_broken_platform_manifest(tmp_path: Path) -> None:
+    _write_push_project(tmp_path)
+    (tmp_path / "xc7z020" / "pynq" / "manifest.yaml").write_text("schema: fabricgate-platform/v1\nruntime: [")
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.push(tmp_path, token="tok", registry="http://test")
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+@pytest.mark.parametrize("manifest_text", ["schema: nope\n", "runtime: ["])
+def test_verify_reports_a_broken_manifest(tmp_path: Path, manifest_text: str) -> None:
+    (tmp_path / "manifest.yaml").write_text(manifest_text)
+    with pytest.raises(sdk_api.SDKError, match="Invalid manifest") as exc_info:
+        sdk_api.verify(tmp_path)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_corrupt_credentials_file_is_invalid(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """#69: a damaged credentials.json tells the user what to do instead of a JSONDecodeError."""
+    from fabricgate.client import auth as _auth
+
+    monkeypatch.undo()  # use the real load_credentials instead of the autouse stub; the store is tmp_path
+    p = tmp_path / "credentials.json"
+    p.write_text("{")
+    monkeypatch.setattr(_auth, "_DEFAULT_CRED_PATH", p)
+    monkeypatch.setattr(_auth, "_try_keyring_load", lambda _registry: None)
+    monkeypatch.delenv("FABRICGATE_TOKEN", raising=False)
+    with pytest.raises(sdk_api.SDKError, match="Fix or delete") as exc_info:
+        sdk_api.quota(namespace="alice", registry="http://test")
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_explicit_token_skips_a_corrupt_credentials_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """search / quota with token= do not read the store, so a damaged one does not block them."""
+    from fabricgate.client import auth as _auth
+
+    monkeypatch.undo()  # real load_credentials; the store is tmp_path
+    p = tmp_path / "credentials.json"
+    p.write_text("{")
+    monkeypatch.setattr(_auth, "_DEFAULT_CRED_PATH", p)
+    monkeypatch.setattr(_auth, "_try_keyring_load", lambda _registry: None)
+    monkeypatch.delenv("FABRICGATE_TOKEN", raising=False)
+    _patch_all_rc(monkeypatch, _FakePushRegistryClient)
+    assert sdk_api.quota(namespace="alice", token="tok", registry="http://test").namespace == "alice"
 
 
 def test_push_reraises_unexpected_index_load_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

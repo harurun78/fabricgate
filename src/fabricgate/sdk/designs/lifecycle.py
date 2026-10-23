@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from fabricgate.client import auth
 from fabricgate.client.registry_client import RegistryClient, RegistryError
 from fabricgate.models.cli import DeprecateResult, YankResult
 from fabricgate.sdk._helpers import (
@@ -11,6 +10,7 @@ from fabricgate.sdk._helpers import (
     _parse_design_ref,
     _parse_design_ref_optional_version,
     _registry_error_kind,
+    _stored_credentials,
     _validate_semver,
 )
 
@@ -40,7 +40,7 @@ def yank(
     list[YankResult]
         Results for each yanked version.
     """
-    creds = auth.load_credentials(registry)
+    creds = _stored_credentials(registry)
     if creds is None:
         raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
 
@@ -94,7 +94,7 @@ def deprecate(
     registry: str = "https://registry.fabricgate.dev/api/v1",
 ) -> list[DeprecateResult]:
     """Set one or more versions to deprecated state."""
-    creds = auth.load_credentials(registry)
+    creds = _stored_credentials(registry)
     if creds is None:
         raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
 
@@ -153,7 +153,7 @@ def undeprecate(
     registry: str = "https://registry.fabricgate.dev/api/v1",
 ) -> list[DeprecateResult]:
     """Clear deprecated state for one or more versions."""
-    creds = auth.load_credentials(registry)
+    creds = _stored_credentials(registry)
     if creds is None:
         raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
 

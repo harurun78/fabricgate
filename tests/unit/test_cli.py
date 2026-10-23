@@ -3247,3 +3247,43 @@ def test_yank_uses_fabricgate_token_env_and_never_prints_it(monkeypatch) -> None
     result = runner.invoke(main, ["--json", "yank", "test-ns/blink:1.0.0"])
     assert result.exit_code == 2
     assert secret not in result.output
+
+
+@pytest.mark.parametrize("config_text", ["registry_url: https://x\n", "registry: [\n"])
+def test_invalid_config_is_reported_without_traceback(monkeypatch, tmp_path, config_text: str) -> None:
+    """#69: an unknown key or a YAML error in config.yaml is one error line and exit 3."""
+    import fabricgate.client.config as config_mod
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(config_text)
+    monkeypatch.setattr(config_mod, "_DEFAULT_CONFIG_FILE", cfg)
+    result = CliRunner().invoke(main, ["list"])
+    assert result.exit_code == 3
+    assert "invalid configuration" in result.output + result.stderr_bytes.decode()
+    assert "Traceback" not in result.output
+
+
+def test_invalid_fg_platform_is_reported_without_traceback(monkeypatch, tmp_path) -> None:
+    import fabricgate.client.config as config_mod
+
+    monkeypatch.setattr(config_mod, "_DEFAULT_CONFIG_FILE", tmp_path / "none.yaml")
+    monkeypatch.setenv("FG_PLATFORM", "ZCU104/pynq")
+    result = CliRunner().invoke(main, ["list"])
+    assert result.exit_code == 3
+
+
+def test_diff_handles_an_empty_field_list(monkeypatch) -> None:
+    """#69: a platform entry with fields=[] does not crash max()."""
+    from fabricgate.models.api.responses import VersionDiffPlatform, VersionDiffSummary
+
+    monkeypatch.setattr(
+        "fabricgate.cli.commands.diff.sdk_api.diff",
+        lambda *_a, **_kw: VersionDiffResponse(
+            base="1.0.0",
+            head="1.1.0",
+            summary=VersionDiffSummary(platforms_changed=["zcu104/pynq"]),
+            diff=[VersionDiffPlatform(platform="zcu104/pynq", fields=[])],
+        ),
+    )
+    result = CliRunner().invoke(main, ["diff", "a/b:1.1.0", "--base", "1.0.0"])
+    assert result.exit_code == 0, result.output

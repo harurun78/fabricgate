@@ -6,11 +6,19 @@ import hashlib
 from collections.abc import Mapping
 from pathlib import Path
 
-from fabricgate.client import auth
+import yaml
+from pydantic import ValidationError
+
 from fabricgate.client.publisher import PublishError, collect_artifacts, load_design_index, promote_platforms
 from fabricgate.client.registry_client import RegistryClient, RegistryError
 from fabricgate.models.cli import PushResult
-from fabricgate.sdk._helpers import ExitKind, SDKError, _quota_warning_message, _registry_error_kind
+from fabricgate.sdk._helpers import (
+    ExitKind,
+    SDKError,
+    _quota_warning_message,
+    _registry_error_kind,
+    _stored_credentials,
+)
 
 
 def _upload_artifacts_directly(
@@ -96,10 +104,10 @@ def push(
         index, _index_path = load_design_index(project_dir)
     except PublishError as exc:
         raise SDKError(str(exc), code=ExitKind.INVALID) from exc
-    except Exception as exc:
-        if type(exc).__name__ == "ValidationError":
-            raise SDKError(f"Invalid design index: {exc}", code=ExitKind.INVALID) from exc
-        raise
+    except (ValidationError, yaml.YAMLError) as exc:
+        raise SDKError(f"Invalid design index: {exc}", code=ExitKind.INVALID) from exc
+    except OSError as exc:
+        raise SDKError(f"Cannot read the design index: {exc}", code=ExitKind.INFRA) from exc
 
     # Parse namespace / design from the index name (e.g. "myns/blink")
     name_parts = str(index.name).split("/", 1)
@@ -129,11 +137,15 @@ def push(
             files = promote_platforms(files, promotions)
     except PublishError as exc:
         raise SDKError(str(exc), code=ExitKind.INVALID) from exc
+    except (ValidationError, yaml.YAMLError) as exc:
+        raise SDKError(f"Invalid platform manifest: {exc}", code=ExitKind.INVALID) from exc
+    except OSError as exc:
+        raise SDKError(f"Cannot read the project files: {exc}", code=ExitKind.INFRA) from exc
 
     # Resolve auth token
     effective_token = token
     if effective_token is None:
-        creds = auth.load_credentials(registry)
+        creds = _stored_credentials(registry)
         if creds is not None:
             effective_token = creds.token
 
