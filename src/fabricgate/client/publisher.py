@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -182,6 +183,49 @@ def collect_artifacts(
         raise PublishError(msg)
 
     return files
+
+
+def promote_platforms(files: Mapping[str, bytes], promotions: Mapping[str, str]) -> dict[str, bytes]:
+    """Rename platforms in the parts built by :func:`collect_artifacts`.
+
+    *promotions* maps an old platform ID to the new one (e.g.
+    ``"custom-xczu7ev-ffvc1156/pynq"`` → ``"generic-xczu7ev/pynq"``). The part
+    keys, the manifest ``board`` and the index entry (platform and digest) all
+    move together, so the registry sees one consistent platform. The files on
+    disk are not touched.
+
+    A manifest with an attestation cannot be promoted: rewriting ``board``
+    changes the bytes its signature covers.
+    """
+    index = yaml.safe_load(files["index"])
+    promoted: dict[str, bytes] = {}
+    for key, data in files.items():
+        if key == "index" or not key.startswith("platform:"):
+            promoted[key] = data
+            continue
+        # Platform IDs contain "/" but never ":", so the first ":" ends the ID.
+        platform_id, part = key.removeprefix("platform:").split(":", 1)
+        new_id = promotions.get(platform_id)
+        if new_id is None:
+            promoted[key] = data
+            continue
+        if part == "manifest":
+            manifest = yaml.safe_load(data)
+            if manifest.get("attestation"):
+                msg = (
+                    f"Cannot promote {platform_id}: its manifest is signed (attestation) and promotion "
+                    "rewrites it. Promote before signing, or push without promotion."
+                )
+                raise PublishError(msg)
+            manifest["board"] = new_id.split("/", 1)[0]
+            data = yaml.safe_dump(manifest, sort_keys=False).encode()
+            for entry in index["platforms"]:
+                if entry["platform"] == platform_id:
+                    entry["platform"] = new_id
+                    entry["digest"] = f"sha256:{hashlib.sha256(data).hexdigest()}"
+        promoted[f"platform:{new_id}:{part}"] = data
+    promoted["index"] = yaml.safe_dump(index, sort_keys=False).encode()
+    return promoted
 
 
 def _extract_artifact_refs(manifest: PlatformManifest) -> list[Any]:

@@ -3556,20 +3556,51 @@ def _write_push_project_custom_board(root: Path) -> None:
     (root / "fabricgate-index.yaml").write_text(chr(10).join(index_lines))
 
 
-def test_push_board_override_replaces_custom_prefix(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_push_board_override_promotes_the_collected_platform(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Files come from the custom-* directory; every part names the generic-* platform (#64)."""
+    import yaml as _yaml
+
+    captured: dict[str, object] = {}
+
+    class _RecordingClient(_FakePushRegistryClient):
+        def publish_version(self, namespace, design, version, files):
+            captured["files"] = dict(files)
+            return super().publish_version(namespace, design, version, files)
+
     _write_push_project_custom_board(tmp_path)
-    captured: dict[str, str] = {}
-
-    def _fake_collect_artifacts(_project_dir, index, **_kwargs):
-        captured["platform"] = str(index.platforms[0].platform)
-        return {"index": b"ok"}
-
     monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
-    monkeypatch.setattr(_sdk_designs_push_mod, "collect_artifacts", _fake_collect_artifacts)
-    _patch_all_rc(monkeypatch, _FakePushRegistryClient)
+    _patch_all_rc(monkeypatch, _RecordingClient)
     result = sdk_api.push(tmp_path, token="tok", board_override="generic-xczu7ev", registry="http://test")
     assert result.name == "test-ns/blink"
-    assert captured["platform"] == "generic-xczu7ev/pynq"
+
+    files = captured["files"]
+    assert not [key for key in files if "custom-xczu7ev" in key]
+    manifest = files["platform:generic-xczu7ev/pynq:manifest"]
+    assert _yaml.safe_load(manifest)["board"] == "generic-xczu7ev"
+    (entry,) = _yaml.safe_load(files["index"])["platforms"]
+    assert entry["platform"] == "generic-xczu7ev/pynq"
+    assert entry["digest"] == f"sha256:{hashlib.sha256(manifest).hexdigest()}"
+    # The local files are left as they were.
+    assert "board: custom-xczu7ev" in (tmp_path / "custom-xczu7ev" / "pynq" / "manifest.yaml").read_text()
+
+
+def test_push_board_override_refuses_a_signed_manifest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _write_push_project_custom_board(tmp_path)
+    manifest_path = tmp_path / "custom-xczu7ev" / "pynq" / "manifest.yaml"
+    manifest_path.write_text(
+        manifest_path.read_text()
+        + "\nattestation:\n  bundle: cosign.bundle\n  transparency_log_url: https://rekor.sigstore.dev\n"
+    )
+    (manifest_path.parent / "cosign.bundle").write_bytes(b"bundle")
+    index_path = tmp_path / "fabricgate-index.yaml"
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    index_path.write_text(index_path.read_text().rsplit("digest: ", 1)[0] + f"digest: sha256:{digest}")
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+    _patch_all_rc(monkeypatch, _FakePushRegistryClient)
+
+    with pytest.raises(sdk_api.SDKError, match="Promote before signing") as exc_info:
+        sdk_api.push(tmp_path, token="tok", board_override="generic-xczu7ev", registry="http://test")
+    assert exc_info.value.code == ExitKind.INVALID
 
 
 def test_push_registry_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
