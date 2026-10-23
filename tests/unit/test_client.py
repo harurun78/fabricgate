@@ -696,3 +696,23 @@ def test_collect_artifacts_url_rejects_placeholder_sha256(tmp_path: Path) -> Non
     idx, _ = load_design_index(tmp_path)
     with pytest.raises(PublishError, match="placeholder"):
         collect_artifacts(tmp_path, idx, artifact_urls={"design.bit": _BIT_URL})
+
+
+@pytest.mark.parametrize("bad_name", ["../../../secret.txt", "/etc/hostname", "sub/design.bit", ""])
+def test_collect_artifacts_rejects_unsafe_filename(tmp_path: Path, bad_name: str) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (tmp_path / "secret.txt").write_text("SECRET")
+    TestPublisher()._write_project(project)
+    manifest_path = project / "xc7z020" / "pynq" / "manifest.yaml"
+    data = yaml.safe_load(manifest_path.read_text())
+    # A placeholder sha256 skips the digest check, so only the name check can stop the read.
+    data["artifacts"]["hwh"] = {"file": bad_name, "sha256": "0" * 64}
+    manifest_path.write_text(yaml.safe_dump(data))
+    idx_path = project / "fabricgate-index.yaml"
+    idx_data = yaml.safe_load(idx_path.read_text())
+    idx_data["platforms"][0]["digest"] = f"sha256:{hashlib.sha256(manifest_path.read_bytes()).hexdigest()}"
+    idx_path.write_text(yaml.safe_dump(idx_data))
+    idx, _ = load_design_index(project)
+    with pytest.raises(PublishError, match="Invalid artifact filename"):
+        collect_artifacts(project, idx)

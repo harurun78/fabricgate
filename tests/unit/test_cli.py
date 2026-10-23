@@ -2347,6 +2347,22 @@ def test_verify_json_output(monkeypatch, tmp_path) -> None:
     assert data["artifacts"][0]["verified"] is True
 
 
+def test_verify_json_failure_uses_exit_code_3(monkeypatch, tmp_path) -> None:
+    def _fake_verify(*_args, **_kwargs):
+        return VerificationResult(
+            design_ref="ns/blink:1.0.0",
+            platform="xc7z020/pynq",
+            directory=str(tmp_path),
+            artifacts=[VerificationItem(file="design.bit", sha256="abc123", verified=False)],
+        )
+
+    monkeypatch.setattr("fabricgate.cli.commands.verify.sdk_api.verify", _fake_verify)
+    runner = CliRunner()
+    result = runner.invoke(main, ["--json", "verify", str(tmp_path)])
+    assert result.exit_code == 3
+    assert json.loads(result.output)["artifacts"][0]["verified"] is False
+
+
 def test_verify_success(monkeypatch, tmp_path) -> None:
     def _fake_verify(*_args, **_kwargs):
         return VerificationResult(

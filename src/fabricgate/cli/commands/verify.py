@@ -24,6 +24,8 @@ def verify_cmd(obj: dict[str, object], directory: Path) -> None:
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
+        if not all(artifact.verified for artifact in result.artifacts):
+            raise click.exceptions.Exit(3)
         return
 
     click.echo(f"Verifying {result.design_ref} ({result.platform}) ...")

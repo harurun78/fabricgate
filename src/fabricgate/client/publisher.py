@@ -26,6 +26,12 @@ def _is_placeholder_sha256(sha256: str) -> bool:
     return len(sha256) == 64 and len(set(sha256)) == 1
 
 
+def _is_single_filename(name: str) -> bool:
+    """Return True if *name* is one non-empty path segment (no absolute path, ``..`` or ``/``)."""
+    parts = Path(name).parts
+    return bool(name) and not Path(name).is_absolute() and ".." not in parts and len(parts) == 1
+
+
 class PublishError(Exception):
     """Raised when a push package cannot be assembled."""
 
@@ -117,6 +123,11 @@ def collect_artifacts(
         # Collect artifact files from the manifest
         artifact_dir = manifest_path.parent
         for ref in _extract_artifact_refs(manifest):
+            # Checked before any read: a name that escapes the manifest directory
+            # would otherwise upload an arbitrary local file.
+            if not _is_single_filename(ref.file):
+                msg = f"Invalid artifact filename in {manifest_rel}: {ref.file!r}"
+                raise PublishError(msg)
             artifact_path = artifact_dir / ref.file
             url = artifact_urls.get(ref.file)
             if url is None and not artifact_path.exists():

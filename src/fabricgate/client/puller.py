@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from fabricgate.client import cache
-from fabricgate.client.publisher import _extract_artifact_refs
+from fabricgate.client.publisher import _extract_artifact_refs, _is_single_filename
 from fabricgate.client.registry_client import RegistryClientProtocol, RegistryError
 from fabricgate.client.resolver import resolve_platform_detailed
 from fabricgate.client.validator import verify_artifact
@@ -74,15 +74,9 @@ def _validate_artifact_filename(artifact_name: str, *, context: str) -> Path:
 
     Rejects empty, absolute, traversal, or multi-segment names.
     """
-    artifact_path_obj = Path(artifact_name)
-    if (
-        not artifact_name
-        or artifact_path_obj.is_absolute()
-        or ".." in artifact_path_obj.parts
-        or len(artifact_path_obj.parts) != 1
-    ):
+    if not _is_single_filename(artifact_name):
         raise IntegrityError(f"Invalid artifact filename in {context}: {artifact_name!r}")
-    return artifact_path_obj
+    return Path(artifact_name)
 
 
 def _resolve_and_download_deps(
