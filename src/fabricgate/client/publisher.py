@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 import yaml
 
-from fabricgate.client.validator import sha256_digest
+from fabricgate.client.validator import artifact_refs, is_single_filename, sha256_digest
 from fabricgate.models.design_index import DesignIndex
 from fabricgate.models.platform_manifest import PlatformManifest, parse_platform_manifest
 
@@ -27,12 +27,6 @@ def _is_placeholder_sha256(sha256: str) -> bool:
     return len(sha256) == 64 and len(set(sha256)) == 1
 
 
-def _is_single_filename(name: str) -> bool:
-    """Return True if *name* is one non-empty path segment (no absolute path, ``..`` or ``/``)."""
-    parts = Path(name).parts
-    return bool(name) and not Path(name).is_absolute() and ".." not in parts and len(parts) == 1
-
-
 class PublishError(Exception):
     """Raised when a push package cannot be assembled."""
 
@@ -46,18 +40,24 @@ def _read_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+def _find_index_path(project_dir: Path) -> Path | None:
+    for candidate in ("fabricgate-index.yaml", "fabricgate-index.yml"):
+        p = project_dir / candidate
+        if p.exists():
+            return p
+    return None
+
+
 def load_design_index(project_dir: Path) -> tuple[DesignIndex, Path]:
     """Find and parse the Design Index in *project_dir*.
 
     Returns (parsed_index, index_path).
     """
-    for candidate in ("fabricgate-index.yaml", "fabricgate-index.yml"):
-        p = project_dir / candidate
-        if p.exists():
-            data = _read_yaml(p)
-            return DesignIndex.model_validate(data), p
-    msg = f"No fabricgate-index.yaml found in {project_dir}"
-    raise PublishError(msg)
+    p = _find_index_path(project_dir)
+    if p is None:
+        msg = f"No fabricgate-index.yaml found in {project_dir}"
+        raise PublishError(msg)
+    return DesignIndex.model_validate(_read_yaml(p)), p
 
 
 def load_platform_manifest(manifest_path: Path) -> PlatformManifest:
@@ -95,12 +95,10 @@ def collect_artifacts(
             raise PublishError(msg)
     unmatched_urls = set(artifact_urls)
 
-    # Include the design index itself
-    for candidate in ("fabricgate-index.yaml", "fabricgate-index.yml"):
-        p = project_dir / candidate
-        if p.exists():
-            files["index"] = p.read_bytes()
-            break
+    # The file's own bytes, not a re-serialized *index*: promote_platforms edits these.
+    index_path = _find_index_path(project_dir)
+    if index_path is not None:
+        files["index"] = index_path.read_bytes()
 
     for entry in index.platforms:
         platform_key = entry.platform  # e.g. "xc7z020/pynq"
@@ -123,10 +121,10 @@ def collect_artifacts(
 
         # Collect artifact files from the manifest
         artifact_dir = manifest_path.parent
-        for ref in _extract_artifact_refs(manifest):
+        for ref in artifact_refs(manifest):
             # Checked before any read: a name that escapes the manifest directory
             # would otherwise upload an arbitrary local file.
-            if not _is_single_filename(ref.file):
+            if not is_single_filename(ref.file):
                 msg = f"Invalid artifact filename in {manifest_rel}: {ref.file!r}"
                 raise PublishError(msg)
             artifact_path = artifact_dir / ref.file
@@ -165,7 +163,7 @@ def collect_artifacts(
         # registry serves it from artifacts/{bundle}.
         if manifest.attestation is not None:
             bundle = manifest.attestation.bundle
-            if not _is_single_filename(bundle):
+            if not is_single_filename(bundle):
                 msg = f"Invalid attestation bundle filename in {manifest_rel}: {bundle!r}"
                 raise PublishError(msg)
             bundle_path = artifact_dir / bundle
@@ -233,23 +231,3 @@ def promote_platforms(files: Mapping[str, bytes], promotions: Mapping[str, str])
         promoted[f"platform:{new_id}:{part}"] = data
     promoted["index"] = yaml.safe_dump(index, sort_keys=False).encode()
     return promoted
-
-
-def _extract_artifact_refs(manifest: PlatformManifest) -> list[Any]:
-    """Extract ArtifactRef objects from any manifest variant."""
-    refs: list[Any] = []
-    artifacts = getattr(manifest, "artifacts", None)
-    if artifacts is None:  # pragma: no cover
-        return refs  # pragma: no cover
-    # Iterate over all fields of the artifacts model
-    for field_name in type(artifacts).model_fields:
-        value = getattr(artifacts, field_name, None)
-        if value is None:
-            continue
-        if isinstance(value, list):
-            for item in value:
-                if hasattr(item, "file"):
-                    refs.append(item)
-        elif hasattr(value, "file"):
-            refs.append(value)
-    return refs

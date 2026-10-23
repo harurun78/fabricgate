@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fabricgate.client.registry_client import RegistryClient, RegistryError
+from fabricgate.client.registry_client import RegistryClient
 from fabricgate.models.api.responses import DesignSummary
 from fabricgate.models.cli import DesignInfo, SearchResult
 from fabricgate.sdk._helpers import (
@@ -10,7 +10,7 @@ from fabricgate.sdk._helpers import (
     SDKError,
     _default_namespace_from_scopes,
     _parse_design_ref,
-    _registry_error_kind,
+    _registry_errors,
     _stored_credentials,
     _validate_namespace_name,
 )
@@ -30,18 +30,15 @@ def search(
     token: str | None = None,
 ) -> list[SearchResult]:
     """Search for designs in the registry."""
-    try:
-        with RegistryClient(base_url=registry, token=token) as client:
-            response = client.search_designs(
-                q=query,
-                platform=platform,
-                board=board,
-                device_family=device_family,
-                runtime=runtime,
-                tag=tag,
-            )
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        response = client.search_designs(
+            q=query,
+            platform=platform,
+            board=board,
+            device_family=device_family,
+            runtime=runtime,
+            tag=tag,
+        )
 
     return [
         SearchResult(
@@ -83,17 +80,14 @@ def list_remote(
     _validate_namespace_name(ns)
 
     designs: list[DesignSummary] = []
-    try:
-        with RegistryClient(base_url=registry, token=effective_token) as client:
-            page = 1
-            while True:
-                response = client.search_designs(namespace=ns, page=page, per_page=_LIST_PAGE_SIZE)
-                designs.extend(response.designs)
-                if not response.designs or len(designs) >= response.total:
-                    break
-                page += 1
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=effective_token) as client:
+        page = 1
+        while True:
+            response = client.search_designs(namespace=ns, page=page, per_page=_LIST_PAGE_SIZE)
+            designs.extend(response.designs)
+            if not response.designs or len(designs) >= response.total:
+                break
+            page += 1
     return designs
 
 
@@ -105,11 +99,8 @@ def info(
 ) -> DesignInfo:
     """Fetch version-specific metadata for a design reference."""
     namespace, design, version = _parse_design_ref(design_ref)
-    try:
-        with RegistryClient(base_url=registry, token=token) as client:
-            response = client.get_version(namespace, design, version)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        response = client.get_version(namespace, design, version)
 
     return DesignInfo(
         name=response.name,

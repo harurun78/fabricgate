@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from fabricgate.client.registry_client import RegistryClient, RegistryError
+from fabricgate.client.registry_client import RegistryClient
 from fabricgate.models.cli import WatchResult
 from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
     _parse_design_ref_optional_version,
-    _registry_error_kind,
+    _registry_errors,
     _validate_semver,
 )
 
@@ -53,10 +53,8 @@ def watch(
         _validate_semver(since_version)
 
     try:
-        with RegistryClient(base_url=registry, token=token) as client:
+        with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
             response = client.get_design(namespace, design)
-    except RegistryError as exc:
-        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
     except OSError as exc:
         raise SDKError(f"Network error: {exc}", code=ExitKind.INFRA) from exc
 

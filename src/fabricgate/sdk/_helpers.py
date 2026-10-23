@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Protocol, runtime_checkable
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -14,7 +15,6 @@ from fabricgate.client.registry_client import RegistryError
 from fabricgate.models.api.responses import QuotaResponse
 from fabricgate.models.cli import Credentials, StatsSeriesItem
 from fabricgate.models.common import DesignName, NamespaceName, SemVer
-from fabricgate.models.platform_manifest import PlatformManifest
 
 # Backward-compatible alias: ExitKind is public SDK API (fg.SDKError.code).
 # New code should use FailureKind. Targeted for removal at 1.0.
@@ -23,14 +23,6 @@ ExitKind = FailureKind
 _NAMESPACE_NAME_ADAPTER: TypeAdapter[str] = TypeAdapter(NamespaceName)
 _DESIGN_NAME_ADAPTER: TypeAdapter[str] = TypeAdapter(DesignName)
 _SEMVER_ADAPTER: TypeAdapter[str] = TypeAdapter(SemVer)
-
-
-@runtime_checkable
-class _ArtifactRef(Protocol):
-    """Protocol for artifact entries returned by ``_extract_artifact_refs``."""
-
-    file: str
-    sha256: str
 
 
 class SDKError(Exception):
@@ -56,6 +48,25 @@ def _stored_credentials(registry: str) -> Credentials | None:
             "Fix or delete ~/.fabricgate/credentials.json, then run 'fabricgate login'.",
             code=ExitKind.INVALID,
         ) from exc
+
+
+def _require_token(registry: str, token: str | None = None) -> str:
+    """Return *token*, else the stored one; with neither, the caller is not logged in."""
+    if token is None:
+        creds = _stored_credentials(registry)
+        token = creds.token if creds is not None else None
+    if token is None:
+        raise SDKError("Not authenticated. Run 'fabricgate login' first.", code=ExitKind.PERMISSION)
+    return token
+
+
+@contextmanager
+def _registry_errors() -> Iterator[None]:
+    """Re-raise a RegistryError from the block as an SDKError of the same kind."""
+    try:
+        yield
+    except RegistryError as exc:
+        raise SDKError(str(exc), code=_registry_error_kind(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -160,26 +171,6 @@ def _find_manifest_path(directory: Path) -> Path:
         if path.exists():
             return path
     raise SDKError(f"Manifest not found in {directory}", code=ExitKind.INVALID)
-
-
-def _extract_artifact_refs(manifest: PlatformManifest) -> list[_ArtifactRef]:
-    refs: list[_ArtifactRef] = []
-    artifacts = getattr(manifest, "artifacts", None)
-    if artifacts is None:
-        return refs
-
-    for field_name in type(artifacts).model_fields:
-        value = getattr(artifacts, field_name, None)
-        if value is None:
-            continue
-        if isinstance(value, list):
-            for item in value:
-                if hasattr(item, "file"):
-                    refs.append(item)
-        elif hasattr(value, "file"):
-            refs.append(value)
-
-    return refs
 
 
 # ---------------------------------------------------------------------------
