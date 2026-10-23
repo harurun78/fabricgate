@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -189,6 +190,52 @@ class TestAuth:
         save_credentials(self._cred(), p)
         # 0600 = owner-only read/write
         assert p.stat().st_mode & 0o777 == 0o600
+
+    def test_file_never_readable_by_others_while_writing(
+        self, tmp_path: Path, file_credentials: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """既存の 0644 ファイルでも、トークンを書き込む時点で 0600 になっている。"""
+        import os
+
+        p = tmp_path / "creds.json"
+        p.write_text("{}", encoding="utf-8")
+        p.chmod(0o644)
+        modes: list[int] = []
+        real_write = Path.write_text
+
+        def _write_text(self: Path, *args: object, **kwargs: object) -> int:
+            modes.append(self.stat().st_mode & 0o777)
+            return real_write(self, *args, **kwargs)  # type: ignore[arg-type]
+
+        real_fdopen = os.fdopen
+
+        class _Recording:
+            def __init__(self, f: Any) -> None:
+                self._f = f
+
+            def __enter__(self) -> _Recording:
+                return self
+
+            def __exit__(self, *exc: object) -> None:
+                self._f.close()
+
+            def write(self, s: str) -> int:
+                modes.append(os.fstat(self._f.fileno()).st_mode & 0o777)
+                return int(self._f.write(s))
+
+        def _fdopen(fd: int, *args: object, **kwargs: object) -> _Recording:
+            return _Recording(real_fdopen(fd, *args, **kwargs))  # type: ignore[call-overload]
+
+        monkeypatch.setattr(Path, "write_text", _write_text)
+        monkeypatch.setattr(os, "fdopen", _fdopen)
+        save_credentials(self._cred(), p)
+        assert modes == [0o600]
+        assert p.stat().st_mode & 0o777 == 0o600
+
+    def test_parent_dir_created_owner_only(self, tmp_path: Path, file_credentials: None) -> None:
+        p = tmp_path / "sub" / "creds.json"
+        save_credentials(self._cred(), p)
+        assert p.parent.stat().st_mode & 0o777 == 0o700
 
     def test_multiple_registries(self, tmp_path: Path, file_credentials: None) -> None:
         p = tmp_path / "creds.json"
