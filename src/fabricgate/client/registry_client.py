@@ -181,16 +181,18 @@ class RegistryClient:
                 except Exception:
                     err = _oauth_error_response(resp)
                 if err is None:
-                    resp.raise_for_status()
-                    raise AssertionError("unreachable: status >= 400")
+                    # A proxy or CDN page (HTML / plain text): keep the status so 401 / 404 / 429
+                    # are classified as such instead of collapsing into a network error.
+                    err = ErrorResponse(
+                        error=ErrorDetail(code=f"HTTP_{resp.status_code}", message=resp.reason_phrase or "HTTP error")
+                    )
                 raise RegistryError(resp.status_code, err, retry_after=resp.headers.get("Retry-After"))
             return resp
         except httpx.HTTPError as exc:
-            # Transport failures (connect/DNS/timeout) and the malformed-error-body
-            # ``raise_for_status`` path both surface as ``httpx.HTTPError``.  Translate
-            # them into ``NetworkError`` so ``httpx`` stays confined to this layer;
-            # ``NetworkError.kind`` is ``FailureKind.INFRA``, as before.  Parseable
-            # error responses raise ``RegistryError`` (not an httpx type) and pass through.
+            # Transport failures (connect/DNS/timeout) surface as ``httpx.HTTPError``.
+            # Translate them into ``NetworkError`` so ``httpx`` stays confined to this
+            # layer; ``NetworkError.kind`` is ``FailureKind.INFRA``. Error responses,
+            # with or without a parseable body, raise ``RegistryError`` and pass through.
             if isinstance(exc, httpx.LocalProtocolError):
                 # h11 quotes the offending header, which may be the Authorization token,
                 # so neither the message nor the chained cause may carry it.
