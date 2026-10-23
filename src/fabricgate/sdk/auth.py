@@ -153,16 +153,12 @@ def login(
             scopes=token_resp.scopes,
             refresh_token=token_resp.refresh_token,
         )
-        auth.save_credentials(cred)
+        stored_in = auth.save_credentials(cred)
 
-        # Derive storage label
         hostname = urlparse(registry).hostname or registry
-        try:
-            import keyring
-
-            keyring.get_password("fabricgate", "__connectivity_check__")
+        if stored_in == "keyring":
             storage = f"OS keychain ({hostname})"
-        except Exception:
+        else:
             storage = f"~/.fabricgate/credentials.json ({hostname})"
 
         return LoginResult(

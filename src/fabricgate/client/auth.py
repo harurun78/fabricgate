@@ -13,6 +13,7 @@ import os
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 
 from fabricgate.models.cli import Credentials
 
@@ -104,21 +105,44 @@ def load_credentials(registry: str, path: Path | None = None) -> Credentials | N
     return creds.get(registry)
 
 
-def save_credentials(cred: Credentials, path: Path | None = None) -> None:
-    """Persist credentials for *cred.registry*."""
+def _drop_file_entry(registry: str, file_path: Path) -> None:
+    creds = _load_creds_file(file_path)
+    if creds.pop(registry, None) is not None:
+        _save_creds_file(creds, file_path)
+
+
+def save_credentials(cred: Credentials, path: Path | None = None) -> Literal["keyring", "file"]:
+    """Persist credentials for *cred.registry* and return where they were stored.
+
+    After a keychain save, an entry left in the file by an earlier fallback login
+    is removed so the old token does not stay on disk in plain text.
+    """
     if _try_keyring_save(cred):
-        return
+        try:
+            _drop_file_entry(cred.registry, path or _DEFAULT_CRED_PATH)
+        except (OSError, ValueError):
+            # The login itself succeeded; a file we cannot read or rewrite must not undo that.
+            _log.debug("credentials file unreadable, stale entry not removed")
+        return "keyring"
     file_path = path or _DEFAULT_CRED_PATH
     creds = _load_creds_file(file_path)
     creds[cred.registry] = cred
     _save_creds_file(creds, file_path)
+    return "file"
 
 
 def delete_credentials(registry: str, path: Path | None = None) -> None:
-    """Remove credentials for *registry*."""
-    if _try_keyring_delete(registry):
-        return
-    file_path = path or _DEFAULT_CRED_PATH
-    creds = _load_creds_file(file_path)
-    creds.pop(registry, None)
-    _save_creds_file(creds, file_path)
+    """Remove credentials for *registry* from both the keychain and the file.
+
+    Both are cleared because an earlier login may have fallen back to the file;
+    leaving that entry would bring the old token back once the keychain is empty.
+    """
+    deleted_from_keyring = _try_keyring_delete(registry)
+    try:
+        _drop_file_entry(registry, path or _DEFAULT_CRED_PATH)
+    except (OSError, ValueError):
+        # The keychain entry is already gone; an unreadable file must not turn
+        # that into a failure (it could not be loaded either).
+        if not deleted_from_keyring:
+            raise
+        _log.debug("credentials file unreadable, keychain entry removed")

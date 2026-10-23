@@ -663,16 +663,25 @@ def test_login_parses_oauth_response_and_raw_pending(monkeypatch: pytest.MonkeyP
 
 
 def test_login_keyring_storage_label(monkeypatch: pytest.MonkeyPatch) -> None:
-    """キーリングが利用可能な場合、storage labelに 'keychain' が含まれる。"""
+    """キーリングに保存した場合、storage labelに 'keychain' が含まれる。"""
+    _patch_all_rc(monkeypatch, _FakeLoginRegistryClient)
+    monkeypatch.setattr(sdk_api.auth, "save_credentials", lambda cred, path=None: "keyring")
+
+    result = sdk_api.login(registry="https://example.com/api/v1", poll_interval=0)
+    assert "keychain" in result.storage.lower()
+
+
+def test_login_storage_label_follows_actual_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    """keyring が import できても、ファイルに保存したならファイルと表示する。"""
     import sys
     from unittest.mock import MagicMock
 
     _patch_all_rc(monkeypatch, _FakeLoginRegistryClient)
-    monkeypatch.setattr(sdk_api.auth, "save_credentials", lambda cred, path=None: None)
+    monkeypatch.setattr(sdk_api.auth, "save_credentials", lambda cred, path=None: "file")
     monkeypatch.setitem(sys.modules, "keyring", MagicMock())
 
     result = sdk_api.login(registry="https://example.com/api/v1", poll_interval=0)
-    assert "keychain" in result.storage.lower()
+    assert "credentials.json" in result.storage
 
 
 # ---------------------------------------------------------------------------
@@ -4430,3 +4439,28 @@ def test_resolve_deps_digest_mismatch_writes_nothing(tmp_path: Path) -> None:
     with pytest.raises(IntegrityError, match="Digest mismatch for dependency artifact"):
         _resolve_and_download_deps(_Client(), "a", "b", "1.0.0", "xc7z020", "pynq", tmp_path, True)
     assert not any(p.read_bytes() == b"wrong" for p in tmp_path.rglob("*") if p.is_file())
+
+
+@pytest.mark.parametrize(
+    ("deps_only", "expected"),
+    [
+        (False, {"design.bit", "design.hwh", "dep.bit", "dep.hwh", "shell.bit", "shell.hwh"}),
+        (True, {"dep.bit", "dep.hwh"}),
+    ],
+)
+def test_pull_verify_attestation_covers_dependencies_and_shell(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, deps_only: bool, expected: set[str]
+) -> None:
+    attested: list[str] = []
+    _patch_all_rc(monkeypatch, _FakeRegistryClientWithDeps)
+    monkeypatch.setattr(_puller_mod, "_verify_attestation", lambda _dir, names: attested.extend(names))
+
+    sdk_api.pull(
+        "test-ns/blink:1.0.0",
+        output=tmp_path,
+        platform="xc7z020/pynq",
+        verify_attestation=True,
+        deps_only=deps_only,
+        registry="http://test",
+    )
+    assert set(attested) == expected

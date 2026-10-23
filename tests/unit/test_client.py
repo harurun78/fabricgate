@@ -120,6 +120,67 @@ class TestAuth:
         delete_credentials("https://r.example.com", p)
         assert load_credentials("https://r.example.com", p) is None
 
+    def test_save_reports_file_store(self, tmp_path: Path, file_credentials: None) -> None:
+        assert save_credentials(self._cred(), tmp_path / "creds.json") == "file"
+
+    def test_delete_clears_file_entry_even_when_keyring_delete_succeeds(
+        self, tmp_path: Path, file_credentials: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """keyring 無しで保存した古いトークンが、keyring 側の削除後に復活しない。"""
+        import fabricgate.client.auth as auth_module
+
+        p = tmp_path / "creds.json"
+        save_credentials(self._cred(), p)
+        monkeypatch.setattr(auth_module, "_try_keyring_delete", lambda _registry: True)
+        delete_credentials("https://r.example.com", p)
+        assert load_credentials("https://r.example.com", p) is None
+
+    def test_delete_after_keyring_delete_tolerates_corrupt_file(
+        self, tmp_path: Path, file_credentials: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import fabricgate.client.auth as auth_module
+
+        p = tmp_path / "creds.json"
+        p.write_text("{bad", encoding="utf-8")
+        monkeypatch.setattr(auth_module, "_try_keyring_delete", lambda _registry: True)
+        delete_credentials("https://r.example.com", p)
+        assert p.read_text(encoding="utf-8") == "{bad"
+
+    def test_delete_without_keyring_still_reports_corrupt_file(self, tmp_path: Path, file_credentials: None) -> None:
+        p = tmp_path / "creds.json"
+        p.write_text("{bad", encoding="utf-8")
+        with pytest.raises(ValueError):
+            delete_credentials("https://r.example.com", p)
+
+    def test_keyring_save_removes_stale_file_entry(
+        self, tmp_path: Path, file_credentials: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """keyring 無しで保存した古いトークンは、keyring に保存し直した時点でファイルから消える。"""
+        import fabricgate.client.auth as auth_module
+
+        p = tmp_path / "creds.json"
+        save_credentials(self._cred(), p)
+        save_credentials(self._cred("https://other.example.com"), p)
+        monkeypatch.setattr(auth_module, "_try_keyring_save", lambda _cred: True)
+        assert save_credentials(self._cred(), p) == "keyring"
+        assert load_credentials("https://r.example.com", p) is None
+        assert load_credentials("https://other.example.com", p) is not None
+
+    def test_keyring_save_tolerates_corrupt_file(
+        self, tmp_path: Path, file_credentials: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import fabricgate.client.auth as auth_module
+
+        p = tmp_path / "creds.json"
+        p.write_text("{bad", encoding="utf-8")
+        monkeypatch.setattr(auth_module, "_try_keyring_save", lambda _cred: True)
+        assert save_credentials(self._cred(), p) == "keyring"
+
+    def test_delete_without_entry_creates_no_file(self, tmp_path: Path, file_credentials: None) -> None:
+        p = tmp_path / "creds.json"
+        delete_credentials("https://r.example.com", p)
+        assert not p.exists()
+
     def test_load_missing(self, tmp_path: Path, file_credentials: None) -> None:
         assert load_credentials("x", tmp_path / "no.json") is None
 
@@ -147,7 +208,7 @@ class TestAuth:
         assert loaded is not None
         assert loaded.token == "tok-abc"
 
-    def test_keyring_save_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_keyring_save_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """keyring.set_password が成功するとき True を返す (ファイル書き込みなし)。"""
         saved: list[str] = []
 
@@ -155,17 +216,17 @@ class TestAuth:
 
         monkeypatch.setattr(_keyring_module, "set_password", lambda _svc, _reg, _val: saved.append(_val))
         cred = self._cred()
-        save_credentials(cred)
+        assert save_credentials(cred, tmp_path / "creds.json") == "keyring"
         assert len(saved) == 1
 
-    def test_keyring_delete_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_keyring_delete_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """keyring.delete_password が成功するとき True を返す (ファイル読み込みなし)。"""
         deleted: list[str] = []
 
         import keyring as _keyring_module
 
         monkeypatch.setattr(_keyring_module, "delete_password", lambda _svc, _reg: deleted.append(_reg))
-        delete_credentials("https://r.example.com")
+        delete_credentials("https://r.example.com", tmp_path / "creds.json")
         assert len(deleted) == 1
 
     def test_token_env_wins_over_stored(

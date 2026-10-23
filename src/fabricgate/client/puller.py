@@ -79,15 +79,26 @@ def _validate_artifact_filename(artifact_name: str, *, context: str) -> Path:
     return Path(artifact_name)
 
 
-def _write_verified(path: Path, data: bytes, expected_sha256: str, *, verify: bool, label: str) -> None:
+def _write_verified(
+    path: Path,
+    data: bytes,
+    expected_sha256: str,
+    *,
+    verify: bool,
+    label: str,
+    written: list[Path] | None = None,
+) -> None:
     """Write *data* to *path*, checking its digest first when *verify* is set.
 
     Checking before the write keeps a mismatching download from landing on disk
     under its final name or overwriting a file verified by an earlier pull.
+    *written* collects the paths so attestation can cover every artifact.
     """
     if verify and hashlib.sha256(data).hexdigest() != expected_sha256:
         raise IntegrityError(f"Digest mismatch for {label}")
     path.write_bytes(data)
+    if written is not None:
+        written.append(path)
 
 
 def _resolve_and_download_deps(
@@ -101,6 +112,7 @@ def _resolve_and_download_deps(
     verify_digests: bool,
     *,
     include_optional: bool = False,
+    written: list[Path] | None = None,
 ) -> list[str]:
     """Resolve dependencies and download them into deps/ subdirectory.
 
@@ -172,6 +184,7 @@ def _resolve_and_download_deps(
                 artifact.sha256,
                 verify=verify_digests,
                 label=f"dependency artifact {artifact_name}",
+                written=written,
             )
 
         dep_refs.append(dep_ref)
@@ -190,6 +203,7 @@ def _maybe_download_shell(
     verify_digests: bool,
     *,
     no_shell: bool = False,
+    written: list[Path] | None = None,
 ) -> str | None:
     """Download the static shell for a partial bitstream if applicable.
 
@@ -248,6 +262,7 @@ def _maybe_download_shell(
             artifact.sha256,
             verify=verify_digests,
             label=f"shell artifact {artifact_name}",
+            written=written,
         )
 
     return shell_ref
@@ -343,6 +358,8 @@ def pull_design(
             _verify_attestation(target_dir, downloaded_files)
 
     # --- Dependency resolution ---
+    # Dependency and shell artifacts are attested too, not only the root.
+    extra_files: list[Path] | None = [] if verify_attestation else None
     dep_refs: list[str] = []
     if not no_deps:
         dep_refs = _resolve_and_download_deps(
@@ -355,6 +372,7 @@ def pull_design(
             target_dir,
             verify_digests,
             include_optional=include_optional_deps,
+            written=extra_files,
         )
 
     # --- Shell auto-download ---
@@ -370,7 +388,11 @@ def pull_design(
             target_dir,
             verify_digests,
             no_shell=no_shell,
+            written=extra_files,
         )
+
+    for extra in extra_files or []:
+        _verify_attestation(extra.parent, [extra.name])
 
     if cache_dir is not None and not deps_only:
         cache.store(
