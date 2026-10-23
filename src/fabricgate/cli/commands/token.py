@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
 
 
@@ -30,16 +30,13 @@ def token_create_cmd(
 ) -> None:
     """Create a new API key."""
     reg: str = str(obj["registry"])
-    try:
+    with sdk_errors():
         result = sdk_api.token_create(
             name=name,
             scopes=scopes,
             expires=expires,
             registry=reg,
         )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
@@ -60,11 +57,8 @@ def token_create_cmd(
 def token_list_cmd(obj: dict[str, object]) -> None:
     """List all API keys."""
     reg: str = str(obj["registry"])
-    try:
+    with sdk_errors():
         keys = sdk_api.token_list(registry=reg)
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps([k.model_dump(mode="json") for k in keys], indent=2))
@@ -99,14 +93,11 @@ def token_revoke_cmd(
     """Revoke an API key."""
     if not force and not obj["json"]:
         if not click.confirm(f"Revoke API key (id: {token_id})?", default=False):
-            raise click.exceptions.Exit(0)
+            raise click.exceptions.Exit(0)  # declined at the prompt: not a failure
 
     reg: str = str(obj["registry"])
-    try:
+    with sdk_errors():
         sdk_api.token_revoke(token_id, registry=reg)
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps({"revoked": True, "id": token_id}))

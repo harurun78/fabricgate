@@ -6,7 +6,7 @@ import json
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
 
 
@@ -36,7 +36,7 @@ def deprecate_cmd(
     if not undo and not message.strip():
         raise click.UsageError("--message is required unless --undo is used.")
 
-    try:
+    with sdk_errors():
         if undo:
             results = sdk_api.undeprecate(
                 design_ref,
@@ -51,9 +51,6 @@ def deprecate_cmd(
                 successor=successor,
                 registry=reg,
             )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if obj["json"]:
         click.echo(json.dumps([r.model_dump(mode="json") for r in results], indent=2))

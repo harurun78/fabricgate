@@ -7,7 +7,7 @@ from pathlib import Path
 
 import click
 
-from fabricgate.cli.exit_codes import exit_code_for
+from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
 
 
@@ -53,7 +53,7 @@ def pull_cmd(
     if no_shell:
         click.echo("\u26a0  Shell dependency skipped. Ensure shell bitstream is present before loading.", err=True)
 
-    try:
+    with sdk_errors():
         result = sdk_api.pull(
             design_ref,
             platform=effective_platform,
@@ -70,9 +70,6 @@ def pull_cmd(
             certificate_identity=certificate_identity,
             certificate_oidc_issuer=certificate_oidc_issuer,
         )
-    except sdk_api.SDKError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
     if result.deprecated_warning:
         click.echo(f"\u26a0  {result.deprecated_warning}", err=True)
