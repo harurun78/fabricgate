@@ -3076,6 +3076,16 @@
             }
           },
           {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Force"
+            }
+          },
+          {
             "name": "authorization",
             "in": "header",
             "required": false,
