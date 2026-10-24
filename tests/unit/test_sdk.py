@@ -550,7 +550,7 @@ def _login_over_mock_http(
     expires_in: int | None = 900,
 ) -> list[float]:
     """Run ``login`` against a mock registry; return the sleeps between polls (no real waiting)."""
-    import httpx
+    import httpx2
 
     from fabricgate.client.registry_client import RegistryClient
 
@@ -558,16 +558,16 @@ def _login_over_mock_http(
     if expires_in is not None:
         device["expires_in"] = expires_in
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         if request.url.path.endswith("/oauth/device_authorization"):
-            return httpx.Response(200, json=device)
+            return httpx2.Response(200, json=device)
         status, body, headers = token_responses.pop(0)
-        return httpx.Response(status, json=body, headers=headers)
+        return httpx2.Response(status, json=body, headers=headers)
 
     class _MockTransportClient(RegistryClient):
         def __init__(self, base_url: str, token: str | None = None) -> None:
             super().__init__(base_url=base_url, token=token)
-            self._client = httpx.Client(base_url=base_url, transport=httpx.MockTransport(handler))
+            self._client = httpx2.Client(base_url=base_url, transport=httpx2.MockTransport(handler))
 
     sleeps: list[float] = []
     monkeypatch.setattr(_sdk_auth_mod, "RegistryClient", _MockTransportClient)
@@ -636,7 +636,7 @@ def test_login_slow_down_still_adds_five_seconds(monkeypatch: pytest.MonkeyPatch
 
 def test_login_parses_oauth_response_and_raw_pending(monkeypatch: pytest.MonkeyPatch) -> None:
     """Real client over HTTP: raw OAuth pending, enveloped pending, then an OAuth token body."""
-    import httpx
+    import httpx2
 
     from fabricgate.client.registry_client import RegistryClient
 
@@ -655,19 +655,19 @@ def test_login_parses_oauth_response_and_raw_pending(monkeypatch: pytest.MonkeyP
         ),
     ]
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         if request.url.path.endswith("/oauth/device_authorization"):
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={"device_code": "D", "user_code": "U", "verification_uri": "https://x/d", "interval": 0},
             )
         status, body = token_bodies.pop(0)
-        return httpx.Response(status, json=body)
+        return httpx2.Response(status, json=body)
 
     class _MockTransportClient(RegistryClient):
         def __init__(self, base_url: str, token: str | None = None) -> None:
             super().__init__(base_url=base_url, token=token)
-            self._client = httpx.Client(base_url=base_url, transport=httpx.MockTransport(handler))
+            self._client = httpx2.Client(base_url=base_url, transport=httpx2.MockTransport(handler))
 
     monkeypatch.setattr(_sdk_auth_mod, "RegistryClient", _MockTransportClient)
     monkeypatch.setattr(_sdk_auth_mod.time, "sleep", lambda _s: None)
