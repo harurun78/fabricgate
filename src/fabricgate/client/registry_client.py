@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from urllib.parse import quote
 
-import httpx
+import httpx2
 
 from fabricgate.client.errors import FailureKind
 from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
@@ -80,9 +80,9 @@ class RegistryError(Exception):
 class NetworkError(RegistryError):
     """Raised when a transport-layer failure prevents reaching the registry.
 
-    Wraps an ``httpx`` transport error (connection refused, DNS failure,
+    Wraps an ``httpx2`` transport error (connection refused, DNS failure,
     timeout) so callers only ever handle the :class:`RegistryError` hierarchy
-    and ``httpx`` stays confined to this client layer.  Carries no HTTP status
+    and ``httpx2`` stays confined to this client layer.  Carries no HTTP status
     (``status_code = 0``, ``error = None``); its ``kind`` is ``FailureKind.INFRA``.
     """
 
@@ -101,7 +101,7 @@ class NetworkError(RegistryError):
 def _seg(value: str | int) -> str:
     """Percent-encode one URL path segment.
 
-    ``quote`` leaves ``.`` and ``..`` as they are and httpx removes them as dot
+    ``quote`` leaves ``.`` and ``..`` as they are and httpx2 removes them as dot
     segments, so they would move the request to another route; reject them.
     """
     text = str(value)
@@ -110,7 +110,7 @@ def _seg(value: str | int) -> str:
     return quote(text, safe="")
 
 
-def _oauth_error_response(resp: httpx.Response) -> ErrorResponse | None:
+def _oauth_error_response(resp: httpx2.Response) -> ErrorResponse | None:
     """Map a raw OAuth error body (RFC 6749 §5.2) onto the registry error envelope.
 
     ``{"error": "authorization_pending"}`` becomes code ``AUTHORIZATION_PENDING``,
@@ -154,7 +154,7 @@ class RegistryClient:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         self._timeout = timeout
-        self._client = httpx.Client(
+        self._client = httpx2.Client(
             base_url=base_url,
             headers=headers,
             timeout=timeout,
@@ -171,7 +171,7 @@ class RegistryClient:
 
     # ---- helpers ----
 
-    def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+    def _request(self, method: str, path: str, **kwargs: Any) -> httpx2.Response:
         try:
             resp = self._client.request(method, path, **kwargs)
             if resp.status_code >= 400:
@@ -188,12 +188,12 @@ class RegistryClient:
                     )
                 raise RegistryError(resp.status_code, err, retry_after=resp.headers.get("Retry-After"))
             return resp
-        except httpx.HTTPError as exc:
-            # Transport failures (connect/DNS/timeout) surface as ``httpx.HTTPError``.
-            # Translate them into ``NetworkError`` so ``httpx`` stays confined to this
+        except httpx2.HTTPError as exc:
+            # Transport failures (connect/DNS/timeout) surface as ``httpx2.HTTPError``.
+            # Translate them into ``NetworkError`` so ``httpx2`` stays confined to this
             # layer; ``NetworkError.kind`` is ``FailureKind.INFRA``. Error responses,
             # with or without a parseable body, raise ``RegistryError`` and pass through.
-            if isinstance(exc, httpx.LocalProtocolError):
+            if isinstance(exc, httpx2.LocalProtocolError):
                 # h11 quotes the offending header, which may be the Authorization token,
                 # so neither the message nor the chained cause may carry it.
                 raise NetworkError(
@@ -340,16 +340,16 @@ class RegistryClient:
         if ticket.url is None:
             return
         try:
-            resp = httpx.put(
+            resp = httpx2.put(
                 ticket.url,
                 content=data,
                 headers=ticket.headers,
                 # No write deadline: a 256MB artifact on a slow uplink takes
                 # far longer than the request timeout, and the upload is a
                 # single PUT that cannot be resumed if it is cut off.
-                timeout=httpx.Timeout(self._timeout, write=None),
+                timeout=httpx2.Timeout(self._timeout, write=None),
             )
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise NetworkError(f"Network error uploading {ticket.filename}: {exc}") from exc
         if resp.status_code >= 400:
             # 400 BadDigest means the bytes did not match the signed digest.

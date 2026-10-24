@@ -19,6 +19,8 @@ pip install fabricgate
 
 Python 3.11 or newer. `fgate` is installed as a short alias of `fabricgate`.
 
+HTTPS certificates are verified against the operating system's trust store, not a bundled `certifi` list. If `SSL_CERT_FILE` or `SSL_CERT_DIR` is set, that CA bundle is used instead. A minimal container image may ship without system CA certificates; install them (for example the `ca-certificates` package) or point `SSL_CERT_FILE` at a bundle.
+
 ## Three steps to a running design
 
 ```sh

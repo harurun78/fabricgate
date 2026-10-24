@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-import httpx
+import httpx2
 import pytest
 from pydantic import ValidationError
 
@@ -17,31 +17,31 @@ def _transport(
     status: int = 200,
     body: dict | list | bytes = b"",
     content_type: str = "application/json",
-) -> httpx.MockTransport:
+) -> httpx2.MockTransport:
     """Create a mock transport returning a fixed response."""
 
-    def _handler(request: httpx.Request) -> httpx.Response:
+    def _handler(request: httpx2.Request) -> httpx2.Response:
         if isinstance(body, (dict, list)):
-            return httpx.Response(
+            return httpx2.Response(
                 status,
                 json=body,
                 request=request,
                 headers={"content-type": content_type},
             )
-        return httpx.Response(
+        return httpx2.Response(
             status,
             content=body,
             request=request,
             headers={"content-type": content_type},
         )
 
-    return httpx.MockTransport(_handler)
+    return httpx2.MockTransport(_handler)
 
 
-def _make_client(transport: httpx.MockTransport, token: str | None = None) -> RegistryClient:
+def _make_client(transport: httpx2.MockTransport, token: str | None = None) -> RegistryClient:
     """Build a RegistryClient with a mock transport injected."""
     client = RegistryClient(base_url="http://test/api/v1", token=token)
-    client._client = httpx.Client(
+    client._client = httpx2.Client(
         base_url="http://test/api/v1",
         transport=transport,
         headers={"Authorization": f"Bearer {token}"} if token else {},
@@ -94,12 +94,12 @@ class TestErrorHandling:
         status, so it is classified like a JSON error instead of a network error (#72)."""
         from fabricgate.client.errors import FailureKind
 
-        def _handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(
+        def _handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(
                 status, content=b"<html>nope</html>", headers={"content-type": "text/html", "Retry-After": "7"}
             )
 
-        client = _make_client(httpx.MockTransport(_handler))
+        client = _make_client(httpx2.MockTransport(_handler))
         with pytest.raises(RegistryError) as exc_info:
             client.search_designs()
         err = exc_info.value
@@ -111,12 +111,12 @@ class TestErrorHandling:
 
     def test_raises_network_error_on_transport_error(self) -> None:
         """A transport-layer failure (connect/DNS/timeout) is translated into
-        NetworkError inside _request, keeping httpx confined to this layer."""
+        NetworkError inside _request, keeping httpx2 confined to this layer."""
 
-        def _handler(request: httpx.Request) -> httpx.Response:
-            raise httpx.ConnectError("connection refused", request=request)
+        def _handler(request: httpx2.Request) -> httpx2.Response:
+            raise httpx2.ConnectError("connection refused", request=request)
 
-        client = _make_client(httpx.MockTransport(_handler))
+        client = _make_client(httpx2.MockTransport(_handler))
 
         with pytest.raises(NetworkError) as exc_info:
             client.search_designs()
@@ -160,14 +160,14 @@ class TestSearchDesigns:
         assert result.designs == []
 
     def test_namespace_filter_is_sent_as_query_param(self) -> None:
-        def _handler(request: httpx.Request) -> httpx.Response:
+        def _handler(request: httpx2.Request) -> httpx2.Response:
             assert request.url.path == "/api/v1/designs"
             params = dict(request.url.params)
             assert params["namespace"] == "alice"
             assert params["per_page"] == "100"
-            return httpx.Response(200, json={"designs": [], "total": 0, "page": 1, "per_page": 100}, request=request)
+            return httpx2.Response(200, json={"designs": [], "total": 0, "page": 1, "per_page": 100}, request=request)
 
-        client = _make_client(httpx.MockTransport(_handler))
+        client = _make_client(httpx2.MockTransport(_handler))
         result = client.search_designs(namespace="alice", per_page=100)
         assert result.total == 0
 
@@ -345,13 +345,13 @@ class TestArtifactUploads:
 
         seen: dict[str, object] = {}
 
-        def _fake_put(url: str, **kwargs: object) -> httpx.Response:
+        def _fake_put(url: str, **kwargs: object) -> httpx2.Response:
             seen["url"] = url
             seen["headers"] = kwargs.get("headers")
             seen["content"] = kwargs.get("content")
-            return httpx.Response(200, request=httpx.Request("PUT", url))
+            return httpx2.Response(200, request=httpx2.Request("PUT", url))
 
-        monkeypatch.setattr(httpx, "put", _fake_put)
+        monkeypatch.setattr(httpx2, "put", _fake_put)
         ticket = ArtifactUploadTicket(
             filename="design.bit",
             sha256="a" * 64,
@@ -368,10 +368,10 @@ class TestArtifactUploads:
     def test_upload_artifact_skips_when_no_url(self, monkeypatch) -> None:
         from fabricgate.models.api.responses import ArtifactUploadTicket
 
-        def _fail(*_args: object, **_kwargs: object) -> httpx.Response:
+        def _fail(*_args: object, **_kwargs: object) -> httpx2.Response:
             raise AssertionError("must not PUT when the object is already stored")
 
-        monkeypatch.setattr(httpx, "put", _fail)
+        monkeypatch.setattr(httpx2, "put", _fail)
         ticket = ArtifactUploadTicket(filename="design.bit", sha256="a" * 64)
 
         _make_client(_transport(200, {})).upload_artifact(ticket, b"data")
@@ -380,14 +380,14 @@ class TestArtifactUploads:
         """Storage answers 400 BadDigest when the bytes do not match the signature."""
         from fabricgate.models.api.responses import ArtifactUploadTicket
 
-        def _bad_digest(url: str, **_kwargs: object) -> httpx.Response:
-            return httpx.Response(
+        def _bad_digest(url: str, **_kwargs: object) -> httpx2.Response:
+            return httpx2.Response(
                 400,
                 content=b"<Error><Code>BadDigest</Code></Error>",
-                request=httpx.Request("PUT", url),
+                request=httpx2.Request("PUT", url),
             )
 
-        monkeypatch.setattr(httpx, "put", _bad_digest)
+        monkeypatch.setattr(httpx2, "put", _bad_digest)
         ticket = ArtifactUploadTicket(
             filename="design.bit",
             sha256="a" * 64,
@@ -444,12 +444,12 @@ class TestDeprecateVersion:
             "successor": "demo/blink:2.0.0",
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "POST"
             assert request.url.path == "/api/v1/namespaces/demo/designs/blink/versions/1.0.0/deprecate"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport)
 
         result = client.deprecate_version(
@@ -474,12 +474,12 @@ class TestUndeprecateVersion:
             "successor": None,
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "DELETE"
             assert request.url.path == "/api/v1/namespaces/demo/designs/blink/versions/1.0.0/deprecate"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport)
 
         result = client.undeprecate_version("demo", "blink", "1.0.0")
@@ -571,16 +571,16 @@ class TestGetDesignStats:
             ],
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "GET"
             assert request.url.path == "/api/v1/namespaces/demo/designs/blink/stats"
             params = dict(request.url.params)
             assert params["period"] == "daily"
             assert params["from"] == "2026-03-01"
             assert params["to"] == "2026-03-31"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport)
 
         result = client.get_design_stats(
@@ -609,14 +609,14 @@ class TestGetVersionStats:
             ],
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "GET"
             assert request.url.path == "/api/v1/namespaces/demo/designs/blink/versions/1.2.0/stats"
             params = dict(request.url.params)
             assert params["period"] == "weekly"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport)
 
         result = client.get_version_stats("demo", "blink", "1.2.0", period="weekly")
@@ -638,12 +638,12 @@ class TestGetNamespaceStats:
             "period_downloads": {"last_7d": 80, "last_30d": 220},
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "GET"
             assert request.url.path == "/api/v1/namespaces/demo/stats"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport)
 
         result = client.get_namespace_stats("demo")
@@ -664,12 +664,12 @@ class TestGetNamespaceQuota:
             "file_size_limit_bytes": 524_288_000,
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "GET"
             assert request.url.path == "/api/v1/namespaces/demo/quota"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport)
 
         result = client.get_namespace_quota("demo")
@@ -728,7 +728,7 @@ class TestCreateApiKey:
             "created_at": _NOW,
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "POST"
             assert request.url.path == "/api/v1/users/me/api-keys"
             import json as _json
@@ -736,9 +736,9 @@ class TestCreateApiKey:
             req_body = _json.loads(request.content)
             assert req_body["name"] == "ci-key"
             assert req_body["scopes"] == ["public:read"]
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport, token="tok")
 
         result = client.create_api_key("ci-key", ["public:read"], _NOW)
@@ -773,12 +773,12 @@ class TestListApiKeys:
             ]
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "GET"
             assert request.url.path == "/api/v1/users/me/api-keys"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport, token="tok")
 
         result = client.list_api_keys()
@@ -792,12 +792,12 @@ class TestDeleteApiKey:
     def test_delete_api_key(self) -> None:
         """DELETE /users/me/api-keys/{id} の正常系。"""
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "DELETE"
             assert request.url.path == "/api/v1/users/me/api-keys/42"
-            return httpx.Response(204, content=b"", request=request)
+            return httpx2.Response(204, content=b"", request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport, token="tok")
 
         # Should not raise
@@ -822,7 +822,7 @@ class TestCreateWebhook:
             "created_at": _NOW,
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "POST"
             assert request.url.path == "/api/v1/namespaces/myns/webhooks"
             import json as _json
@@ -830,9 +830,9 @@ class TestCreateWebhook:
             req_body = _json.loads(request.content)
             assert req_body["url"] == "https://example.com/hook"
             assert req_body["events"] == ["design.published", "design.yanked"]
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport, token="tok")
 
         result = client.create_webhook("myns", "https://example.com/hook", ["design.published", "design.yanked"])
@@ -870,12 +870,12 @@ class TestListWebhooks:
             ]
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "GET"
             assert request.url.path == "/api/v1/namespaces/myns/webhooks"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport, token="tok")
 
         result = client.list_webhooks("myns")
@@ -890,12 +890,12 @@ class TestDeleteWebhook:
     def test_delete_webhook(self) -> None:
         """DELETE /namespaces/{ns}/webhooks/{id} の正常系。"""
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "DELETE"
             assert request.url.path == "/api/v1/namespaces/myns/webhooks/10"
-            return httpx.Response(204, content=b"", request=request)
+            return httpx2.Response(204, content=b"", request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport, token="tok")
 
         # Should not raise
@@ -911,12 +911,12 @@ class TestTestWebhook:
             "duration_ms": 120,
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "POST"
             assert request.url.path == "/api/v1/namespaces/myns/webhooks/10/test"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport, token="tok")
 
         result = client.test_webhook("myns", 10)
@@ -950,12 +950,12 @@ class TestListWebhookDeliveries:
             ]
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "GET"
             assert request.url.path == "/api/v1/namespaces/myns/webhooks/10/deliveries"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport, token="tok")
 
         result = client.list_webhook_deliveries("myns", 10)
@@ -994,15 +994,15 @@ class TestLicenseCheck:
             ),
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "GET"
             assert request.url.path == "/api/v1/namespaces/alice/designs/counter/versions/1.0.0/license-check"
             # No query params
             assert "tool" not in str(request.url.params)
             assert "edition" not in str(request.url.params)
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport)
 
         result = client.license_check("alice", "counter", "1.0.0")
@@ -1038,14 +1038,14 @@ class TestLicenseCheck:
             ),
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "GET"
             assert request.url.path == "/api/v1/namespaces/alice/designs/counter/versions/1.0.0/license-check"
             assert "vivado" in str(request.url.params)
             assert "enterprise" in str(request.url.params)
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport)
 
         result = client.license_check("alice", "counter", "1.0.0", tool=["vivado"], edition="enterprise")
@@ -1081,14 +1081,14 @@ class TestGetVersionDiff:
             ],
         }
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             assert request.method == "GET"
             assert request.url.path == "/api/v1/namespaces/alice/designs/counter/versions/2.0.0/diff"
             assert request.url.params.get("base") == "1.0.0"
             assert request.url.params.get("platform") == "xczu7ev/pynq"
-            return httpx.Response(200, json=body, request=request)
+            return httpx2.Response(200, json=body, request=request)
 
-        transport = httpx.MockTransport(handler)
+        transport = httpx2.MockTransport(handler)
         client = _make_client(transport)
 
         result = client.get_version_diff("alice", "counter", "2.0.0", "1.0.0", "xczu7ev/pynq")
@@ -1103,15 +1103,15 @@ class TestPublishVersionArtifactUrl:
         """``artifact-url`` parts are plain form fields (no filename), other parts stay files."""
         seen: dict[str, bytes] = {}
 
-        def _handler(request: httpx.Request) -> httpx.Response:
+        def _handler(request: httpx2.Request) -> httpx2.Response:
             seen["body"] = request.read()
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={"name": "demo/blink", "version": "1.0.0", "platforms": ["xc7z020/pynq"], "published_at": _NOW},
                 request=request,
             )
 
-        client = _make_client(httpx.MockTransport(_handler))
+        client = _make_client(httpx2.MockTransport(_handler))
         client.publish_version(
             "demo",
             "blink",
@@ -1138,11 +1138,11 @@ class TestPublishVersionArtifactUrl:
 def _capturing_client() -> tuple[RegistryClient, list[str]]:
     paths: list[str] = []
 
-    def _handler(request: httpx.Request) -> httpx.Response:
+    def _handler(request: httpx2.Request) -> httpx2.Response:
         paths.append(request.url.raw_path.decode())
-        return httpx.Response(204, request=request)
+        return httpx2.Response(204, request=request)
 
-    return _make_client(httpx.MockTransport(_handler)), paths
+    return _make_client(httpx2.MockTransport(_handler)), paths
 
 
 def test_path_parameters_cannot_leave_their_segment() -> None:

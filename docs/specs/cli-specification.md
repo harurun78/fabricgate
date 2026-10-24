@@ -1443,7 +1443,7 @@ CLI / SDK は以下の3層で構成する。将来的にコアロジックの他
 
 | モジュール | 責務 |
 |---|---|
-| `registry_client.py` | Registry API への HTTP 通信 (httpx)。全 API エンドポイントのメソッド |
+| `registry_client.py` | Registry API への HTTP 通信 (httpx2)。全 API エンドポイントのメソッド |
 | `cache.py` | ローカルキャッシュの読み書き。キャッシュヒット判定 |
 | `validator.py` | SHA-256 ダイジェスト検証。Design Index ↔ Platform Manifest ↔ Artifact の整合性チェック |
 | `resolver.py` | プラットフォーム解決ロジック。Design Index から platform を選択 |
@@ -1451,7 +1451,7 @@ CLI / SDK は以下の3層で構成する。将来的にコアロジックの他
 | `auth.py` | 認証情報の読み書き (`~/.fabricgate/credentials.json`) |
 | `config.py` | 設定ファイルの読み込み (`~/.fabricgate/config.yaml`) + 環境変数マージ |
 
-**依存関係:** Client → models, httpx, pyyaml, pydantic-settings
+**依存関係:** Client → models, httpx2, pyyaml, pydantic-settings
 **依存しない:** Click, rich, FastAPI, SQLAlchemy
 
 ### 5.3 CLI ラッパー (`fabricgate.cli`)
@@ -1563,7 +1563,7 @@ ol = Overlay(f"{result.path}/design.bit")
 
 - **Language**: Python ≥ 3.11
 - **CLI framework**: Click (CLI ラッパーのみ)
-- **HTTP client**: httpx (Core 内 RegistryClient)
+- **HTTP client**: httpx2 (Core 内 RegistryClient)
 - **Progress/Output**: rich (CLI ラッパーのみ)
 - **Package**: `fabricgate` on PyPI
 - **Entry point**: `fabricgate` console script (alias: `fgate`)
