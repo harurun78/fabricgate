@@ -90,6 +90,27 @@ def test_search_text_output(monkeypatch) -> None:
     assert "Blink demo" in result.output
 
 
+@pytest.mark.parametrize("option", ["--device", "--device-family"])
+def test_search_device_filter(monkeypatch, option: str) -> None:
+    """--device is the documented name; --device-family still works for old scripts (#74)."""
+    seen: dict[str, object] = {}
+
+    def _fake_search(*_args, **kwargs):
+        seen.update(kwargs)
+        return []
+
+    monkeypatch.setattr("fabricgate.cli.commands.search.sdk_api.search", _fake_search)
+    result = CliRunner().invoke(main, ["search", option, "xczu7ev"])
+    assert result.exit_code == 0, result.output
+    assert seen["device_family"] == "xczu7ev"
+
+
+def test_search_help_shows_only_device() -> None:
+    result = CliRunner().invoke(main, ["search", "--help"])
+    assert "--device " in result.output
+    assert "--device-family" not in result.output
+
+
 def test_search_no_results(monkeypatch) -> None:
     monkeypatch.setattr("fabricgate.cli.commands.search.sdk_api.search", lambda *a, **k: [])
     runner = CliRunner()
