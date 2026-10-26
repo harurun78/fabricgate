@@ -2831,7 +2831,7 @@ def test_stats_json_output(monkeypatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# diff — _format_size / _format_value edge cases + removed platform
+# diff — format_size / _format_value edge cases + removed platform
 # ---------------------------------------------------------------------------
 
 
@@ -2974,12 +2974,12 @@ def test_diff_removed_platform(monkeypatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# quota — fractional size (_format_bytes line 23)
+# quota — size formatting (cli/formatting.py format_size)
 # ---------------------------------------------------------------------------
 
 
 def test_quota_bytes_size(monkeypatch) -> None:
-    """used_bytes < 1024 → '512 B' (unit == "B" path, line 23 in _format_bytes)。"""
+    """used_bytes < 1024 → '512 B' (the "B" unit path of format_size)。"""
 
     def _fake_quota(**_kwargs):
         return QuotaResponse(
@@ -2995,6 +2995,32 @@ def test_quota_bytes_size(monkeypatch) -> None:
     result = runner.invoke(main, ["quota", "--namespace", "alice"])
     assert result.exit_code == 0
     assert "512 B" in result.output
+
+
+@pytest.mark.parametrize(
+    ("used", "limit", "file_limit", "expected"),
+    [
+        (1024**3, 5 * 1024**3, 500 * 1024**2, ["   1 GB /    5 GB", "Max file size: 500 MB"]),
+        (int(4.4 * 1024**3), 5 * 1024**3, 1536, ["4.4 GB /    5 GB", "Max file size: 1.5 KB"]),
+    ],
+)
+def test_quota_sizes_use_the_diff_format(monkeypatch, used, limit, file_limit, expected) -> None:
+    """quota prints sizes like diff: no decimal for whole numbers (#100)."""
+
+    def _fake_quota(**_kwargs):
+        return QuotaResponse(
+            namespace="alice",
+            storage=QuotaStorageInfo(used_bytes=used, limit_bytes=limit, used_percent=used / limit * 100),
+            versions_per_design=QuotaVersionsInfo(limit=100),
+            designs=QuotaDesignsInfo(used=1, limit=200),
+            file_size_limit_bytes=file_limit,
+        )
+
+    monkeypatch.setattr("fabricgate.cli.commands.quota.sdk_api.quota", _fake_quota)
+    result = CliRunner().invoke(main, ["quota", "--namespace", "alice"])
+    assert result.exit_code == 0, result.output
+    for text in expected:
+        assert text in result.output
 
 
 # ---------------------------------------------------------------------------
