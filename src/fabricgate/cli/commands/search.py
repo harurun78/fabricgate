@@ -14,7 +14,9 @@ from fabricgate.sdk import api as sdk_api
 @click.argument("query", required=False)
 @click.option("--platform", default=None, help="Filter by platform.")
 @click.option("--board", default=None, help="Filter by board ID.")
-@click.option("--device-family", default=None, help="Filter by device family.")
+@click.option("--device", "device_family", default=None, help="Filter by device family (e.g. xczu7ev).")
+# The name used up to v0.4.4, kept (hidden) so existing scripts keep working.
+@click.option("--device-family", "device_family_alias", default=None, hidden=True)
 @click.option("--runtime", default=None, help="Filter by runtime.")
 @click.option("--tag", default=None, help="Filter by tag.")
 @click.pass_obj
@@ -24,6 +26,7 @@ def search_cmd(
     platform: str | None,
     board: str | None,
     device_family: str | None,
+    device_family_alias: str | None,
     runtime: str | None,
     tag: str | None,
 ) -> None:
@@ -33,7 +36,7 @@ def search_cmd(
             query,
             platform=platform,
             board=board,
-            device_family=device_family,
+            device_family=device_family or device_family_alias,
             runtime=runtime,
             tag=tag,
             registry=str(obj["registry"]),
