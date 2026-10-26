@@ -449,6 +449,30 @@ class TestDesignIndex:
         assert idx.summary == "Test design"
         assert idx.tags == ["test", "demo"]
 
+    @pytest.mark.parametrize("field", ["repository", "docs"])
+    @pytest.mark.parametrize("url", ["https://github.com/fabricgate/blink", "http://example.com/docs#intro"])
+    def test_http_links_accepted(self, field: str, url: str):
+        idx = DesignIndex.model_validate({**_minimal_index_data(), field: url})
+        assert getattr(idx, field) == url
+
+    @pytest.mark.parametrize("field", ["repository", "docs"])
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "data:text/html,<script>alert(1)</script>",
+            "ftp://example.com/x",
+            "https://",
+            "https://example.com/a b",
+            " https://example.com",
+        ],
+    )
+    def test_non_http_links_rejected(self, field: str, url: str):
+        """repository / docs are shown as links, so only http(s) URLs are accepted (#47)."""
+        with pytest.raises(ValidationError, match=field):
+            DesignIndex.model_validate({**_minimal_index_data(), field: url})
+
     def test_duplicate_platform_rejected(self):
         data = _minimal_index_data()
         data["platforms"].append(data["platforms"][0].copy())

@@ -5204,3 +5204,21 @@ def test_pull_succeeds_when_the_cache_cannot_be_written(
             (cache_dir / "blobs" / "sha256").chmod(0o755)
     assert result.cached is False
     assert (tmp_path / "o" / "design.bit").read_bytes() == b"bitstream-data"
+
+
+class _FakeLegacyLinksClient(_FakeRegistryClient):
+    """A version published before #47 with links that the model now rejects."""
+
+    def get_version(self, namespace: str, design: str, version: str) -> VersionDetailResponse:
+        detail = super().get_version(namespace, design, version)
+        return detail.model_copy(update={"repository": "javascript:alert(1)", "docs": "file:///etc/passwd"})
+
+
+def test_pull_ignores_legacy_non_http_links(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """pull does not use repository / docs, so old values must not make it fail (#47)."""
+    _patch_all_rc(monkeypatch, _FakeLegacyLinksClient)
+
+    result = _pull_into(tmp_path / "o", None)
+
+    assert result.name == "test-ns/blink"
+    assert (tmp_path / "o" / "design.bit").read_bytes() == b"bitstream-data"

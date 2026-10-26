@@ -97,6 +97,9 @@ def _version_detail_to_index(data: dict[str, Any]) -> DesignIndex:
     # added to the API model later does not make pull fail.
     if "platforms" in data:
         data["platforms"] = [{k: v for k, v in p.items() if k in PlatformEntry.model_fields} for p in data["platforms"]]
+    # Versions published before #47 may carry non-http(s) links; pull does not use them.
+    data.pop("repository", None)
+    data.pop("docs", None)
     return DesignIndex.model_validate(data)
 
 
