@@ -171,6 +171,7 @@
     "repository": {
       "anyOf": [
         {
+          "pattern": "^https?://\\S+$",
           "type": "string"
         },
         {
@@ -183,6 +184,7 @@
     "docs": {
       "anyOf": [
         {
+          "pattern": "^https?://\\S+$",
           "type": "string"
         },
         {

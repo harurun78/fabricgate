@@ -51,8 +51,9 @@ class DesignIndex(FabricGateModel):
     summary: str | None = Field(default=None, max_length=200)
     license: SpdxExpression | None = None
     author: str | None = None
-    repository: str | None = None
-    docs: str | None = None
+    # Shown as links (web UI, CLI), so only http(s): no javascript:, file: or data: URLs (#47).
+    repository: str | None = Field(default=None, pattern=r"^https?://\S+$")
+    docs: str | None = Field(default=None, pattern=r"^https?://\S+$")
     tags: list[str] = Field(default_factory=list, max_length=10)
     platforms: list[PlatformEntry] = Field(min_length=1)
 

@@ -26,8 +26,8 @@ version: <semver>              # Semantic versioning (X.Y.Z)
 summary: <string>              # One-line description (max 200 chars)
 license: <SPDX-identifier>    # e.g., MIT, Apache-2.0, BSD-3-Clause
 author: <string>               # Author or organization name
-repository: <url>              # Source repository URL
-docs: <url>                    # Documentation URL
+repository: <url>              # Source repository URL (http/https only)
+docs: <url>                    # Documentation URL (http/https only)
 tags: [<string>, ...]          # Searchable tags (max 10)
 
 # Required: at least one platform
@@ -279,6 +279,7 @@ platforms:
 | `license`, if present, must match SPDX expression pattern (§3.5) | Error |
 | `license` empty string is not permitted; use `null` / omit for "no license" | Error |
 | `license` identifier not in the published SPDX license list | Warning |
+| `repository` / `docs`, if present, must be `http://` or `https://` URLs without whitespace (they are shown as links) | Error |
 | `summary` max 200 chars | Error |
 | `tags` max 10 items | Error |
 | `speed_grade.tested` should include `speed_grade.min` | Warning |
