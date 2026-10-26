@@ -109,6 +109,15 @@ def test_search_sdk_error(monkeypatch) -> None:
     assert "connection refused" in result.output
 
 
+def test_search_missing_ssl_cert_file_exit_code_4(monkeypatch, tmp_path) -> None:
+    """An SSL_CERT_FILE that does not exist is a network error, not a traceback (#105)."""
+    monkeypatch.setenv("SSL_CERT_FILE", str(tmp_path / "missing.pem"))
+    runner = CliRunner()
+    result = runner.invoke(main, ["--registry", "https://test", "search", "blink"])
+    assert result.exit_code == 4
+    assert "Network error" in result.output
+
+
 def test_info_text_output(monkeypatch) -> None:
     def _fake_info(*_args, **_kwargs):
         return DesignInfo(
