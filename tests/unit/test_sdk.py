@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import os
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, ClassVar
@@ -5174,3 +5175,32 @@ def test_pull_without_cache_dir_neither_reads_nor_writes_a_cache(
     assert first.cached is second.cached is False
     assert sorted(downloads) == sorted(["blink/design.bit", "blink/design.hwh"] * 2)
     assert not any(p.name == "blobs" for p in tmp_path.rglob("*"))
+
+
+def _blobs_is_a_file(cache_dir: Path) -> None:
+    cache_dir.mkdir()
+    (cache_dir / "blobs").write_bytes(b"")
+
+
+def _blob_dir_not_searchable(cache_dir: Path) -> None:
+    if os.geteuid() == 0:
+        pytest.skip("root ignores directory permissions")
+    (cache_dir / "blobs" / "sha256").mkdir(parents=True)
+    (cache_dir / "blobs" / "sha256").chmod(0)
+
+
+@pytest.mark.parametrize("break_cache", [_blobs_is_a_file, _blob_dir_not_searchable])
+def test_pull_succeeds_when_the_cache_cannot_be_written(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, break_cache
+) -> None:
+    """A broken cache only logs a warning; the pull itself still succeeds (#115)."""
+    _patch_all_rc(monkeypatch, _FakeRegistryClient)
+    cache_dir = tmp_path / "cache"
+    break_cache(cache_dir)
+    try:
+        result = _pull_into(tmp_path / "o", cache_dir)
+    finally:
+        if (cache_dir / "blobs" / "sha256").is_dir():
+            (cache_dir / "blobs" / "sha256").chmod(0o755)
+    assert result.cached is False
+    assert (tmp_path / "o" / "design.bit").read_bytes() == b"bitstream-data"

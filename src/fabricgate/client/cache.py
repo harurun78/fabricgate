@@ -13,6 +13,7 @@ and downloaded instead.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -152,13 +153,14 @@ def get_blob(cache_dir: Path, sha256: str) -> bytes | None:
 def put_blob(cache_dir: Path, data: bytes) -> None:
     """Store *data* under its SHA-256. Write errors are logged, not raised: the pull itself succeeded."""
     path = _blob_path(cache_dir, hashlib.sha256(data).hexdigest())
-    if path.exists():
-        return
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     try:
+        if path.exists():
+            return
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp.write_bytes(data)
         os.replace(tmp, path)
     except OSError as exc:
-        tmp.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            tmp.unlink(missing_ok=True)
         _log.warning("could not write cache blob %s: %s", path, exc)
