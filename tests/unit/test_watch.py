@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -273,16 +274,12 @@ def test_watch_network_error_exit_code_4(monkeypatch: pytest.MonkeyPatch) -> Non
     assert exc_info.value.code == sdk_api.ExitKind.INFRA
 
 
-def test_watch_client_setup_oserror_exit_code_4(monkeypatch: pytest.MonkeyPatch) -> None:
-    """OSError from building the HTTP client (e.g. SSL_CERT_FILE pointing nowhere) is not a NetworkError."""
-
-    def _broken_client(**_kwargs: object) -> None:
-        raise FileNotFoundError(2, "No such file or directory")
-
-    _patch(monkeypatch, _broken_client)
+def test_watch_client_setup_oserror_exit_code_4(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Building the HTTP client with an SSL_CERT_FILE that does not exist maps to INFRA."""
+    monkeypatch.setenv("SSL_CERT_FILE", str(tmp_path / "missing.pem"))
 
     with pytest.raises(sdk_api.SDKError) as exc_info:
-        sdk_api.watch(design_ref="test-ns/blink", registry="http://test")
+        sdk_api.watch(design_ref="test-ns/blink", registry="https://test")
 
     assert exc_info.value.code == sdk_api.ExitKind.INFRA
 
