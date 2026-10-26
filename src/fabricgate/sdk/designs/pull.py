@@ -51,6 +51,10 @@ def pull(
     With *verify_attestation*, each manifest must be signed by the given
     *attestation_key*, or by *certificate_identity* / *certificate_oidc_issuer*
     (keyless).
+
+    With *cache_dir*, artifacts are taken from that cache when their pinned
+    sha256 is there (``PullResult.cached`` is true when all root artifacts were),
+    and downloaded ones are added to it. Without it, no cache is read or written.
     """
     if no_deps and deps_only:
         raise SDKError("--no-deps and --deps-only are mutually exclusive.", code=ExitKind.INVALID)

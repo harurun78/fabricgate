@@ -1232,6 +1232,34 @@ def test_pull_deps_only_option(monkeypatch, tmp_path) -> None:
     assert captured_kwargs["deps_only"] is True
 
 
+@pytest.mark.parametrize("no_cache", [False, True])
+def test_pull_no_cache_option(monkeypatch, tmp_path, no_cache: bool) -> None:
+    """--no-cache passes no cache directory, so the SDK neither reads nor writes the cache (#115)."""
+    captured_kwargs: dict = {}
+
+    def _fake_pull(*_args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return PullResult(
+            name="test-ns/blink",
+            version="1.0.0",
+            platform="xc7z020/pynq",
+            path="/tmp/out",
+            artifacts=["design.bit"],
+            cached=not no_cache,
+        )
+
+    monkeypatch.setattr("fabricgate.cli.commands.pull.sdk_api.pull", _fake_pull)
+    args = ["--cache-dir", str(tmp_path / "c"), "pull", "test-ns/blink:1.0.0"] + (["--no-cache"] if no_cache else [])
+    result = CliRunner().invoke(main, args)
+    assert result.exit_code == 0, result.output
+    if no_cache:
+        assert captured_kwargs["cache_dir"] is None
+        assert "Saved to /tmp/out\n" in result.output
+    else:
+        assert captured_kwargs["cache_dir"] == tmp_path / "c"
+        assert "Saved to /tmp/out (from cache)" in result.output
+
+
 def test_pull_no_shell_option_shows_warning(monkeypatch, tmp_path) -> None:
     """--no-shellで警告がstderrに出る。"""
 

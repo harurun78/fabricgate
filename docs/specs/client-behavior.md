@@ -215,10 +215,12 @@ shell 依存の宣言形式（`name`/`version`/`board_id`/`runtime` 等）は [p
 
 > SDK は独自のキャッシュ実装を採ってよい。以下は fabricgate リファレンスクライアントの実装（`client/cache.py`）。
 
-- ルート: `~/.fabricgate/cache/`。
-- インデックス: `index.json`（`CacheIndex` = `CacheEntry[]`。各 entry: `name` / `version` / `platform` / `path` / `pulled_at` / `digest`。`models/cli.py:51-65`）。
-- platform ディレクトリ: `{cache}/{namespace}/{design}/{version}/{device}/{runtime}/`（**人間可読**であり、§5 のサーバ CAS とは異なる）。
-- lookup は `(name, version, platform)` 一致かつディスク上にパスが存在する場合にヒット（`cache.py:45-57`）。
+- ルート: `~/.fabricgate/cache/`（`--cache-dir` / `FG_CACHE_DIR`）。
+- インデックス: `index.json`（`CacheIndex` = `CacheEntry[]`。各 entry: `name` / `version` / `platform` / `path` / `pulled_at` / `digest`）。pull の記録で、`path` は pull の出力先。`fabricgate list` が表示する。キャッシュヒットの判定には使わない。
+- アーティファクトの実体: `blobs/sha256/<64-hex>`。ファイル名はその内容の sha256（§5 のサーバ CAS と同じ考え方で、人間可読ではない）。
+- ヒット: マニフェストのアーティファクト `sha256` と同名の blob があり、読み出した内容の sha256 が一致する場合。一致しなければ blob を削除してダウンロードする。マニフェストと署名（`--verify-attestation`）は毎回 registry から取得して検証する。
+- blob は一時ファイルに書いてから rename する。blob の読み書きの失敗は警告に留め、pull は続ける。
+- `--no-cache`（SDK では `cache_dir=None`）のときは読みも書きもしない。
 
 ---
 

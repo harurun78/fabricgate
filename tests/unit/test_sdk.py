@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import os
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, ClassVar
@@ -5010,10 +5011,11 @@ def test_download_platform_writes_manifest_and_artifacts(tmp_path: Path) -> None
             calls.append(args)
             return {"design.bit": b"bit", "design.hwh": b"hwh"}[args[-1]]
 
-    names = _download_platform(
+    names, cached = _download_platform(
         _Client(), "a", "b", "1.0.0", "pynq-z2", "pynq", tmp_path, verify_digests=True, signer=None
     )
     assert names == ["design.bit", "design.hwh"]
+    assert cached is False
     assert (tmp_path / "manifest.yaml").read_bytes() == _PULL_MANIFEST
     assert (tmp_path / "design.bit").read_bytes() == b"bit"
     assert calls[1] == ("a", "b", "1.0.0", "pynq-z2", "pynq", "design.bit")
@@ -5068,3 +5070,137 @@ def test_parse_versions() -> None:
         _parse_versions("alice/counter", ["latest"], "yank")
     with pytest.raises(sdk_api.SDKError, match="Maximum 50 versions per deprecate operation"):
         _parse_versions("alice/counter", [f"0.0.{i}" for i in range(51)], "deprecate")
+
+
+# ===========================================================================
+# #115: pull reuses cached artifacts by the sha256 the manifest pins
+# ===========================================================================
+
+
+def _recording_downloads(client_cls: type) -> tuple[type, list[str]]:
+    """Subclass *client_cls* so that artifact downloads (not attestation bundles) are recorded."""
+    downloads: list[str] = []
+
+    class _Recording(client_cls):  # type: ignore[misc,valid-type]
+        def download_artifact(self, *args):
+            if args[-1] != "cosign.bundle":
+                downloads.append(f"{args[1]}/{args[-1]}")
+            return super().download_artifact(*args)
+
+    return _Recording, downloads
+
+
+def _pull_into(out: Path, cache_dir: Path | None, **kwargs):
+    return sdk_api.pull(
+        "test-ns/blink:1.0.0",
+        platform="xc7z020/pynq",
+        output=out,
+        cache_dir=cache_dir,
+        registry="http://test",
+        **kwargs,
+    )
+
+
+def _files(root: Path) -> dict[str, bytes]:
+    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+def test_pull_second_time_takes_every_artifact_from_the_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    client_cls, downloads = _recording_downloads(_FakeRegistryClientWithDeps)
+    _patch_all_rc(monkeypatch, client_cls)
+    cache_dir = tmp_path / "cache"
+
+    first = _pull_into(tmp_path / "a", cache_dir)
+    first_downloads = list(downloads)
+    downloads.clear()
+    second = _pull_into(tmp_path / "b", cache_dir)
+
+    assert first.cached is False
+    assert {d.split("/")[0] for d in first_downloads} == {"blink", "dep-design", "shell-design"}
+    assert second.cached is True
+    assert downloads == []  # root, dependency and shell artifacts all came from the cache
+    assert _files(tmp_path / "b") == _files(tmp_path / "a")
+
+
+def test_pull_cache_hit_still_verifies_every_attestation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    client_cls, downloads = _recording_downloads(_FakeAttestedClient)
+    _patch_all_rc(monkeypatch, client_cls)
+    checked: list[str] = []
+    monkeypatch.setattr(_puller_mod, "_verify_manifest_attestation", lambda *_a, label, **_kw: checked.append(label))
+    attested = {"verify_attestation": True, "attestation_key": "cosign.pub"}
+
+    _pull_into(tmp_path / "a", tmp_path / "cache", **attested)
+    downloads.clear()
+    checked.clear()
+    result = _pull_into(tmp_path / "b", tmp_path / "cache", **attested)
+
+    assert result.cached is True
+    assert downloads == []
+    assert checked == [
+        "manifest test-ns/blink:1.0.0",
+        "dependency manifest dep-ns/dep-design:0.1.0",
+        "shell manifest shell-ns/shell-design:2.0.0",
+    ]
+
+
+def test_pull_replaces_a_damaged_cache_blob(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import hashlib
+
+    client_cls, downloads = _recording_downloads(_FakeRegistryClient)
+    _patch_all_rc(monkeypatch, client_cls)
+    cache_dir = tmp_path / "cache"
+    _pull_into(tmp_path / "a", cache_dir)
+    blob = cache_dir / "blobs" / "sha256" / hashlib.sha256(b"bitstream-data").hexdigest()
+    blob.write_bytes(b"tampered")
+    downloads.clear()
+
+    result = _pull_into(tmp_path / "b", cache_dir)
+
+    assert result.cached is False
+    assert downloads == ["blink/design.bit"]
+    assert (tmp_path / "b" / "design.bit").read_bytes() == b"bitstream-data"
+    assert blob.read_bytes() == b"bitstream-data"
+
+
+def test_pull_without_cache_dir_neither_reads_nor_writes_a_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    client_cls, downloads = _recording_downloads(_FakeRegistryClient)
+    _patch_all_rc(monkeypatch, client_cls)
+    monkeypatch.chdir(tmp_path)
+
+    first = _pull_into(tmp_path / "a", None)
+    second = _pull_into(tmp_path / "b", None)
+
+    assert first.cached is second.cached is False
+    assert sorted(downloads) == sorted(["blink/design.bit", "blink/design.hwh"] * 2)
+    assert not any(p.name == "blobs" for p in tmp_path.rglob("*"))
+
+
+def _blobs_is_a_file(cache_dir: Path) -> None:
+    cache_dir.mkdir()
+    (cache_dir / "blobs").write_bytes(b"")
+
+
+def _blob_dir_not_searchable(cache_dir: Path) -> None:
+    if os.geteuid() == 0:
+        pytest.skip("root ignores directory permissions")
+    (cache_dir / "blobs" / "sha256").mkdir(parents=True)
+    (cache_dir / "blobs" / "sha256").chmod(0)
+
+
+@pytest.mark.parametrize("break_cache", [_blobs_is_a_file, _blob_dir_not_searchable])
+def test_pull_succeeds_when_the_cache_cannot_be_written(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, break_cache
+) -> None:
+    """A broken cache only logs a warning; the pull itself still succeeds (#115)."""
+    _patch_all_rc(monkeypatch, _FakeRegistryClient)
+    cache_dir = tmp_path / "cache"
+    break_cache(cache_dir)
+    try:
+        result = _pull_into(tmp_path / "o", cache_dir)
+    finally:
+        if (cache_dir / "blobs" / "sha256").is_dir():
+            (cache_dir / "blobs" / "sha256").chmod(0o755)
+    assert result.cached is False
+    assert (tmp_path / "o" / "design.bit").read_bytes() == b"bitstream-data"
