@@ -9,6 +9,7 @@ from collections.abc import Iterable
 import click
 
 from fabricgate.cli.exit_codes import sdk_errors
+from fabricgate.cli.formatting import format_size
 from fabricgate.models.api.responses import VersionDiffField, VersionDiffResponse
 from fabricgate.sdk import api as sdk_api
 
@@ -21,20 +22,6 @@ def _sanitize_labels(values: Iterable[str]) -> list[str]:
     return [_sanitize_label(v) for v in values]
 
 
-def _format_size(value: int) -> str:
-    size = float(value)
-    units = ["B", "KB", "MB", "GB", "TB"]
-    for unit in units:
-        if size < 1024 or unit == units[-1]:
-            if unit == "B":
-                return f"{int(size)} {unit}"
-            if size.is_integer():
-                return f"{int(size)} {unit}"
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{int(value)} B"  # pragma: no cover
-
-
 def _format_value(field_name: str, value: object) -> str:
     if value is None:
         return "null"
@@ -42,7 +29,7 @@ def _format_value(field_name: str, value: object) -> str:
         return "true" if value else "false"
     if isinstance(value, int):
         if field_name.endswith("size"):
-            return _format_size(value)
+            return format_size(value)
         return str(value)
     if isinstance(value, float):
         return str(value)

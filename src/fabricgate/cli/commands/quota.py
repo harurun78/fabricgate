@@ -7,23 +7,11 @@ import json
 import click
 
 from fabricgate.cli.exit_codes import sdk_errors
+from fabricgate.cli.formatting import format_size
 from fabricgate.sdk import api as sdk_api
 from fabricgate.sdk._helpers import _quota_warning_message
 
 _BAR_WIDTH = 32
-
-
-def _format_bytes(value: int) -> str:
-    units = ["B", "KB", "MB", "GB", "TB"]
-    num = float(value)
-    unit = units[0]
-    for unit in units:
-        if num < 1024.0 or unit == units[-1]:
-            break
-        num /= 1024.0
-    if unit == "B":
-        return f"{int(num)} {unit}"
-    return f"{num:.1f} {unit}"
 
 
 def _render_quota_bar(percent: float) -> str:
@@ -55,10 +43,10 @@ def quota_cmd(obj: dict[str, object], namespace: str | None) -> None:
     click.echo("")
     click.echo(
         "  Storage"
-        f"    {_format_bytes(result.storage.used_bytes):>7} / {_format_bytes(result.storage.limit_bytes):>7}"
+        f"    {format_size(result.storage.used_bytes):>7} / {format_size(result.storage.limit_bytes):>7}"
         f"   [{_render_quota_bar(used_percent)}]"
         f"  {round(used_percent):>3}%{warning}"
     )
     click.echo(f"  Designs    {result.designs.used:>5} / {result.designs.limit}")
     click.echo(f"  Versions / design limit: {result.versions_per_design.limit}")
-    click.echo(f"  Max file size: {_format_bytes(result.file_size_limit_bytes)}")
+    click.echo(f"  Max file size: {format_size(result.file_size_limit_bytes)}")

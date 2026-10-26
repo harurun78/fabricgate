@@ -1178,7 +1178,7 @@ $ fabricgate quota --namespace alice
 
 Namespace: alice
 
-  Storage    1.0 GB / 5.0 GB   [████████░░░░░░░░░░░░░░░░░░░░░░]  20%
+  Storage    1 GB / 5 GB   [████████░░░░░░░░░░░░░░░░░░░░░░]  20%
   Designs        12 / 200
   Versions / design limit: 100
   Max file size: 500 MB
@@ -1191,7 +1191,7 @@ $ fabricgate quota --namespace alice
 
 Namespace: alice
 
-  Storage    4.4 GB / 5.0 GB   [████████████████████████████░░]  88%  ⚠ 上限に近づいています
+  Storage    4.4 GB / 5 GB   [████████████████████████████░░]  88%  ⚠ 上限に近づいています
   Designs        12 / 200
 ```
 
