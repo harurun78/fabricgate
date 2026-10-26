@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from fabricgate.cli.commands.build import (
     _make_index_stub,
@@ -291,6 +291,19 @@ class TestResolveBoardId:
         assert board_id == "custom-xczu7ev-ffvc1156"
         assert df == "xczu7ev"
 
+    def test_custom_without_package_when_board_specific(self) -> None:
+        db = _minimal_board_db([])
+        info = HwhInfo(
+            boardpart="unknown:vendor:part0:1.0",
+            part=None,
+            device_family="xczu7ev",
+            package=None,
+            interfaces=[ParsedInterface(name="MIPI", vlnv="xilinx.com:interface:mipi_csi2_rtl:1.0")],
+        )
+        board_id, df = _resolve_board_id(info, db)
+        assert board_id == "custom-xczu7ev"
+        assert df == "xczu7ev"
+
     def test_no_boardpart_uses_virtual(self) -> None:
         db = _minimal_board_db([])
         info = HwhInfo(
@@ -343,6 +356,17 @@ class TestInterfacesToManifest:
         ifaces = [ParsedInterface(name="M_AXIS", vlnv="xilinx.com:interface:axis_rtl:1.0", protocol=None)]
         result = _interfaces_to_manifest(ifaces)
         assert result[0].type == "axi-stream"
+
+    @pytest.mark.parametrize(
+        ("vlnv", "protocol"),
+        [("xilinx.com:interface:apb_rtl:1.0", "APB4"), ("xilinx.com:interface:aximm_rtl:1.0", None)],
+        ids=["unknown-protocol", "no-protocol-not-stream"],
+    )
+    def test_falls_back_to_axi_lite(self, vlnv: str, protocol: str | None) -> None:
+        from fabricgate.cli.commands.build import _interfaces_to_manifest
+
+        result = _interfaces_to_manifest([ParsedInterface(name="S", vlnv=vlnv, protocol=protocol)])
+        assert result[0].type == "axi-lite"
 
     def test_base_address_forwarded(self) -> None:
         from fabricgate.cli.commands.build import _interfaces_to_manifest
@@ -657,6 +681,145 @@ class TestBuildCmd:
         assert result.exit_code == 1
         assert "Multiple HWH files found" in result.output
         assert "--hwh" in result.output
+
+
+_BUILD_INPUT = "myns/my-design\n1.0.0\npynq\nLED blink\n\n"
+_UNKNOWN_BOARDPART = "acme.com:board:part0:1.0"
+_AXI_IFACE = ParsedInterface(name="S_AXI", vlnv="xilinx.com:interface:aximm_rtl:1.0", protocol="AXI4LITE")
+_HDMI_IFACE = ParsedInterface(name="hdmi_out", vlnv="digilentinc.com:interface:hdmi_rtl:1.0")
+
+
+def _invoke_build(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    info: HwhInfo,
+    args: list[str],
+    stdin: str,
+) -> Result:
+    """Run ``build`` with *info* as the parsed HWH and a Board DB that only knows the ZCU104."""
+    src = tmp_path / "vivado"
+    src.mkdir()
+    (src / "design.hwh").write_text("<unused/>")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("fabricgate.cli.commands.build.parse_hwh", lambda _path: info)
+    db = _minimal_board_db(
+        [
+            BoardEntry(
+                board_id="zcu104",
+                display_name="Xilinx ZCU104",
+                boardpart="xilinx.com:zcu104:part0:1.1",
+                device_family="xczu7ev",
+            )
+        ]
+    )
+    monkeypatch.setattr(
+        "fabricgate.cli.commands.build.BoardDb",
+        type("FakeBoardDb", (object,), {"load": staticmethod(lambda **_kw: db)}),
+    )
+    return CliRunner().invoke(build_cmd, [str(src), *args], input=stdin)
+
+
+class TestBuildCmdBoardResolution:
+    """Branches of ``build`` that the HWH fixtures above do not reach (#110)."""
+
+    @pytest.mark.parametrize(
+        ("interfaces", "board_id", "question"),
+        [
+            ([_AXI_IFACE], "generic-xc7z020", "Treat as generic-xc7z020 (AXI-only, any xc7z020 board)?"),
+            ([_AXI_IFACE, _HDMI_IFACE], "custom-xc7z020-clg400", "registered as: custom-xc7z020-clg400/<runtime>"),
+        ],
+        ids=["axi-only", "board-specific"],
+    )
+    def test_unknown_board_accepted_by_default_uses_the_virtual_board(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        interfaces: list[ParsedInterface],
+        board_id: str,
+        question: str,
+    ) -> None:
+        info = HwhInfo(_UNKNOWN_BOARDPART, "xc7z020clg400-1", "xc7z020", "clg400", list(interfaces))
+        # Enter alone answers the confirmation: the default is yes.
+        result = _invoke_build(tmp_path, monkeypatch, info, [], "\n" + _BUILD_INPUT)
+
+        assert result.exit_code == 0, result.output
+        assert "→ Board DB: not found" in result.output
+        assert f"→ Suggest: {board_id}" in result.output
+        assert question in result.output
+        manifest = yaml.safe_load((tmp_path / "my-design" / board_id / "pynq" / "manifest.yaml").read_text())
+        assert manifest["board"] == board_id
+        assert manifest["device_family"] == "xc7z020"
+
+    @pytest.mark.parametrize(
+        "interfaces", [[_AXI_IFACE], [_AXI_IFACE, _HDMI_IFACE]], ids=["axi-only", "board-specific"]
+    )
+    def test_unknown_board_declined_aborts(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, interfaces: list[ParsedInterface]
+    ) -> None:
+        info = HwhInfo(_UNKNOWN_BOARDPART, "xc7z020clg400-1", "xc7z020", "clg400", list(interfaces))
+        result = _invoke_build(tmp_path, monkeypatch, info, [], "n\n" + _BUILD_INPUT)
+
+        assert result.exit_code == 1
+        assert "Aborted." in result.output
+        assert "Design name" not in result.output
+        assert not (tmp_path / "my-design").exists()
+
+    @pytest.mark.parametrize(
+        ("interfaces", "summary"),
+        [
+            ([_AXI_IFACE, _HDMI_IFACE], "2 interface(s), 1 AXI, board-specific: hdmi_rtl"),
+            ([_HDMI_IFACE], "1 interface(s), board-specific: hdmi_rtl"),
+        ],
+        ids=["axi-and-hdmi", "hdmi-only"],
+    )
+    def test_reports_the_interface_summary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, interfaces: list[ParsedInterface], summary: str
+    ) -> None:
+        info = HwhInfo(_UNKNOWN_BOARDPART, "xc7z020clg400-1", "xc7z020", "clg400", list(interfaces))
+        result = _invoke_build(tmp_path, monkeypatch, info, ["--dry-run"], "y\n" + _BUILD_INPUT)
+
+        assert result.exit_code == 0, result.output
+        assert f"EXTERNALINTERFACES: {summary}\n" in result.output
+        assert "design_portability: board-specific" in result.output
+
+    def test_no_boardpart_uses_the_virtual_board_without_asking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        info = HwhInfo(None, "xc7z020clg400-1", "xc7z020", "clg400")
+        result = _invoke_build(tmp_path, monkeypatch, info, [], _BUILD_INPUT)
+
+        assert result.exit_code == 0, result.output
+        assert "BOARDPART: (not found)" in result.output
+        assert "EXTERNALINTERFACES: (none)" in result.output
+        assert "→ No BOARDPART; cannot look up board" in result.output
+        assert "Continue?" not in result.output
+        assert (tmp_path / "my-design" / "generic-xc7z020" / "pynq" / "manifest.yaml").exists()
+
+    def test_parse_error_exits_1(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _raise(_path: Path) -> HwhInfo:
+            raise HwhParseError("broken hwh")
+
+        src = tmp_path / "vivado"
+        src.mkdir()
+        (src / "design.hwh").write_text("<unused/>")
+        monkeypatch.setattr("fabricgate.cli.commands.build.parse_hwh", _raise)
+
+        result = CliRunner().invoke(build_cmd, [str(src)], input=_BUILD_INPUT)
+
+        assert result.exit_code == 1
+        assert "Error: broken hwh" in result.output
+
+    def test_write_failure_exits_4(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A file where the board directory must go makes mkdir fail (INFRA)."""
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "zcu104").write_text("not a directory")
+        info = HwhInfo("xilinx.com:zcu104:part0:1.1", "xczu7ev-ffvc1156-2-e", "xczu7ev", "ffvc1156")
+        result = _invoke_build(tmp_path, monkeypatch, info, ["--output", str(out)], _BUILD_INPUT)
+
+        assert result.exit_code == 4
+        assert "Error: Write failed" in result.output
+        assert not (out / "fabricgate-index.yaml").exists()
 
 
 def test_parse_hwh_refuses_entities_as_a_parse_error(tmp_path: Path) -> None:
