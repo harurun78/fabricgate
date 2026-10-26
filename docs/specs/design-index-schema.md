@@ -18,7 +18,7 @@ Analogous to an [OCI Image Index](https://github.com/opencontainers/image-spec/b
 
 ```yaml
 # Required
-schema: fabricgate-index/v1    # Fixed schema identifier
+schema: fabricgate-index/v1    # Fixed schema identifier (treated as this value when omitted)
 name: <namespace>/<design>     # Lowercase, [a-z0-9-]+/[a-z0-9-]+
 version: <semver>              # Semantic versioning (X.Y.Z)
 
@@ -48,7 +48,7 @@ platforms:
 
 ### 3.1 `schema`
 
-Fixed value: `fabricgate-index/v1`
+Fixed value: `fabricgate-index/v1`. When omitted, the index is read as `fabricgate-index/v1`; any other value is an error.
 
 Must be the first field. Used for schema detection and forward compatibility.
 
@@ -269,7 +269,7 @@ platforms:
 
 | Rule | Severity |
 |------|----------|
-| `schema` must be `fabricgate-index/v1` | Error |
+| `schema`, if present, must be `fabricgate-index/v1` (omitted → `fabricgate-index/v1`) | Error |
 | `name` must match regex | Error |
 | `version` must be valid semver | Error |
 | `platforms` must have ≥1 entry | Error |
@@ -279,8 +279,8 @@ platforms:
 | `license`, if present, must match SPDX expression pattern (§3.5) | Error |
 | `license` empty string is not permitted; use `null` / omit for "no license" | Error |
 | `license` identifier not in the published SPDX license list | Warning |
-| `summary` max 200 chars | Warning |
-| `tags` max 10 items | Warning |
+| `summary` max 200 chars | Error |
+| `tags` max 10 items | Error |
 | `speed_grade.tested` should include `speed_grade.min` | Warning |
 
 ## 6. Registry Storage

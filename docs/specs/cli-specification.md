@@ -666,7 +666,9 @@ macOS Keychain / Linux Secret Service). Plaintext fallback to
 no keychain is available.
 
 > Implementation: use [`keyring`](https://pypi.org/project/keyring/) library.
-> Service name: `fabricgate`, username: registry hostname.
+> Service name: `fabricgate`, username: the registry API base URL used for the login
+> (e.g. `https://registry.fabricgate.dev/api/v1`), not just its hostname. The hostname is only
+> what the login message shows.
 
 Polling follows RFC 8628: `authorization_pending` keeps polling, `slow_down` adds 5 s to the
 interval. A `429` (registry rate limit) waits for `Retry-After` (seconds or HTTP-date; never
@@ -1280,8 +1282,10 @@ Undeprecating community/fft-accel:1.0.0 ...
 - 0: Success
 - 1: Design / version not found
 - 2: Permission error（未認証 / 401 / 403）
-- 3: Invalid（`--message` 必須、不正な design-ref / semver、50 バージョン超）
+- 3: Invalid（不正な design-ref / semver、50 バージョン超）
 - 4: Network error / server 5xx
+
+> 注: `--message` の省略（空白だけの値も含む）、`--undo` と `--message` / `--successor` の同時指定は Click の usage error（exit 2）になる。これは終了コード標準（意味論カテゴリ）とは別レイヤーの引数エラーである。SDK の `deprecate()` を空の `message` で呼んだ場合は Invalid（3）になる。
 
 ---
 
