@@ -8,7 +8,7 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ### Added
 
-- `POST /api/v1/oauth/signup` (request `SignupRequest`, response `UserProfileResponse`, `201`): a new user whose identity provider name (for example the GitHub login) is reserved, or already used by another user or namespace, chooses another username in the web UI. The registry's web frontend calls it with the pending sign-in it set at `GET /api/v1/oauth/callback`; no CLI/SDK code calls it. The username follows the namespace name rules (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`, 1-39 characters). Errors: `400 INVALID_PARAMETER`, `401 UNAUTHORIZED` (the pending sign-in expired), `403 FORBIDDEN` (CSRF), `409 RESERVED_NAMESPACE` / `409 USERNAME_TAKEN`.
+- `POST /api/v1/oauth/signup` (request `SignupRequest`, response `UserProfileResponse`, `201`): a new user whose identity provider name (for example the GitHub login) is reserved, or already used by another user or namespace, chooses another username in the web UI. The registry's web frontend calls it with the pending sign-in it set at `GET /api/v1/oauth/callback`; no CLI/SDK code calls it. The username follows the namespace name rules (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`, 1-39 characters). Errors: `422 SCHEMA_VALIDATION_FAILED` (`username` empty or over 64 characters), `400 INVALID_PARAMETER` (any other username outside the rules), `401 UNAUTHORIZED` (the pending sign-in expired), `403 FORBIDDEN` (CSRF), `409 RESERVED_NAMESPACE` / `409 USERNAME_TAKEN`.
 
 ### Changed
 
