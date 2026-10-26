@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import click
@@ -142,6 +143,26 @@ def _make_index_stub(
     return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
 
 
+def _render_stubs(inputs: _BuildInputs) -> tuple[str, str]:
+    """Return ``(index_yaml, manifest_yaml)`` for *inputs*."""
+    manifest_yaml = _make_manifest_stub(
+        runtime=inputs.runtime,
+        board=inputs.board_id,
+        device_family=inputs.device_family,
+        design_ref=f"{inputs.design_name}:{inputs.version}",
+        interfaces=_interfaces_to_manifest(inputs.hwh_info.interfaces),
+        design_portability=inputs.hwh_info.design_portability,
+    )
+    index_yaml = _make_index_stub(
+        design_name=inputs.design_name,
+        version=inputs.version,
+        summary=inputs.description,
+        tags=inputs.tags,
+        platform_id=inputs.platform_id,
+    )
+    return index_yaml, manifest_yaml
+
+
 # ---------------------------------------------------------------------------
 # CLI command
 # ---------------------------------------------------------------------------
@@ -177,7 +198,71 @@ def build_cmd(
     hwh_path_opt: Path | None,
 ) -> None:
     """Generate Platform Manifest and Design Index from a Vivado HWH file."""
-    # --- Step 1: Find HWH files ---
+    inputs = _collect_inputs(directory, hwh_path_opt, namespace=namespace, semver=semver, tags=tags)
+    index_yaml, manifest_yaml = _render_stubs(inputs)
+    _write_outputs(inputs, index_yaml, manifest_yaml, output_dir=output_dir, dry_run=dry_run)
+
+
+@dataclass(frozen=True)
+class _BuildInputs:
+    """What ``build`` reads from the HWH and asks the user, before generating YAML."""
+
+    hwh_info: HwhInfo
+    board_id: str
+    device_family: str | None
+    design_name: str
+    version: str
+    runtime: str
+    description: str | None
+    tags: list[str]
+
+    @property
+    def platform_id(self) -> str:
+        return f"{self.board_id}/{self.runtime}"
+
+
+def _collect_inputs(
+    directory: Path,
+    hwh_path_opt: Path | None,
+    *,
+    namespace: str | None,
+    semver: str | None,
+    tags: str | None,
+) -> _BuildInputs:
+    hwh_path = _select_hwh(directory, hwh_path_opt)
+    hwh_info = _parse_hwh_and_report(hwh_path)
+    board_id, device_family = _choose_board(hwh_info)
+
+    # --- Interactive inputs ---
+    click.echo("")
+
+    ns_prompt = f"{namespace}/" if namespace else ""
+    raw_name = click.prompt(f"Design name [{ns_prompt}]", default=f"{ns_prompt}my-design")
+    design_name = raw_name.strip()
+
+    raw_version = click.prompt("Version", default=semver or "0.1.0")
+    version = raw_version.strip()
+
+    runtime = _prompt_runtime()
+
+    description = click.prompt("Description", default="", show_default=False).strip() or None
+
+    raw_tags = tags or click.prompt("Tags (comma-separated, optional)", default="", show_default=False)
+    tag_list = [t.strip() for t in raw_tags.split(",") if t.strip()] if raw_tags else []
+
+    return _BuildInputs(
+        hwh_info=hwh_info,
+        board_id=board_id,
+        device_family=device_family,
+        design_name=design_name,
+        version=version,
+        runtime=runtime,
+        description=description,
+        tags=tag_list,
+    )
+
+
+def _select_hwh(directory: Path, hwh_path_opt: Path | None) -> Path:
     click.echo("Scanning for HWH files ...")
     hwh_files = find_hwh_files(directory)
     if not hwh_files:
@@ -187,8 +272,8 @@ def build_cmd(
         click.echo(f"  Found: {f.relative_to(directory.parent)}")
 
     if hwh_path_opt is not None:
-        hwh_path = hwh_path_opt
-    elif len(hwh_files) > 1:
+        return hwh_path_opt
+    if len(hwh_files) > 1:
         if not _stdin_is_tty():
             # Non-interactive: error — user must specify via --hwh
             names = ", ".join(f.name for f in hwh_files)
@@ -197,20 +282,19 @@ def build_cmd(
                 err=True,
             )
             exit_with(FailureKind.GENERIC)
-        else:
-            click.echo("\nMultiple HWH files found. Select one:")
-            for i, f in enumerate(hwh_files):
-                click.echo(f"  [{i + 1}] {f.relative_to(directory.parent)}")
-            choice = click.prompt(
-                "Select HWH file",
-                type=click.IntRange(1, len(hwh_files)),
-                default=1,
-            )
-            hwh_path = hwh_files[choice - 1]
-    else:
-        hwh_path = hwh_files[0]
+        click.echo("\nMultiple HWH files found. Select one:")
+        for i, f in enumerate(hwh_files):
+            click.echo(f"  [{i + 1}] {f.relative_to(directory.parent)}")
+        choice = click.prompt(
+            "Select HWH file",
+            type=click.IntRange(1, len(hwh_files)),
+            default=1,
+        )
+        return hwh_files[choice - 1]
+    return hwh_files[0]
 
-    # --- Step 2: Parse HWH ---
+
+def _parse_hwh_and_report(hwh_path: Path) -> HwhInfo:
     click.echo("\nParsing HWH ...")
     try:
         hwh_info = parse_hwh(hwh_path)
@@ -235,10 +319,12 @@ def build_cmd(
     else:
         click.echo("  EXTERNALINTERFACES: (none)")
 
-    portability = hwh_info.design_portability
-    click.echo(f"  → design_portability: {portability}")
+    click.echo(f"  → design_portability: {hwh_info.design_portability}")
+    return hwh_info
 
-    # --- Step 3: Board DB lookup ---
+
+def _choose_board(hwh_info: HwhInfo) -> tuple[str, str | None]:
+    """Return ``(board_id, device_family)``, asking before using a board that is not in the Board DB."""
     try:
         db = BoardDb.load()
     except Exception as exc:
@@ -246,86 +332,50 @@ def build_cmd(
         # INFRA: failed to load local Board DB (ADR-008 exit-code standard).
         exit_with(FailureKind.INFRA)
 
-    board_id: str
-    device_family: str | None
-
-    if hwh_info.boardpart:
-        entry = db.lookup_by_boardpart(hwh_info.boardpart)
-        if entry:
-            click.echo(f"  → Board DB match: {entry.board_id} ({entry.display_name})")
-            board_id = entry.board_id
-            device_family = entry.device_family
-        else:
-            # Not in Board DB — propose virtual board
-            click.echo("  → Board DB: not found")
-            proposed_board_id, device_family = _resolve_board_id(hwh_info, db)
-            if portability == "axi-only":
-                click.echo(f"  → Suggest: {proposed_board_id}")
-                if not click.confirm(
-                    f"\n  Board '{hwh_info.boardpart}' is not in the Board DB.\n"
-                    f"  Treat as {proposed_board_id} (AXI-only, any {device_family} board)?",
-                    default=True,
-                ):
-                    click.echo("Aborted.", err=True)
-                    exit_with(FailureKind.GENERIC)
-            else:
-                click.echo(f"  → Suggest: {proposed_board_id}")
-                if not click.confirm(
-                    f"\n  Platform will be registered as: {proposed_board_id}/<runtime>\n  Continue?",
-                    default=True,
-                ):
-                    click.echo("Aborted.", err=True)
-                    exit_with(FailureKind.GENERIC)
-            board_id = proposed_board_id
-    else:
+    if not hwh_info.boardpart:
         click.echo("  → No BOARDPART; cannot look up board")
-        proposed_board_id, device_family = _resolve_board_id(hwh_info, db)
-        board_id = proposed_board_id
+        return _resolve_board_id(hwh_info, db)
 
-    # --- Step 4: Interactive inputs ---
-    click.echo("")
+    entry = db.lookup_by_boardpart(hwh_info.boardpart)
+    if entry:
+        click.echo(f"  → Board DB match: {entry.board_id} ({entry.display_name})")
+        return entry.board_id, entry.device_family
 
-    ns_prompt = f"{namespace}/" if namespace else ""
-    raw_name = click.prompt(f"Design name [{ns_prompt}]", default=f"{ns_prompt}my-design")
-    design_name = raw_name.strip()
+    # Not in Board DB — propose virtual board
+    click.echo("  → Board DB: not found")
+    proposed_board_id, device_family = _resolve_board_id(hwh_info, db)
+    if hwh_info.design_portability == "axi-only":
+        click.echo(f"  → Suggest: {proposed_board_id}")
+        if not click.confirm(
+            f"\n  Board '{hwh_info.boardpart}' is not in the Board DB.\n"
+            f"  Treat as {proposed_board_id} (AXI-only, any {device_family} board)?",
+            default=True,
+        ):
+            click.echo("Aborted.", err=True)
+            exit_with(FailureKind.GENERIC)
+    else:
+        click.echo(f"  → Suggest: {proposed_board_id}")
+        if not click.confirm(
+            f"\n  Platform will be registered as: {proposed_board_id}/<runtime>\n  Continue?",
+            default=True,
+        ):
+            click.echo("Aborted.", err=True)
+            exit_with(FailureKind.GENERIC)
+    return proposed_board_id, device_family
 
-    raw_version = click.prompt("Version", default=semver or "0.1.0")
-    version = raw_version.strip()
 
-    runtime = _prompt_runtime()
-
-    description = click.prompt("Description", default="", show_default=False).strip() or None
-
-    raw_tags = tags or click.prompt("Tags (comma-separated, optional)", default="", show_default=False)
-    tag_list = [t.strip() for t in raw_tags.split(",") if t.strip()] if raw_tags else []
-
-    # --- Step 5: Derive paths and build YAML ---
-    platform_id = f"{board_id}/{runtime}"
-    design_slug = design_name.split("/")[-1] if "/" in design_name else design_name
-
-    design_ref = f"{design_name}:{version}"
-    manifest_interfaces = _interfaces_to_manifest(hwh_info.interfaces)
-
-    manifest_yaml = _make_manifest_stub(
-        runtime=runtime,
-        board=board_id,
-        device_family=device_family,
-        design_ref=design_ref,
-        interfaces=manifest_interfaces,
-        design_portability=portability,
-    )
-    index_yaml = _make_index_stub(
-        design_name=design_name,
-        version=version,
-        summary=description,
-        tags=tag_list,
-        platform_id=platform_id,
-    )
-
-    # --- Step 6: Write (or preview) ---
+def _write_outputs(
+    inputs: _BuildInputs,
+    index_yaml: str,
+    manifest_yaml: str,
+    *,
+    output_dir: Path | None,
+    dry_run: bool,
+) -> None:
+    design_slug = inputs.design_name.split("/")[-1] if "/" in inputs.design_name else inputs.design_name
     out_root = output_dir if output_dir is not None else Path(design_slug)
     # push reads <project>/<board_id>/<runtime>/manifest.yaml
-    manifest_path = out_root / board_id / runtime / "manifest.yaml"
+    manifest_path = out_root / inputs.board_id / inputs.runtime / "manifest.yaml"
     index_path = out_root / "fabricgate-index.yaml"
 
     click.echo("\nGenerated:")
@@ -334,7 +384,7 @@ def build_cmd(
         click.echo(f"  (dry-run) {manifest_path}")
         click.echo("\n--- fabricgate-index.yaml ---")
         click.echo(index_yaml)
-        click.echo(f"--- {platform_id}/manifest.yaml ---")
+        click.echo(f"--- {inputs.platform_id}/manifest.yaml ---")
         click.echo(manifest_yaml)
         return
 
