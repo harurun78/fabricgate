@@ -1213,6 +1213,8 @@ fabricgate yank <design-ref> [<version>...] [--reason <text>]
 - `<design-ref>`: `namespace/design:version`（単一バージョン）または `namespace/design`（`<version>...` と組み合わせ）
 - `<version>...`: yank するバージョンを複数指定（最大 50）
 
+複数のバージョンは指定順に 1 つずつ処理し、最初の失敗で止まる。それより前のバージョンは変更済みのまま残るので、エラーメッセージの末尾にそれらを挙げる（例: `... (0.9.0 was yanked before this error)`）。終了コードは失敗した要求のもの。
+
 **Options:**
 
 | Option | Description |
@@ -1253,6 +1255,8 @@ Yanking 2 versions of community/fft-accel ...
 fabricgate deprecate <design-ref> [<version>...] --message <text> [--successor <design-ref>]
 fabricgate deprecate --undo <design-ref> [<version>...]
 ```
+
+複数バージョンの処理順と途中で失敗したときの扱いは yank（§3.12）と同じ。エラーメッセージの末尾には `(... were deprecated before this error)`（`--undo` では `undeprecated`）と書く。
 
 **Behavior:**
 

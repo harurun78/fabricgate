@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+
 from fabricgate.client.registry_client import RegistryClient
 from fabricgate.models.cli import DeprecateResult, YankResult
 from fabricgate.sdk._helpers import (
@@ -41,6 +44,23 @@ def _parse_versions(design_ref: str, versions: list[str] | None, operation: str)
     return namespace, design, version_list
 
 
+@contextmanager
+def _name_done_versions(done: Sequence[YankResult | DeprecateResult], past: str) -> Iterator[None]:
+    """On an SDKError, add the versions in *done* (already *past*, e.g. "yanked") to its message.
+
+    Versions are processed one by one and the first failure stops the loop, so the
+    earlier ones stay changed on the registry even though the command fails.
+    """
+    try:
+        yield
+    except SDKError as exc:
+        if not done:
+            raise
+        versions = ", ".join(r.version for r in done)
+        verb = "was" if len(done) == 1 else "were"
+        raise SDKError(f"{exc} ({versions} {verb} {past} before this error)", code=exc.code) from exc
+
+
 def yank(
     design_ref: str,
     versions: list[str] | None = None,
@@ -71,7 +91,11 @@ def yank(
     namespace, design, version_list = _parse_versions(design_ref, versions, "yank")
 
     results: list[YankResult] = []
-    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+    with (
+        _name_done_versions(results, "yanked"),
+        _registry_errors(),
+        RegistryClient(base_url=registry, token=token) as client,
+    ):
         for ver in version_list:
             resp = client.yank_version(namespace, design, ver, reason)
             results.append(
@@ -103,7 +127,11 @@ def deprecate(
     namespace, design, version_list = _parse_versions(design_ref, versions, "deprecate")
 
     results: list[DeprecateResult] = []
-    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+    with (
+        _name_done_versions(results, "deprecated"),
+        _registry_errors(),
+        RegistryClient(base_url=registry, token=token) as client,
+    ):
         for ver in version_list:
             resp = client.deprecate_version(
                 namespace,
@@ -137,7 +165,11 @@ def undeprecate(
     namespace, design, version_list = _parse_versions(design_ref, versions, "deprecate")
 
     results: list[DeprecateResult] = []
-    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+    with (
+        _name_done_versions(results, "undeprecated"),
+        _registry_errors(),
+        RegistryClient(base_url=registry, token=token) as client,
+    ):
         for ver in version_list:
             resp = client.undeprecate_version(namespace, design, ver)
             results.append(

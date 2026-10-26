@@ -2580,6 +2580,61 @@ def test_yank_not_found_error(monkeypatch: pytest.MonkeyPatch) -> None:
     assert exc_info.value.code == ExitKind.NOT_FOUND
 
 
+_LIFECYCLE_CALLS = {
+    "yanked": lambda versions: sdk_api.yank("alice/counter", versions, reason="bug", registry="http://test"),
+    "deprecated": lambda versions: sdk_api.deprecate("alice/counter", versions, message="old", registry="http://test"),
+    "undeprecated": lambda versions: sdk_api.undeprecate("alice/counter", versions, registry="http://test"),
+}
+
+
+@pytest.mark.parametrize("past", list(_LIFECYCLE_CALLS))
+@pytest.mark.parametrize(
+    ("versions", "suffix"),
+    [
+        (["1.0.0", "1.1.0", "9.9.9"], " (1.0.0, 1.1.0 were {past} before this error)"),
+        (["1.0.0", "9.9.9", "1.1.0"], " (1.0.0 was {past} before this error)"),
+        (["9.9.9", "1.0.0"], ""),
+    ],
+    ids=["two-done", "one-done", "none-done"],
+)
+def test_lifecycle_failure_names_the_versions_already_changed(
+    monkeypatch: pytest.MonkeyPatch, past: str, versions: list[str], suffix: str
+) -> None:
+    """The first failure stops the loop; the error says which versions were changed before it (#74)."""
+    from fabricgate.client.registry_client import RegistryError
+    from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
+
+    not_found = RegistryError(404, ErrorResponse(error=ErrorDetail(code="NOT_FOUND", message="Version not found")))
+    calls: list[str] = []
+
+    class _FailOn999(_YankFakeClient):
+        def _check(self, version: str) -> None:
+            calls.append(version)
+            if version == "9.9.9":
+                raise not_found
+
+        def yank_version(self, namespace, design, version, reason=""):
+            self._check(version)
+            return super().yank_version(namespace, design, version, reason)
+
+        def deprecate_version(self, namespace, design, version, message="", successor=None):
+            self._check(version)
+            return super().deprecate_version(namespace, design, version, message, successor)
+
+        def undeprecate_version(self, namespace, design, version):
+            self._check(version)
+            return super().undeprecate_version(namespace, design, version)
+
+    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: _yank_creds())
+    _patch_all_rc(monkeypatch, _FailOn999)
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        _LIFECYCLE_CALLS[past](versions)
+    assert str(exc_info.value) == str(not_found) + suffix.format(past=past)
+    assert exc_info.value.code == ExitKind.NOT_FOUND
+    assert calls == versions[: versions.index("9.9.9") + 1]
+
+
 # ===========================================================================
 # CLI-DEPRECATE-001: deprecate SDK function
 # ===========================================================================
