@@ -1199,6 +1199,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/oauth/signup:
+    post:
+      tags:
+      - auth
+      summary: Oauth Signup
+      description: 'Finish a web sign-in whose IdP name was unavailable by creating
+        the user with a chosen username.
+
+
+        The principal comes from the pending sign-in cookie the OAuth callback set,
+        not from
+
+        a session: the session cookie is set here, once the user row exists.'
+      operationId: oauth_signup_api_v1_oauth_signup_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/oauth/token:
     post:
       tags:
@@ -4226,6 +4259,18 @@ components:
       - shell
       title: ShellResponse
       description: '``GET .../platforms/{device}/{runtime}/shell``.'
+    SignupRequest:
+      properties:
+        username:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Username
+      type: object
+      required:
+      - username
+      title: SignupRequest
+      description: 'Body of ``POST /oauth/signup``: the username a new user chooses.'
     SpeedGrade:
       properties:
         min:

@@ -6,8 +6,15 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+### Added
+
+- `POST /api/v1/oauth/signup` (request `SignupRequest`, response `UserProfileResponse`, `201`): a new user whose identity provider name (for example the GitHub login) is reserved, or already used by another user or namespace, chooses another username in the web UI. The registry's web frontend calls it with the pending sign-in it set at `GET /api/v1/oauth/callback`; no CLI/SDK code calls it. The username follows the namespace name rules (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`, 1-39 characters). Errors: `422 SCHEMA_VALIDATION_FAILED` (`username` empty or over 64 characters), `400 INVALID_PARAMETER` (any other username outside the rules), `401 UNAUTHORIZED` (the pending sign-in expired), `403 FORBIDDEN` (CSRF), `409 RESERVED_NAMESPACE` / `409 USERNAME_TAKEN`.
+
 ### Changed
 
+- `GET /api/v1/oauth/callback`: when a new user's identity provider name is reserved or already used, the registry redirects to the frontend's username form (`/auth/username`) instead of `/login?error=user_resolve_failed`. No session is set until the user is created.
+- `POST /api/v1/oauth/token`: on the same collision the `409` code is unchanged (`USERNAME_TAKEN` / `RESERVED_NAMESPACE`), and the message now tells the user to sign in on the web to choose a username and then log in again. `fabricgate login` prints the message as is.
+- Username and namespace collisions are checked ignoring case: a new user `Alice` is refused when `alice` exists as a username or namespace, and a namespace `alice` cannot be created by anyone but user `Alice`.
 - **BREAKING (schema)**: Design Index `repository` and `docs` must be `http://` or `https://` URLs without whitespace (`^https?://\S+$`). They are shown as links, so `javascript:`, `file:`, `data:` and other schemes are rejected. `fabricgate push` refuses such an index, and so does a registry that validates with this model. `fabricgate pull` ignores both fields, so versions published earlier with other values still pull. `design-index.schema.json` is regenerated.
 - `fabricgate quota` prints sizes the way `fabricgate diff` does: whole numbers without a decimal (`1 GB`, `500 MB`) and one decimal otherwise (`4.4 GB`). It printed `1.0 GB` and `500.0 MB` before. Only the text output changes; `--json` is unchanged. No API or schema change.
 - `fabricgate pull` (and the SDK's `pull(cache_dir=...)`) reuses artifacts from the local cache. Root, dependency and shell artifacts are looked up by the sha256 their manifest pins, under `<cache-dir>/blobs/sha256/`. A cached file is hashed again before use and downloaded again when it does not match. Manifests are still fetched every time, and `--verify-attestation` still checks every signature. `PullResult.cached` is now `true` when all root artifacts came from the cache (it was always `false`), and the text output says `(from cache)`. `--no-cache` neither reads nor writes the cache. The cache has no size limit; delete `blobs/` to free the space. No API or schema change.
