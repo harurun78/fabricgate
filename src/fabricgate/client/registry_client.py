@@ -154,11 +154,16 @@ class RegistryClient:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         self._timeout = timeout
-        self._client = httpx2.Client(
-            base_url=base_url,
-            headers=headers,
-            timeout=timeout,
-        )
+        try:
+            self._client = httpx2.Client(
+                base_url=base_url,
+                headers=headers,
+                timeout=timeout,
+            )
+        except OSError as exc:
+            # The SSL context is built here, so an SSL_CERT_FILE that does not exist
+            # fails before any request; report it like other transport failures.
+            raise NetworkError(f"Network error: {exc}") from exc
 
     def close(self) -> None:
         self._client.close()
@@ -349,7 +354,8 @@ class RegistryClient:
                 # single PUT that cannot be resumed if it is cut off.
                 timeout=httpx2.Timeout(self._timeout, write=None),
             )
-        except httpx2.HTTPError as exc:
+        except (httpx2.HTTPError, OSError) as exc:
+            # ``httpx2.put`` builds its own client, so it can hit the same OSError as ``__init__``.
             raise NetworkError(f"Network error uploading {ticket.filename}: {exc}") from exc
         if resp.status_code >= 400:
             # 400 BadDigest means the bytes did not match the signed digest.

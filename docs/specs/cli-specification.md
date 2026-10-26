@@ -67,7 +67,7 @@ section (e.g. `info` / `verify` / `search`) emit only the standard codes above.
 Download a design for a specific platform.
 
 ```
-fabricgate pull <design-ref> [--platform <board_id/runtime>] [--output <dir>] [--verify] [--no-deps] [--deps-only]
+fabricgate pull <design-ref> [--platform <board_id/runtime>] [--output <dir>] [--verify] [--no-deps] [--deps-only] [--no-cache]
 ```
 
 **Arguments:**
@@ -84,6 +84,9 @@ fabricgate pull <design-ref> [--platform <board_id/runtime>] [--output <dir>] [-
 - `--deps-only`: 依存 Design のみ取得し、ルートはスキップする（事前にディレクトリを用意する場合等）
 - `--include-optional-deps`: optional 依存も取得する（default: 無効）
 - `--no-shell`: `bitstream_type: partial` のデザインにおいて Shell の自動取得をスキップする（Shell が既にローカルにある場合等）
+- `--no-cache`: ローカルキャッシュ（§4）を読みも書きもしない。すべてのアーティファクトをダウンロードし、`fabricgate list` の記録も残さない
+
+**キャッシュ:** アーティファクト（ルート・依存・shell）は、マニフェストが固定する sha256 でローカルキャッシュを引く。キャッシュにあり、取り出す前にハッシュを取り直して一致したものだけを使い、ダウンロードは省く。一致しないものは捨ててダウンロードし直す。マニフェストは毎回 registry から取得し、`--verify-attestation` の署名検証もキャッシュの有無にかかわらず毎回行う。ルートのアーティファクトがすべてキャッシュから来た場合、`PullResult.cached` は `true` になり、テキスト出力は `Saved to <dir> (from cache)` になる。blob の読み書きに失敗しても pull は失敗させず、警告を出してダウンロードに戻る。
 
 **Behavior:**
 
@@ -666,7 +669,9 @@ macOS Keychain / Linux Secret Service). Plaintext fallback to
 no keychain is available.
 
 > Implementation: use [`keyring`](https://pypi.org/project/keyring/) library.
-> Service name: `fabricgate`, username: registry hostname.
+> Service name: `fabricgate`, username: the registry API base URL used for the login
+> (e.g. `https://registry.fabricgate.dev/api/v1`), not just its hostname. The hostname is only
+> what the login message shows.
 
 Polling follows RFC 8628: `authorization_pending` keeps polling, `slow_down` adds 5 s to the
 interval. A `429` (registry rate limit) waits for `Retry-After` (seconds or HTTP-date; never
@@ -1213,6 +1218,8 @@ fabricgate yank <design-ref> [<version>...] [--reason <text>]
 - `<design-ref>`: `namespace/design:version`（単一バージョン）または `namespace/design`（`<version>...` と組み合わせ）
 - `<version>...`: yank するバージョンを複数指定（最大 50）
 
+複数のバージョンは指定順に 1 つずつ処理し、最初の失敗で止まる。それより前のバージョンは変更済みのまま残るので、エラーメッセージの末尾にそれらを挙げる（例: `... (0.9.0 was yanked before this error)`）。終了コードは失敗した要求のもの。
+
 **Options:**
 
 | Option | Description |
@@ -1254,6 +1261,8 @@ fabricgate deprecate <design-ref> [<version>...] --message <text> [--successor <
 fabricgate deprecate --undo <design-ref> [<version>...]
 ```
 
+複数バージョンの処理順と途中で失敗したときの扱いは yank（§3.12）と同じ。エラーメッセージの末尾には `(... were deprecated before this error)`（`--undo` では `undeprecated`）と書く。
+
 **Behavior:**
 
 ```
@@ -1276,8 +1285,10 @@ Undeprecating community/fft-accel:1.0.0 ...
 - 0: Success
 - 1: Design / version not found
 - 2: Permission error（未認証 / 401 / 403）
-- 3: Invalid（`--message` 必須、不正な design-ref / semver、50 バージョン超）
+- 3: Invalid（不正な design-ref / semver、50 バージョン超）
 - 4: Network error / server 5xx
+
+> 注: `--message` の省略（空白だけの値も含む）、`--undo` と `--message` / `--successor` の同時指定は Click の usage error（exit 2）になる。これは終了コード標準（意味論カテゴリ）とは別レイヤーの引数エラーである。SDK の `deprecate()` を空の `message` で呼んだ場合は Invalid（3）になる。
 
 ---
 
@@ -1388,20 +1399,14 @@ Disclaimer: License compliance is the publisher's and user's responsibility.
 ```
 ~/.fabricgate/
   credentials.json              # Auth token fallback (0600, no keychain env only)
-  cache/                        # OS keychain が優先。keychain 不可環境のみファイル使用
-    fabricgate/
-      blink/
-        1.0.0/
-          index.yaml            # Cached Design Index
-          xczu7ev-pynq/
-            manifest.yaml       # Platform Manifest
-            blink.bit
-            blink.hwh
-          xczu7ev-linux-fpgamgr/
-            manifest.yaml
-            blink.bit
-            blink.dtbo
+  cache/                        # --cache-dir / FG_CACHE_DIR
+    index.json                  # pull の記録（name / version / platform / 出力先 / digest）。`fabricgate list` が表示する
+    blobs/
+      sha256/
+        <64-hex>                # アーティファクトの実体。ファイル名はその sha256
 ```
+
+キャッシュはアーティファクトの内容（sha256）で引くので、同じ内容は版をまたいで 1 つだけ保存される。容量の上限や自動削除は無い。不要になったら `cache/blobs/` を消してよい（次の pull でダウンロードし直す）。
 
 ## 5. 3層アーキテクチャ
 
@@ -1444,7 +1449,7 @@ CLI / SDK は以下の3層で構成する。将来的にコアロジックの他
 | モジュール | 責務 |
 |---|---|
 | `registry_client.py` | Registry API への HTTP 通信 (httpx2)。全 API エンドポイントのメソッド |
-| `cache.py` | ローカルキャッシュの読み書き。キャッシュヒット判定 |
+| `cache.py` | ローカルキャッシュの読み書き。pull の記録（index.json）と、sha256 で引くアーティファクトの実体（blobs/）。ヒット時もハッシュを取り直して照合する |
 | `validator.py` | SHA-256 ダイジェスト検証。Design Index ↔ Platform Manifest ↔ Artifact の整合性チェック |
 | `resolver.py` | プラットフォーム解決ロジック。Design Index から platform を選択 |
 | `publisher.py` | push 用のパッケージ組立。ディレクトリ走査 → バリデーション → multipart 構築 |

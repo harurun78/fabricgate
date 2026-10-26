@@ -640,7 +640,7 @@ interfaces:
 
 | Rule | Severity |
 |------|----------|
-| `schema` must be `fabricgate-platform/v1` | Error |
+| `schema`, if present, must be `fabricgate-platform/v1` (omitted → `fabricgate-platform/v1`) | Error |
 | `runtime` must be a known runtime identifier | Error (strict) / Warning (permissive) |
 | `board` must be non-empty, match Board DB canonical ID format (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`) | Error |
 | `design_ref` must match `namespace/design:version` format | Error |

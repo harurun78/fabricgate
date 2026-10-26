@@ -50,13 +50,8 @@ def watch(
         # Before any request: "1.0.0-rc.1" is not a registry version and must not pass as 1.0.0.
         _validate_semver(since_version)
 
-    try:
-        with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
-            response = client.get_design(namespace, design)
-    except OSError as exc:
-        # Not from requests (those become NetworkError) but from building the
-        # HTTP client, e.g. an SSL_CERT_FILE that does not exist.
-        raise SDKError(f"Network error: {exc}", code=ExitKind.INFRA) from exc
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        response = client.get_design(namespace, design)
 
     full_name = f"{namespace}/{design}"
 

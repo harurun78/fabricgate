@@ -143,6 +143,17 @@ class TestErrorHandling:
         assert exc_info.value.__cause__ is None
         assert exc_info.value.__suppress_context__
 
+    def test_missing_ssl_cert_file_raises_network_error(self, monkeypatch, tmp_path) -> None:
+        """Building the SSL context fails with OSError before any request (#105)."""
+        from fabricgate.client.errors import FailureKind
+
+        monkeypatch.setenv("SSL_CERT_FILE", str(tmp_path / "missing.pem"))
+
+        with pytest.raises(NetworkError) as exc_info:
+            RegistryClient(base_url="https://test/api/v1")
+        assert "Network error" in str(exc_info.value)
+        assert exc_info.value.kind == FailureKind.INFRA
+
 
 # ---------------------------------------------------------------------------
 # Discovery
