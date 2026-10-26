@@ -24,6 +24,11 @@ class NamespaceMemberResponse(BaseModel):
 
     user_id: int
     username: str
+    github_login: str | None = None
+    """GitHub login of the linked account as of the user's last sign-in; None for other identity providers.
+
+    The username can differ from it (a user chooses one when the GitHub login is unavailable),
+    so this is what tells who the account belongs to."""
     role: MemberRole
     joined_at: datetime
 

@@ -4336,6 +4336,17 @@
             "type": "string",
             "title": "Username"
           },
+          "github_login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Login"
+          },
           "email": {
             "anyOf": [
               {
@@ -5717,6 +5728,17 @@
             "type": "string",
             "title": "Username"
           },
+          "github_login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Login"
+          },
           "role": {
             "$ref": "#/components/schemas/MemberRole"
           },
@@ -6588,6 +6610,17 @@
           "username": {
             "type": "string",
             "title": "Username"
+          },
+          "github_login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Github Login"
           },
           "namespace": {
             "type": "string",

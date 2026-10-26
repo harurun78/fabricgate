@@ -86,6 +86,11 @@ class UserProfileResponse(ApiResponseModel):
     """``GET /api/v1/users/me`` — the authenticated user's profile."""
 
     username: str
+    github_login: str | None = None
+    """GitHub login of the linked account as of the user's last sign-in; None for other identity providers.
+
+    The username can differ from it (a user chooses one when the GitHub login is unavailable),
+    so this is what tells who the account belongs to."""
     namespace: str
     """Personal namespace; currently always equal to ``username``."""
     email: str | None = None
@@ -597,6 +602,11 @@ class AdminUserEntry(ApiResponseModel):
 
     id: int
     username: str
+    github_login: str | None = None
+    """GitHub login of the linked account as of the user's last sign-in; None for other identity providers.
+
+    The username can differ from it (a user chooses one when the GitHub login is unavailable),
+    so this is what tells who the account belongs to."""
     email: str | None = None
     provider: str
     created_at: datetime
