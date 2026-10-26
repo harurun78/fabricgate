@@ -3,17 +3,21 @@
 Cache layout::
 
     ~/.fabricgate/cache/
-    ├── index.json          # CacheIndex
-    └── <namespace>/<design>/<version>/<device>/<runtime>/
-        ├── manifest.yaml
-        └── <artifact files>
+    ├── index.json          # CacheIndex: what was pulled, and where to (``fabricgate list``)
+    └── blobs/sha256/<hex>  # artifact bytes, named by their SHA-256
+
+Artifacts are looked up by the sha256 the platform manifest pins, and a blob
+is only used after hashing it again, so a damaged or edited file is dropped
+and downloaded instead.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -110,3 +114,51 @@ def platform_dir(
     ns, design = name.split("/", 1)
     device, runtime = platform.split("/", 1)
     return base / ns / design / version / device / runtime
+
+
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _blob_path(cache_dir: Path, sha256: str) -> Path:
+    if not _SHA256_HEX.match(sha256):
+        raise ValueError(f"not a sha256 hex digest: {sha256!r}")
+    return cache_dir / "blobs" / "sha256" / sha256
+
+
+def get_blob(cache_dir: Path, sha256: str) -> bytes | None:
+    """Return the cached bytes whose SHA-256 is *sha256*, or ``None``.
+
+    The bytes are hashed again before they are returned; a blob that no longer
+    matches is removed. Read errors count as a miss: the caller downloads instead.
+    """
+    path = _blob_path(cache_dir, sha256)
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        _log.warning("ignoring unreadable cache blob %s: %s", path, exc)
+        return None
+    if hashlib.sha256(data).hexdigest() != sha256:
+        _log.warning("removing damaged cache blob %s", path)
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            _log.warning("could not remove %s: %s", path, exc)
+        return None
+    return data
+
+
+def put_blob(cache_dir: Path, data: bytes) -> None:
+    """Store *data* under its SHA-256. Write errors are logged, not raised: the pull itself succeeded."""
+    path = _blob_path(cache_dir, hashlib.sha256(data).hexdigest())
+    if path.exists():
+        return
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_bytes(data)
+        os.replace(tmp, path)
+    except OSError as exc:
+        tmp.unlink(missing_ok=True)
+        _log.warning("could not write cache blob %s: %s", path, exc)

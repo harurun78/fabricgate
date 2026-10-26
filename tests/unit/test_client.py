@@ -558,6 +558,31 @@ class TestCache:
         assert len(idx.entries) == 1
         assert idx.entries[0].digest == digest2
 
+    def test_blob_roundtrip(self, tmp_path: Path) -> None:
+        cache.put_blob(tmp_path, b"bits")
+        assert cache.get_blob(tmp_path, hashlib.sha256(b"bits").hexdigest()) == b"bits"
+        assert cache.get_blob(tmp_path, "0" * 64) is None
+
+    def test_damaged_blob_is_a_miss_and_removed(self, tmp_path: Path) -> None:
+        sha = hashlib.sha256(b"bits").hexdigest()
+        cache.put_blob(tmp_path, b"bits")
+        blob = tmp_path / "blobs" / "sha256" / sha
+        blob.write_bytes(b"other")
+        assert cache.get_blob(tmp_path, sha) is None
+        assert not blob.exists()
+
+    def test_blob_name_must_be_a_sha256(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError):
+            cache.get_blob(tmp_path, "../../etc/passwd")
+
+    def test_blob_write_failure_is_not_raised(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        def _fail(*_a: object) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(cache.os, "replace", _fail)
+        cache.put_blob(tmp_path, b"bits")
+        assert list((tmp_path / "blobs" / "sha256").iterdir()) == []
+
     def test_platform_dir(self) -> None:
         p = cache.platform_dir("ns/design", "1.0.0", "xc7z020/pynq", Path("/cache"))
         assert p == Path("/cache/ns/design/1.0.0/xc7z020/pynq")

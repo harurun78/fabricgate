@@ -20,6 +20,7 @@ from fabricgate.sdk import api as sdk_api
 @click.option("--deps-only", is_flag=True, default=False, help="Download dependencies only, skip root design.")
 @click.option("--include-optional-deps", is_flag=True, default=False, help="Include optional dependencies.")
 @click.option("--no-shell", is_flag=True, default=False, help="Skip shell auto-download for partial bitstreams.")
+@click.option("--no-cache", is_flag=True, default=False, help="Neither read nor write the local cache.")
 @click.option(
     "--verify-attestation",
     is_flag=True,
@@ -40,6 +41,7 @@ def pull_cmd(
     deps_only: bool,
     include_optional_deps: bool,
     no_shell: bool,
+    no_cache: bool,
     verify_attestation: bool,
     attestation_key: str | None,
     certificate_identity: str | None,
@@ -60,7 +62,7 @@ def pull_cmd(
             output=output,
             verify_digests=verify_digests,
             registry=str(obj["registry"]),
-            cache_dir=Path(str(obj["cache_dir"])),
+            cache_dir=None if no_cache else Path(str(obj["cache_dir"])),
             no_deps=no_deps,
             deps_only=deps_only,
             include_optional_deps=include_optional_deps,
@@ -80,7 +82,7 @@ def pull_cmd(
 
     if result.fallback_from:
         click.echo(f"Selected: {result.platform} (family fallback from {result.fallback_from})")
-    click.echo(f"Saved to {result.path}")
+    click.echo(f"Saved to {result.path}" + (" (from cache)" if result.cached else ""))
     for artifact in result.artifacts:
         click.echo(f"  {artifact}")
     if result.dependencies:

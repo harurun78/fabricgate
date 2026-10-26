@@ -67,7 +67,7 @@ section (e.g. `info` / `verify` / `search`) emit only the standard codes above.
 Download a design for a specific platform.
 
 ```
-fabricgate pull <design-ref> [--platform <board_id/runtime>] [--output <dir>] [--verify] [--no-deps] [--deps-only]
+fabricgate pull <design-ref> [--platform <board_id/runtime>] [--output <dir>] [--verify] [--no-deps] [--deps-only] [--no-cache]
 ```
 
 **Arguments:**
@@ -84,6 +84,9 @@ fabricgate pull <design-ref> [--platform <board_id/runtime>] [--output <dir>] [-
 - `--deps-only`: 依存 Design のみ取得し、ルートはスキップする（事前にディレクトリを用意する場合等）
 - `--include-optional-deps`: optional 依存も取得する（default: 無効）
 - `--no-shell`: `bitstream_type: partial` のデザインにおいて Shell の自動取得をスキップする（Shell が既にローカルにある場合等）
+- `--no-cache`: ローカルキャッシュ（§4）を読みも書きもしない。すべてのアーティファクトをダウンロードし、`fabricgate list` の記録も残さない
+
+**キャッシュ:** アーティファクト（ルート・依存・shell）は、マニフェストが固定する sha256 でローカルキャッシュを引く。キャッシュにあり、取り出す前にハッシュを取り直して一致したものだけを使い、ダウンロードは省く。一致しないものは捨ててダウンロードし直す。マニフェストは毎回 registry から取得し、`--verify-attestation` の署名検証もキャッシュの有無にかかわらず毎回行う。ルートのアーティファクトがすべてキャッシュから来た場合、`PullResult.cached` は `true` になり、テキスト出力は `Saved to <dir> (from cache)` になる。blob の読み書きに失敗しても pull は失敗させず、警告を出してダウンロードに戻る。
 
 **Behavior:**
 
@@ -1396,20 +1399,14 @@ Disclaimer: License compliance is the publisher's and user's responsibility.
 ```
 ~/.fabricgate/
   credentials.json              # Auth token fallback (0600, no keychain env only)
-  cache/                        # OS keychain が優先。keychain 不可環境のみファイル使用
-    fabricgate/
-      blink/
-        1.0.0/
-          index.yaml            # Cached Design Index
-          xczu7ev-pynq/
-            manifest.yaml       # Platform Manifest
-            blink.bit
-            blink.hwh
-          xczu7ev-linux-fpgamgr/
-            manifest.yaml
-            blink.bit
-            blink.dtbo
+  cache/                        # --cache-dir / FG_CACHE_DIR
+    index.json                  # pull の記録（name / version / platform / 出力先 / digest）。`fabricgate list` が表示する
+    blobs/
+      sha256/
+        <64-hex>                # アーティファクトの実体。ファイル名はその sha256
 ```
+
+キャッシュはアーティファクトの内容（sha256）で引くので、同じ内容は版をまたいで 1 つだけ保存される。容量の上限や自動削除は無い。不要になったら `cache/blobs/` を消してよい（次の pull でダウンロードし直す）。
 
 ## 5. 3層アーキテクチャ
 
@@ -1452,7 +1449,7 @@ CLI / SDK は以下の3層で構成する。将来的にコアロジックの他
 | モジュール | 責務 |
 |---|---|
 | `registry_client.py` | Registry API への HTTP 通信 (httpx2)。全 API エンドポイントのメソッド |
-| `cache.py` | ローカルキャッシュの読み書き。キャッシュヒット判定 |
+| `cache.py` | ローカルキャッシュの読み書き。pull の記録（index.json）と、sha256 で引くアーティファクトの実体（blobs/）。ヒット時もハッシュを取り直して照合する |
 | `validator.py` | SHA-256 ダイジェスト検証。Design Index ↔ Platform Manifest ↔ Artifact の整合性チェック |
 | `resolver.py` | プラットフォーム解決ロジック。Design Index から platform を選択 |
 | `publisher.py` | push 用のパッケージ組立。ディレクトリ走査 → バリデーション → multipart 構築 |

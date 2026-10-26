@@ -183,9 +183,15 @@ def _download_platform(
     *,
     verify_digests: bool,
     signer: AttestationSigner | None,
+    cache_dir: Path | None = None,
     kind: str = "",
-) -> list[str]:
-    """Download one platform's manifest and artifacts into *dest*; return the artifact names.
+) -> tuple[list[str], bool]:
+    """Download one platform's manifest and artifacts into *dest*.
+
+    Returns the artifact names and whether every artifact came from the cache.
+    With *cache_dir*, an artifact whose pinned sha256 is cached is copied from
+    there instead of downloaded, and a downloaded one is added to the cache. The
+    manifest (and its attestation) is always fetched and checked first.
 
     *kind* (``""``, ``"dependency"`` or ``"shell"``) only prefixes error messages.
     The manifest is parsed before it is written, so a broken one leaves nothing on disk.
@@ -208,18 +214,26 @@ def _download_platform(
         )
 
     names: list[str] = []
+    all_cached = True
     for artifact in artifact_refs(manifest):
         name = str(artifact.file)
         path = _validate_artifact_filename(name, context=f"{prefix}manifest")
+        data = cache.get_blob(cache_dir, artifact.sha256) if cache_dir is not None else None
+        downloaded = data is None
+        if data is None:
+            all_cached = False
+            data = fetch(name)
         _write_verified(
             dest / path,
-            fetch(name),
+            data,
             artifact.sha256,
             verify=verify_digests,
             label=f"{prefix}artifact {name}" if kind else name,
         )
+        if downloaded and cache_dir is not None:
+            cache.put_blob(cache_dir, data)
         names.append(name)
-    return names
+    return names, bool(names) and all_cached
 
 
 def _resolve_and_download_deps(
@@ -234,6 +248,7 @@ def _resolve_and_download_deps(
     *,
     include_optional: bool = False,
     signer: AttestationSigner | None = None,
+    cache_dir: Path | None = None,
 ) -> list[str]:
     """Resolve dependencies and download them into deps/ subdirectory.
 
@@ -282,6 +297,7 @@ def _resolve_and_download_deps(
             dep_dir,
             verify_digests=verify_digests,
             signer=signer,
+            cache_dir=cache_dir,
             kind="dependency",
         )
         dep_refs.append(dep_ref)
@@ -301,6 +317,7 @@ def _maybe_download_shell(
     *,
     no_shell: bool = False,
     signer: AttestationSigner | None = None,
+    cache_dir: Path | None = None,
 ) -> str | None:
     """Download the static shell for a partial bitstream if applicable.
 
@@ -340,6 +357,7 @@ def _maybe_download_shell(
         shell_dir,
         verify_digests=verify_digests,
         signer=signer,
+        cache_dir=cache_dir,
         kind="shell",
     )
 
@@ -383,6 +401,7 @@ def pull_design(
             "or both a certificate identity and a certificate OIDC issuer."
         )
     signer = attestation_signer if verify_attestation else None
+    cache_path = Path(cache_dir) if cache_dir is not None else None
     version_detail = client.get_version(namespace, design, version)
 
     # --- Deprecated warning ---
@@ -404,10 +423,11 @@ def pull_design(
     target_dir.mkdir(parents=True, exist_ok=True)
 
     downloaded_files: list[str] = []
+    cached = False
 
     # --- Download root design (unless deps_only) ---
     if not deps_only:
-        downloaded_files = _download_platform(
+        downloaded_files, cached = _download_platform(
             client,
             namespace,
             design,
@@ -417,6 +437,7 @@ def pull_design(
             target_dir,
             verify_digests=verify_digests,
             signer=signer,
+            cache_dir=cache_path,
         )
 
     # --- Dependency resolution ---
@@ -433,6 +454,7 @@ def pull_design(
             verify_digests,
             include_optional=include_optional_deps,
             signer=signer,
+            cache_dir=cache_path,
         )
 
     # --- Shell auto-download ---
@@ -449,16 +471,17 @@ def pull_design(
             verify_digests,
             no_shell=no_shell,
             signer=signer,
+            cache_dir=cache_path,
         )
 
-    if cache_dir is not None and not deps_only:
+    if cache_path is not None and not deps_only:
         cache.store(
             version_detail.name,
             version_detail.version,
             selected.platform,
             selected.digest,
             target_dir,
-            Path(cache_dir),
+            cache_path,
         )
 
     return PullOutcome(
@@ -467,7 +490,7 @@ def pull_design(
         platform=selected.platform,
         path=str(target_dir),
         artifacts=downloaded_files,
-        cached=False,
+        cached=cached,
         dependencies=dep_refs,
         shell=shell_ref,
         deprecated_warning=deprecated_warning,
