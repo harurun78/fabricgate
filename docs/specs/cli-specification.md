@@ -1427,7 +1427,7 @@ CLI / SDK は以下の3層で構成する。将来的にコアロジックの他
 │  fabricgate.client          │
 │                             │
 │  RegistryClient  (HTTP通信)  │
-│  CacheManager    (ローカル)   │
+│  Cache           (ローカル)   │
 │  Validator       (SHA256検証) │
 │  Resolver        (platform解決)│
 │  Publisher       (push組立)   │
@@ -1464,71 +1464,58 @@ CLI / SDK は以下の3層で構成する。将来的にコアロジックの他
 ```python
 # cli/commands/pull.py の概要
 import click
-from rich.progress import Progress
-from fabricgate.client.registry_client import RegistryClient
-from fabricgate.client.cache import CacheManager
-from fabricgate.client.resolver import resolve_platform
+from fabricgate.cli.exit_codes import sdk_errors
+from fabricgate.sdk import api as sdk_api
 
 @click.command()
 @click.argument("design_ref")
 @click.option("--platform", default=None)
-def pull(design_ref: str, platform: str | None) -> None:
-    client = RegistryClient(registry_url=...)
-    cache = CacheManager(cache_dir=...)
-
-    # Client を呼ぶ
-    index = client.get_design_index(design_ref)
-    selected = resolve_platform(index, platform)
-
-    # 進捗表示は CLI の責務
-    with Progress() as progress:
-        result = client.download_artifacts(
-            ...,
-            on_progress=lambda current, total: progress.update(...),
+@click.option("--no-cache", is_flag=True)
+@click.pass_obj
+def pull(obj, design_ref: str, platform: str | None, no_cache: bool) -> None:
+    # SDK を呼ぶ。SDKError は sdk_errors() が終了コードに変える
+    with sdk_errors():
+        result = sdk_api.pull(
+            design_ref,
+            platform=platform,
+            registry=obj["registry"],
+            cache_dir=None if no_cache else obj["cache_dir"],
         )
-
-    cache.store(result)
-    click.echo(f"Saved to {result.path}")
+    click.echo(f"Saved to {result.path}" + (" (from cache)" if result.cached else ""))
 ```
 
-**役割:** 入力パース (Click) → Client 呼び出し → 出力整形 (rich)。ロジックなし。
+**役割:** 入力パース (Click) → SDK 呼び出し → 出力整形。ロジックなし。
 
 ### 5.4 SDK ラッパー (`fabricgate.sdk`)
 
 ```python
-# sdk/api.py
+# sdk/designs/pull.py の概要(fabricgate.sdk.api から再エクスポート)
+from pathlib import Path
+from fabricgate.client import puller
 from fabricgate.client.registry_client import RegistryClient
-from fabricgate.client.cache import CacheManager
-from fabricgate.client.resolver import resolve_platform
-from fabricgate.models.cli import PullResult, DesignInfo, SearchResult
+from fabricgate.models.cli import PullResult
+from fabricgate.sdk._helpers import _parse_design_ref, _registry_errors
 
 def pull(
     design_ref: str,
     *,
     platform: str | None = None,
     registry: str = "https://registry.fabricgate.dev/api/v1",
-    cache_dir: str = "~/.fabricgate/cache",
-    on_progress: Callable[[int, int], None] | None = None,
+    cache_dir: str | Path | None = None,
 ) -> PullResult:
-    """Download a design for a specific platform.
+    """Download a platform-specific build of a design.
 
-    Args:
-        design_ref: Design reference (e.g., "fabricgate/blink:1.0.0")
-        platform: Target platform (e.g., "zcu104/pynq")
-        registry: Registry base URL
-        cache_dir: Local cache directory
-        on_progress: Optional progress callback (current_bytes, total_bytes)
-
-    Returns:
-        PullResult with local path, artifact list, cache hit status
+    With *cache_dir*, artifacts are taken from that cache when their pinned
+    sha256 is there. Without it, no cache is read or written.
     """
-    client = RegistryClient(registry_url=registry)
-    cache = CacheManager(cache_dir=cache_dir)
-    index = client.get_design_index(design_ref)
-    selected = resolve_platform(index, platform)
-    result = client.download_artifacts(..., on_progress=on_progress)
-    cache.store(result)
-    return result
+    namespace, design, version = _parse_design_ref(design_ref)
+    # Client の例外は _registry_errors() などで SDKError に変える
+    with _registry_errors(), RegistryClient(base_url=registry) as client:
+        # platform 解決・ダウンロード・digest 検証・キャッシュの読み書きは Client が行う
+        outcome = puller.pull_design(
+            client, namespace, design, version, platform=platform, cache_dir=cache_dir
+        )
+    return PullResult(path=outcome.path, artifacts=outcome.artifacts, cached=outcome.cached, ...)
 ```
 
 **役割:** デフォルト値設定 + 型保証 + docstring。Client と同じ引数構成だが、ユーザーフレンドリーなインターフェースを提供。
