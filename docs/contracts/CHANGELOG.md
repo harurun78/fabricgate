@@ -31,6 +31,8 @@ first shipped the change. Changes not yet in a tagged release are listed under
 - `GET /api/v1/oauth/callback`: `code` is optional and an optional `error` query is accepted. When the identity provider redirects back with `error` (for example, the user cancelled on the consent screen) or without `code`, the registry skips the state check and the token exchange, clears the OAuth flow cookies and redirects to `/login?error=<reason>` on the frontend. `<reason>` is the received `error` if it is one of the RFC 6749 §4.1.2.1 error codes, otherwise `oauth_failed`. Before, such a request failed with `422`. Only the identity provider's redirect reaches this endpoint; no CLI/SDK code calls it.
 
 ### Removed
+
+- **BREAKING (Python API)**: `fabricgate.client.lookup()` and `fabricgate.client.platform_dir()` are removed (also from `fabricgate.client.cache`). Nothing called them: `lookup()` matched `index.json` records, which do not decide cache hits (artifacts are looked up by sha256 under `blobs/`), and `platform_dir()` returned a cache path nothing writes to. Code that imported them must drop the import. No CLI, API or schema change.
 - **BREAKING (Registry API)**: `POST /api/v1/admin/mirror/sync` is removed.
   The registry drops its periodic "sync" mirror mode (full replication from an
   upstream registry); the pull-through mirror mode stays. The endpoint was

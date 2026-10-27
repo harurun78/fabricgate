@@ -1,7 +1,7 @@
 """Client logic for FabricGate registry interaction."""
 
 from fabricgate.client.auth import delete_credentials, load_credentials, save_credentials
-from fabricgate.client.cache import load_index, lookup, platform_dir, save_index, store
+from fabricgate.client.cache import load_index, save_index, store
 from fabricgate.client.config import load_config, save_config
 from fabricgate.client.errors import FailureKind
 from fabricgate.client.publisher import PublishError, collect_artifacts, load_design_index, load_platform_manifest
@@ -29,8 +29,6 @@ __all__ = [
     "load_design_index",
     "load_index",
     "load_platform_manifest",
-    "lookup",
-    "platform_dir",
     "resolve_platform",
     "resolve_platform_detailed",
     "save_config",

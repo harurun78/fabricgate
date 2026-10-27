@@ -528,25 +528,6 @@ class TestCache:
         loaded = cache.load_index(tmp_path)
         assert loaded.entries == []
 
-    def test_store_and_lookup(self, tmp_path: Path) -> None:
-        art_dir = tmp_path / "ns" / "design" / "1.0.0" / "xc7z020" / "pynq"
-        art_dir.mkdir(parents=True)
-        entry = cache.store(
-            "ns/design",
-            "1.0.0",
-            "xc7z020/pynq",
-            _FAKE_DIGEST,
-            art_dir,
-            tmp_path,
-        )
-        assert entry.name == "ns/design"
-        found = cache.lookup("ns/design", "1.0.0", "xc7z020/pynq", tmp_path)
-        assert found is not None
-        assert found.digest == _FAKE_DIGEST
-
-    def test_lookup_miss(self, tmp_path: Path) -> None:
-        assert cache.lookup("x/y", "0.0.1", "foo/bar", tmp_path) is None
-
     def test_store_replaces_stale(self, tmp_path: Path) -> None:
         art_dir = tmp_path / "data"
         art_dir.mkdir()
@@ -582,10 +563,6 @@ class TestCache:
         monkeypatch.setattr(cache.os, "replace", _fail)
         cache.put_blob(tmp_path, b"bits")
         assert list((tmp_path / "blobs" / "sha256").iterdir()) == []
-
-    def test_platform_dir(self) -> None:
-        p = cache.platform_dir("ns/design", "1.0.0", "xc7z020/pynq", Path("/cache"))
-        assert p == Path("/cache/ns/design/1.0.0/xc7z020/pynq")
 
 
 # ============================================================================
