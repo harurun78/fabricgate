@@ -90,72 +90,49 @@ fabricgate pull <design-ref> [--platform <board_id/runtime>] [--output <dir>] [-
 
 **Behavior:**
 
+stderr が端末のとき、アーティファクトごとに 1 行の進捗バーを stderr に出す(列はラベル `<ns>/<design>:<version> <ファイル名>`、バー、受信量 / 合計、転送速度。サイズは 1000 単位)。ルート、依存(トポロジカル順)、shell の順に並ぶ。キャッシュから取り出したアーティファクトは、最初から完了したバーになる。サイズが分からない(`Content-Length` が無い)ときは、受信量だけを出す。終わったバーは消さずに残す。stderr が端末でなければバーは出さない。stdout には `Saved to <出力先>` 以降を出す(`--json` では `PullResult` の JSON だけ)。`--output` を省略すると、出力先はカレントディレクトリの `<design>-<version>` になる(以下の例は `/home/user/work` で実行した場合)。
+
 ```
 $ fabricgate pull fabricgate/blink:1.0.0 --platform zcu104/pynq
-
-Resolving fabricgate/blink:1.0.0 ...
-  Found 2 platforms: zcu104/pynq, zcu104/linux-fpgamgr
-  Selected: zcu104/pynq
-
-Resolving dependencies ...
-  xilinx/axi-dma:1.5.2   (required by fabricgate/blink)
-    xilinx/axi-interconnect:2.0.0   (required by xilinx/axi-dma)
-
-Downloading fabricgate/blink:1.0.0 ...
-  blink.bit  [============] 256 KB  sha256:aabb...✓
-  blink.hwh  [============]  12 KB  sha256:1122...✓
-
-Downloading xilinx/axi-dma:1.5.2 ...
-  axi-dma.bit  [============] 128 KB  sha256:ccdd...✓
-  axi-dma.hwh  [============]   8 KB  sha256:3344...✓
-
-Downloading xilinx/axi-interconnect:2.0.0 ...
-  ...
-
-Saved to ./blink-1.0.0/
+fabricgate/blink:1.0.0 blink.bit                   ━━━━━━━━━━━━━━━━━━━━━━━ 262.1/262.1 kB 2.1 MB/s
+fabricgate/blink:1.0.0 blink.hwh                   ━━━━━━━━━━━━━━━━━━━━━━━ 12.3/12.3 kB   900.1 kB/s
+xilinx/axi-dma:1.5.2 axi-dma.bit                   ━━━━━━━━━━━━━━━━━━━━━━━ 131.1/131.1 kB 1.8 MB/s
+xilinx/axi-dma:1.5.2 axi-dma.hwh                   ━━━━━━━━━━━━━━━━━━━━━━━ 8.2/8.2 kB     700.0 kB/s
+xilinx/axi-interconnect:2.0.0 axi-interconnect.bit ━━━━━━━━━━━━━━━━━━━━━━━ 65.5/65.5 kB   1.5 MB/s
+xilinx/axi-interconnect:2.0.0 axi-interconnect.hwh ━━━━━━━━━━━━━━━━━━━━━━━ 6.1/6.1 kB     600.0 kB/s
+Saved to /home/user/work/blink-1.0.0
   blink.bit
   blink.hwh
-  manifest.yaml
-  deps/
-    xilinx/
-      axi-dma/1.5.2/
-      axi-interconnect/2.0.0/
+Dependencies:
+  xilinx/axi-dma:1.5.2
+  xilinx/axi-interconnect:2.0.0
 ```
+
+出力先のディレクトリには、アーティファクトのほかに `manifest.yaml` と、依存の `deps/<ns>/<design>/<version>/`(shell があれば `shell/<ns>/<design>/<version>/`)ができる。
 
 **Partial Reconfiguration (PR) デザインの取得:**
 
-`bitstream_type: partial` の Platform Manifest を含むデザインを pull する場合、依存 Static Shell を自動的に先行取得する。
+`bitstream_type: partial` の Platform Manifest を含むデザインを pull する場合、依存 Static Shell も自動的に取得する(ルートと依存の後)。shell は `shell/<ns>/<design>/<version>/` に、その `manifest.yaml` と一緒に置く。
 
 ```
 $ fabricgate pull community/fft-accel:1.0.0 --platform zcu104/pynq
-
-Resolving community/fft-accel:1.0.0 ...
-  bitstream_type: partial
-  Shell dependency: community/zcu104-shell =1.2.0
-
-Downloading shell: community/zcu104-shell:1.2.0 ...
-  zcu104_shell.bit  [============] 8 MB  sha256:dead...✓
-
-Downloading community/fft-accel:1.0.0 ...
-  fft_accel.bit  [============] 512 KB  sha256:cafe...✓
-  fft_accel.hwh  [============]  14 KB  sha256:beef...✓
-
-Saved to ./fft-accel-1.0.0/
+community/fft-accel:1.0.0 fft_accel.bit       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 524.3/524.3 kB 2.4 MB/s
+community/fft-accel:1.0.0 fft_accel.hwh       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 14.3/14.3 kB   900.0 kB/s
+community/zcu104-shell:1.2.0 zcu104_shell.bit ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.4/8.4 MB     3.2 MB/s
+Saved to /home/user/work/fft-accel-1.0.0
   fft_accel.bit
   fft_accel.hwh
-  manifest.yaml
-  shell/
-    community/zcu104-shell/1.2.0/
-      zcu104_shell.bit
-      manifest.yaml
+Shell: community/zcu104-shell:1.2.0
 ```
 
-Shell が既にローカルに存在する場合、またはユーザーが手動管理する場合は `--no-shell` を指定する:
+Shell が既にローカルに存在する場合、またはユーザーが手動管理する場合は `--no-shell` を指定する。警告は取得の前に stderr に出す(以下、進捗バーは省略):
 
 ```
 $ fabricgate pull community/fft-accel:1.0.0 --platform zcu104/pynq --no-shell
-  ⚠  Shell dependency skipped: community/zcu104-shell =1.2.0
-     Ensure shell bitstream is present before loading.
+⚠  Shell dependency skipped. Ensure shell bitstream is present before loading.
+Saved to /home/user/work/fft-accel-1.0.0
+  fft_accel.bit
+  fft_accel.hwh
 ```
 
 **Family fallback（実ボード id → generic platform）:**
@@ -168,7 +145,7 @@ $ fabricgate pull community/fft-accel:1.0.0 --platform zcu104/pynq --no-shell
 $ fabricgate pull fabricgate/hello:1.0.0 --platform pynq-z2/pynq
 
 Selected: generic-xc7z020/pynq (family fallback from pynq-z2/pynq)
-Saved to ./hello-1.0.0/
+Saved to /home/user/work/hello-1.0.0
   hello.bit
   hello.hwh
 ```
@@ -178,28 +155,22 @@ Saved to ./hello-1.0.0/
 - フォールバック先の entry も無ければ従来どおりエラー（exit code 5、利用可能 platform 一覧付き）。
 
 **When platform is ambiguous:**
+
+`--platform`(または `FG_PLATFORM` / config の `platform`)が無く、Design に platform が複数あるときは、何も取得せずに exit 5 で終わる(メッセージは stderr):
+
 ```
 $ fabricgate pull fabricgate/blink:1.0.0
-
-Resolving fabricgate/blink:1.0.0 ...
-  Found 2 platforms:
-    1. zcu104/pynq
-    2. zcu104/linux-fpgamgr
-
-  Specify --platform or set FG_PLATFORM env var.
-  Example: fabricgate pull fabricgate/blink:1.0.0 --platform zcu104/pynq
+Multiple platforms available (zcu104/pynq, zcu104/linux-fpgamgr); specify --platform
 ```
 
 **Deprecated バージョン指定時の警告:**
 
+取得は止めない。警告は取得が終わった後、`Saved to` の前に stderr に 1 行で出す(後継があれば `Use <successor> instead.`、非推奨メッセージがあればその後に続ける):
+
 ```
 $ fabricgate pull community/fft-accel:1.0.0 --platform zcu104/pynq
-
-⚠  community/fft-accel:1.0.0 is deprecated.
-   Use community/fft-accel:2.0.0 instead.
-   Downloading anyway...
-
-Downloading community/fft-accel:1.0.0 ...
+⚠  community/fft-accel:1.0.0 is deprecated. Use community/fft-accel:2.0.0 instead.
+Saved to /home/user/work/fft-accel-1.0.0
   ...
 ```
 
