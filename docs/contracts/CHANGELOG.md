@@ -8,6 +8,7 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ### Added
 
+- `github_login` (string or null) on `UserProfileResponse` (`GET /api/v1/users/me`, `POST /api/v1/oauth/signup`), `NamespaceMemberResponse` (the namespace members list, add and role change) and `AdminUserEntry` (the admin user list): the GitHub login of the linked account as of the user's last sign-in, or null for other identity providers and for users who have not signed in since the registry started recording it. A username can differ from the GitHub login (a new user chooses one when the GitHub login is reserved or taken), so this shows whose account it is. Optional and additive; existing clients ignore it.
 - `POST /api/v1/oauth/signup` (request `SignupRequest`, response `UserProfileResponse`, `201`): a new user whose identity provider name (for example the GitHub login) is reserved, or already used by another user or namespace, chooses another username in the web UI. The registry's web frontend calls it with the pending sign-in it set at `GET /api/v1/oauth/callback`; no CLI/SDK code calls it. The username follows the namespace name rules (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`, 1-39 characters). Errors: `422 SCHEMA_VALIDATION_FAILED` (`username` empty or over 64 characters), `400 INVALID_PARAMETER` (any other username outside the rules), `401 UNAUTHORIZED` (the pending sign-in expired), `403 FORBIDDEN` (CSRF), `409 RESERVED_NAMESPACE` / `409 USERNAME_TAKEN`.
 
 ### Changed
