@@ -62,21 +62,6 @@ def save_index(index: CacheIndex, cache_dir: Path | None = None) -> None:
         raise
 
 
-def lookup(
-    name: str,
-    version: str,
-    platform: str,
-    cache_dir: Path | None = None,
-) -> CacheEntry | None:
-    """Return a cache entry if it exists, else ``None``."""
-    idx = load_index(cache_dir)
-    for entry in idx.entries:
-        if entry.name == name and entry.version == version and entry.platform == platform:
-            if Path(entry.path).exists():
-                return entry
-    return None
-
-
 def store(
     name: str,
     version: str,
@@ -102,19 +87,6 @@ def store(
     idx.entries.append(entry)
     save_index(idx, cache_dir)
     return entry
-
-
-def platform_dir(
-    name: str,
-    version: str,
-    platform: str,
-    cache_dir: Path | None = None,
-) -> Path:
-    """Return the canonical cache directory for a platform build."""
-    base = cache_dir or _DEFAULT_CACHE_DIR
-    ns, design = name.split("/", 1)
-    device, runtime = platform.split("/", 1)
-    return base / ns / design / version / device / runtime
 
 
 _SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
