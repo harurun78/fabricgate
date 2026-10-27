@@ -1442,7 +1442,7 @@ CLI / SDK は以下の3層で構成する。将来的にコアロジックの他
 | **Client は models に依存する** | `fabricgate.models` は共通基盤 |
 | **CLI は Client を呼ぶだけ** | ビジネスロジックを持たない。入力パース → Client 呼び出し → 出力整形 |
 | **SDK は Client を呼ぶだけ** | 薄いラッパー。型付け + docstring が主な仕事 |
-| **Client の進捗通知はコールバック** | `on_progress: Callable` を Client に渡す。CLI は rich プログレスバー、SDK はユーザー定義 or None |
+| **Client の進捗通知はコールバック** | `on_progress(label, bytes_received, total_bytes)` を Client(`puller.pull_design`)に渡す。CLI は stderr が端末のときだけ rich のプログレスバーを stderr に出す。SDK はユーザー定義 or None |
 
 ### 5.2 Client モジュール (`fabricgate.client`)
 
@@ -1464,6 +1464,7 @@ CLI / SDK は以下の3層で構成する。将来的にコアロジックの他
 ```python
 # cli/commands/pull.py の概要
 import click
+from rich.progress import Progress
 from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
 
@@ -1474,12 +1475,21 @@ from fabricgate.sdk import api as sdk_api
 @click.pass_obj
 def pull(obj, design_ref: str, platform: str | None, no_cache: bool) -> None:
     # SDK を呼ぶ。SDKError は sdk_errors() が終了コードに変える
-    with sdk_errors():
+    # 進捗表示は CLI の責務(成果物ごとに 1 本のバー。stderr が端末でなければ出さない)
+    with sdk_errors(), Progress(...) as progress:
+        tasks = {}
+
+        def on_progress(label, received, total):
+            if label not in tasks:
+                tasks[label] = progress.add_task(label, total=total)
+            progress.update(tasks[label], completed=received, total=total)
+
         result = sdk_api.pull(
             design_ref,
             platform=platform,
             registry=obj["registry"],
             cache_dir=None if no_cache else obj["cache_dir"],
+            on_progress=on_progress,
         )
     click.echo(f"Saved to {result.path}" + (" (from cache)" if result.cached else ""))
 ```
@@ -1490,6 +1500,7 @@ def pull(obj, design_ref: str, platform: str | None, no_cache: bool) -> None:
 
 ```python
 # sdk/designs/pull.py の概要(fabricgate.sdk.api から再エクスポート)
+from collections.abc import Callable
 from pathlib import Path
 from fabricgate.client import puller
 from fabricgate.client.registry_client import RegistryClient
@@ -1502,18 +1513,23 @@ def pull(
     platform: str | None = None,
     registry: str = "https://registry.fabricgate.dev/api/v1",
     cache_dir: str | Path | None = None,
+    on_progress: Callable[[str, int, int | None], None] | None = None,
 ) -> PullResult:
     """Download a platform-specific build of a design.
 
     With *cache_dir*, artifacts are taken from that cache when their pinned
     sha256 is there. Without it, no cache is read or written.
+
+    *on_progress* is called as ``on_progress(label, bytes_received, total_bytes)``
+    while artifacts are fetched.
     """
     namespace, design, version = _parse_design_ref(design_ref)
     # Client の例外は _registry_errors() などで SDKError に変える
     with _registry_errors(), RegistryClient(base_url=registry) as client:
-        # platform 解決・ダウンロード・digest 検証・キャッシュの読み書きは Client が行う
+        # platform 解決・ダウンロード・digest 検証・キャッシュの読み書き・進捗通知は Client が行う
         outcome = puller.pull_design(
-            client, namespace, design, version, platform=platform, cache_dir=cache_dir
+            client, namespace, design, version,
+            platform=platform, cache_dir=cache_dir, on_progress=on_progress,
         )
     return PullResult(path=outcome.path, artifacts=outcome.artifacts, cached=outcome.cached, ...)
 ```

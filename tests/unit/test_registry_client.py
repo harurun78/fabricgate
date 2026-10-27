@@ -241,6 +241,59 @@ class TestDownloadArtifact:
 
         assert result == raw
 
+    def test_reports_progress_up_to_the_content_length(self) -> None:
+        raw = b"x" * 5000
+
+        def _handler(request: httpx2.Request) -> httpx2.Response:
+            # Streamed like a network response, so the received byte count grows chunk by chunk.
+            return httpx2.Response(
+                200, content=iter([raw[:3000], raw[3000:]]), headers={"Content-Length": "5000"}, request=request
+            )
+
+        client = _make_client(httpx2.MockTransport(_handler))
+        calls: list[tuple[int, int | None]] = []
+
+        result = client.download_artifact(
+            "ns", "d", "1.0.0", "xc7z020", "pynq", "a.bit", on_progress=lambda *a: calls.append(a)
+        )
+
+        assert result == raw
+        assert calls == [(0, 5000), (3000, 5000), (5000, 5000)]
+
+    def test_progress_total_is_none_without_content_length(self) -> None:
+        def _handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, content=iter([b"ab", b"cd"]), request=request)
+
+        client = _make_client(httpx2.MockTransport(_handler))
+        calls: list[tuple[int, int | None]] = []
+
+        result = client.download_artifact(
+            "ns", "d", "1.0.0", "xc7z020", "pynq", "a.bit", on_progress=lambda *a: calls.append(a)
+        )
+
+        assert result == b"abcd"
+        assert calls[0] == (0, None)
+        assert calls[-1] == (4, None)
+
+    def test_error_response_raises_registry_error(self) -> None:
+        body = {"error": {"code": "NOT_FOUND", "message": "no such artifact"}}
+        client = _make_client(_transport(404, body))
+
+        with pytest.raises(RegistryError) as exc_info:
+            client.download_artifact("ns", "d", "1.0.0", "xc7z020", "pynq", "a.bit", on_progress=lambda *a: None)
+        assert not isinstance(exc_info.value, NetworkError)
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.error is not None and exc_info.value.error.error.code == "NOT_FOUND"
+
+    def test_transport_error_raises_network_error(self) -> None:
+        def _handler(request: httpx2.Request) -> httpx2.Response:
+            raise httpx2.ReadTimeout("timed out", request=request)
+
+        client = _make_client(httpx2.MockTransport(_handler))
+
+        with pytest.raises(NetworkError, match="Network error"):
+            client.download_artifact("ns", "d", "1.0.0", "xc7z020", "pynq", "a.bit")
+
 
 # ---------------------------------------------------------------------------
 # Auth

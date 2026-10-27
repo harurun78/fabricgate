@@ -1232,6 +1232,28 @@ def test_pull_deps_only_option(monkeypatch, tmp_path) -> None:
     assert captured_kwargs["deps_only"] is True
 
 
+@pytest.mark.parametrize("terminal", [False, True])
+def test_pull_progress_bars_only_on_a_terminal(monkeypatch, terminal: bool) -> None:
+    """pull passes on_progress to the SDK; the bars go to stderr only when it is a terminal (#127)."""
+
+    def _fake_pull(*_args, on_progress, **_kwargs):
+        on_progress("ns/d:1.0.0 progress-check.bit", 0, 2048)
+        on_progress("ns/d:1.0.0 progress-check.bit", 2048, 2048)
+        return PullResult(
+            name="ns/d", version="1.0.0", platform="xc7z020/pynq", path="/tmp/out", artifacts=[], cached=False
+        )
+
+    monkeypatch.setattr("fabricgate.cli.commands.pull.sdk_api.pull", _fake_pull)
+    if terminal:
+        monkeypatch.setenv("FORCE_COLOR", "1")  # rich treats the output as a terminal
+    else:
+        monkeypatch.delenv("FORCE_COLOR", raising=False)
+    result = CliRunner().invoke(main, ["--json", "pull", "ns/d:1.0.0"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["path"] == "/tmp/out"
+    assert ("progress-check.bit" in result.stderr) is terminal
+
+
 @pytest.mark.parametrize("no_cache", [False, True])
 def test_pull_no_cache_option(monkeypatch, tmp_path, no_cache: bool) -> None:
     """--no-cache passes no cache directory, so the SDK neither reads nor writes the cache (#115)."""

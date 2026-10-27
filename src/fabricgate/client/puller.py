@@ -27,6 +27,9 @@ from fabricgate.models.api.errors import ErrorCode
 from fabricgate.models.design_index import DesignIndex, PlatformEntry
 from fabricgate.models.platform_manifest import PlatformManifest, parse_platform_manifest
 
+ProgressCallback = Callable[[str, int, int | None], None]
+"""``on_progress(label, bytes_received, total_bytes)``; *label* is ``"<ns>/<design>:<version> <file>"``."""
+
 
 class PullError(Exception):
     """Base class for client-side pull failures."""
@@ -188,6 +191,7 @@ def _download_platform(
     signer: AttestationSigner | None,
     cache_dir: Path | None = None,
     kind: str = "",
+    on_progress: ProgressCallback | None = None,
 ) -> tuple[list[str], bool]:
     """Download one platform's manifest and artifacts into *dest*.
 
@@ -196,6 +200,7 @@ def _download_platform(
     there instead of downloaded, and a downloaded one is added to the cache. The
     manifest (and its attestation) is always fetched and checked first.
 
+    *on_progress* is told about each artifact; a cached one is reported once, as complete.
     *kind* (``""``, ``"dependency"`` or ``"shell"``) only prefixes error messages.
     The manifest is parsed before it is written, so a broken one leaves nothing on disk.
     """
@@ -223,9 +228,13 @@ def _download_platform(
         path = _validate_artifact_filename(name, context=f"{prefix}manifest")
         data = cache.get_blob(cache_dir, artifact.sha256) if cache_dir is not None else None
         downloaded = data is None
+        label = f"{ref} {name}"
         if data is None:
             all_cached = False
-            data = fetch(name)
+            # on_progress is only passed when set, so clients written before it keep working.
+            data = fetch(name) if on_progress is None else fetch(name, on_progress=partial(on_progress, label))
+        elif on_progress is not None:
+            on_progress(label, len(data), len(data))
         _write_verified(
             dest / path,
             data,
@@ -252,6 +261,7 @@ def _resolve_and_download_deps(
     include_optional: bool = False,
     signer: AttestationSigner | None = None,
     cache_dir: Path | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> list[str]:
     """Resolve dependencies and download them into deps/ subdirectory.
 
@@ -302,6 +312,7 @@ def _resolve_and_download_deps(
             signer=signer,
             cache_dir=cache_dir,
             kind="dependency",
+            on_progress=on_progress,
         )
         dep_refs.append(dep_ref)
 
@@ -321,6 +332,7 @@ def _maybe_download_shell(
     no_shell: bool = False,
     signer: AttestationSigner | None = None,
     cache_dir: Path | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> str | None:
     """Download the static shell for a partial bitstream if applicable.
 
@@ -362,6 +374,7 @@ def _maybe_download_shell(
         signer=signer,
         cache_dir=cache_dir,
         kind="shell",
+        on_progress=on_progress,
     )
 
     return shell_ref
@@ -383,11 +396,13 @@ def pull_design(
     no_shell: bool = False,
     verify_attestation: bool = False,
     attestation_signer: AttestationSigner | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> PullOutcome:
     """Download a platform-specific build of a design and its dependencies.
 
     With *verify_attestation*, every manifest (root, dependencies, shell) must
-    carry a cosign bundle signed by *attestation_signer*.
+    carry a cosign bundle signed by *attestation_signer*. *on_progress* is
+    called while root, dependency and shell artifacts are fetched.
 
     Raises client-layer exceptions (:class:`PullError` subclasses,
     :class:`RegistryError`, :class:`~fabricgate.client.resolver.ResolutionError`,
@@ -441,6 +456,7 @@ def pull_design(
             verify_digests=verify_digests,
             signer=signer,
             cache_dir=cache_path,
+            on_progress=on_progress,
         )
 
     # --- Dependency resolution ---
@@ -458,6 +474,7 @@ def pull_design(
             include_optional=include_optional_deps,
             signer=signer,
             cache_dir=cache_path,
+            on_progress=on_progress,
         )
 
     # --- Shell auto-download ---
@@ -475,6 +492,7 @@ def pull_design(
             no_shell=no_shell,
             signer=signer,
             cache_dir=cache_path,
+            on_progress=on_progress,
         )
 
     if cache_path is not None and not deps_only:

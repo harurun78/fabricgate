@@ -6,9 +6,24 @@ import json
 from pathlib import Path
 
 import click
+from rich.console import Console
+from rich.progress import BarColumn, DownloadColumn, Progress, TaskID, TextColumn, TransferSpeedColumn
 
 from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.sdk import api as sdk_api
+
+
+def _progress_bars() -> Progress:
+    """One download bar per artifact on stderr, shown only when stderr is a terminal."""
+    console = Console(stderr=True)
+    return Progress(
+        TextColumn("{task.description}"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        console=console,
+        disable=not console.is_terminal,
+    )
 
 
 @click.command(name="pull")
@@ -55,7 +70,15 @@ def pull_cmd(
     if no_shell:
         click.echo("\u26a0  Shell dependency skipped. Ensure shell bitstream is present before loading.", err=True)
 
-    with sdk_errors():
+    # sdk_errors() is entered first so the bars are stopped before an error is printed.
+    with sdk_errors(), _progress_bars() as progress:
+        tasks: dict[str, TaskID] = {}
+
+        def on_progress(label: str, received: int, total: int | None) -> None:
+            if label not in tasks:
+                tasks[label] = progress.add_task(label, total=total)
+            progress.update(tasks[label], completed=received, total=total)
+
         result = sdk_api.pull(
             design_ref,
             platform=effective_platform,
@@ -71,6 +94,7 @@ def pull_cmd(
             attestation_key=attestation_key,
             certificate_identity=certificate_identity,
             certificate_oidc_issuer=certificate_oidc_issuer,
+            on_progress=on_progress,
         )
 
     if result.deprecated_warning:
