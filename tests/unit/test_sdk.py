@@ -5122,6 +5122,39 @@ def test_pull_second_time_takes_every_artifact_from_the_cache(monkeypatch: pytes
     assert _files(tmp_path / "b") == _files(tmp_path / "a")
 
 
+def test_pull_reports_progress_for_downloaded_and_cached_artifacts(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class _Progressing(_FakeRegistryClientWithDeps):
+        def download_artifact(self, *args, on_progress=None):
+            data = super().download_artifact(*args)
+            on_progress(0, len(data))
+            on_progress(len(data), len(data))
+            return data
+
+    _patch_all_rc(monkeypatch, _Progressing)
+    events: list[tuple[str, int, int | None]] = []
+
+    def on_progress(label: str, received: int, total: int | None) -> None:
+        events.append((label, received, total))
+
+    _pull_into(tmp_path / "a", tmp_path / "cache", on_progress=on_progress)
+    downloaded = list(events)
+    events.clear()
+    _pull_into(tmp_path / "b", tmp_path / "cache", on_progress=on_progress)
+
+    labels = {label for label, _, _ in downloaded}
+    assert {label.split(" ")[0] for label in labels} == {
+        "test-ns/blink:1.0.0",
+        "dep-ns/dep-design:0.1.0",
+        "shell-ns/shell-design:2.0.0",
+    }
+    assert all(received in (0, total) for _, received, total in downloaded)
+    # Cache hits: each artifact is reported once, already complete.
+    assert sorted(label for label, _, _ in events) == sorted(labels)
+    assert all(received == total for _, received, total in events)
+
+
 def test_pull_cache_hit_still_verifies_every_attestation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     client_cls, downloads = _recording_downloads(_FakeAttestedClient)
     _patch_all_rc(monkeypatch, client_cls)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from urllib.parse import quote
@@ -131,6 +133,43 @@ def _oauth_error_response(resp: httpx2.Response) -> ErrorResponse | None:
     )
 
 
+def _raise_for_status(resp: httpx2.Response) -> None:
+    """Raise :class:`RegistryError` for a 4xx / 5xx response (its body must be read)."""
+    if resp.status_code < 400:
+        return
+    err: ErrorResponse | None
+    try:
+        err = ErrorResponse.model_validate_json(resp.content)
+    except Exception:
+        err = _oauth_error_response(resp)
+    if err is None:
+        # A proxy or CDN page (HTML / plain text): keep the status so 401 / 404 / 429
+        # are classified as such instead of collapsing into a network error.
+        err = ErrorResponse(
+            error=ErrorDetail(code=f"HTTP_{resp.status_code}", message=resp.reason_phrase or "HTTP error")
+        )
+    raise RegistryError(resp.status_code, err, retry_after=resp.headers.get("Retry-After"))
+
+
+@contextmanager
+def _transport_errors() -> Iterator[None]:
+    try:
+        yield
+    except httpx2.HTTPError as exc:
+        # Transport failures (connect/DNS/timeout) surface as ``httpx2.HTTPError``.
+        # Translate them into ``NetworkError`` so ``httpx2`` stays confined to this
+        # layer; ``NetworkError.kind`` is ``FailureKind.INFRA``. Error responses,
+        # with or without a parseable body, raise ``RegistryError`` and pass through.
+        if isinstance(exc, httpx2.LocalProtocolError):
+            # h11 quotes the offending header, which may be the Authorization token,
+            # so neither the message nor the chained cause may carry it.
+            raise NetworkError(
+                "Network error: the request has an invalid header value"
+                " (does the token contain whitespace or a newline?)"
+            ) from None
+        raise NetworkError(f"Network error: {exc}") from exc
+
+
 def _part_content_type(field_name: str) -> str:
     """Return the appropriate MIME type for a multipart field.
 
@@ -177,35 +216,10 @@ class RegistryClient:
     # ---- helpers ----
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx2.Response:
-        try:
+        with _transport_errors():
             resp = self._client.request(method, path, **kwargs)
-            if resp.status_code >= 400:
-                err: ErrorResponse | None
-                try:
-                    err = ErrorResponse.model_validate_json(resp.content)
-                except Exception:
-                    err = _oauth_error_response(resp)
-                if err is None:
-                    # A proxy or CDN page (HTML / plain text): keep the status so 401 / 404 / 429
-                    # are classified as such instead of collapsing into a network error.
-                    err = ErrorResponse(
-                        error=ErrorDetail(code=f"HTTP_{resp.status_code}", message=resp.reason_phrase or "HTTP error")
-                    )
-                raise RegistryError(resp.status_code, err, retry_after=resp.headers.get("Retry-After"))
+            _raise_for_status(resp)
             return resp
-        except httpx2.HTTPError as exc:
-            # Transport failures (connect/DNS/timeout) surface as ``httpx2.HTTPError``.
-            # Translate them into ``NetworkError`` so ``httpx2`` stays confined to this
-            # layer; ``NetworkError.kind`` is ``FailureKind.INFRA``. Error responses,
-            # with or without a parseable body, raise ``RegistryError`` and pass through.
-            if isinstance(exc, httpx2.LocalProtocolError):
-                # h11 quotes the offending header, which may be the Authorization token,
-                # so neither the message nor the chained cause may carry it.
-                raise NetworkError(
-                    "Network error: the request has an invalid header value"
-                    " (does the token contain whitespace or a newline?)"
-                ) from None
-            raise NetworkError(f"Network error: {exc}") from exc
 
     # ---- Discovery ----
 
@@ -278,15 +292,37 @@ class RegistryClient:
         board_id: str,
         runtime: str,
         filename: str,
+        *,
+        on_progress: Callable[[int, int | None], None] | None = None,
     ) -> bytes:
-        """Download an artifact file (follows redirects)."""
-        resp = self._request(
-            "GET",
+        """Download an artifact file (follows redirects).
+
+        *on_progress* is called with ``(bytes_received, total_bytes)`` before the
+        body arrives and after each chunk; *total_bytes* is the Content-Length, or
+        ``None`` when the response has none.
+        """
+        path = (
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}"
-            f"/platforms/{_seg(board_id)}/{_seg(runtime)}/artifacts/{_seg(filename)}",
-            follow_redirects=True,
+            f"/platforms/{_seg(board_id)}/{_seg(runtime)}/artifacts/{_seg(filename)}"
         )
-        return resp.content
+        with _transport_errors(), self._client.stream("GET", path, follow_redirects=True) as resp:
+            if resp.status_code >= 400:
+                resp.read()
+                _raise_for_status(resp)
+            length = resp.headers.get("Content-Length")
+            total = int(length) if length is not None and length.isdigit() else None
+            if on_progress is not None:
+                on_progress(0, total)
+            chunks: list[bytes] = []
+            for chunk in resp.iter_bytes():
+                chunks.append(chunk)
+                if on_progress is not None:
+                    # Bytes on the wire, which is what Content-Length counts (also when compressed).
+                    on_progress(resp.num_bytes_downloaded, total)
+            if on_progress is not None:
+                # The last chunk on the wire can decode to nothing (a gzip trailer), so report the end once more.
+                on_progress(resp.num_bytes_downloaded, total)
+            return b"".join(chunks)
 
     # ---- Auth ----
 
@@ -705,6 +741,8 @@ class RegistryClientProtocol(Protocol):
         board_id: str,
         runtime: str,
         filename: str,
+        *,
+        on_progress: Callable[[int, int | None], None] | None = None,
     ) -> bytes: ...
 
     def create_artifact_uploads(

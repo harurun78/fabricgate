@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import yaml
@@ -45,6 +46,7 @@ def pull(
     attestation_key: str | None = None,
     certificate_identity: str | None = None,
     certificate_oidc_issuer: str | None = None,
+    on_progress: Callable[[str, int, int | None], None] | None = None,
 ) -> PullResult:
     """Download a platform-specific build of a design.
 
@@ -55,6 +57,11 @@ def pull(
     With *cache_dir*, artifacts are taken from that cache when their pinned
     sha256 is there (``PullResult.cached`` is true when all root artifacts were),
     and downloaded ones are added to it. Without it, no cache is read or written.
+
+    *on_progress* is called as ``on_progress(label, bytes_received, total_bytes)``
+    while artifacts are fetched. *label* is ``"<ns>/<design>:<version> <file>"``;
+    *total_bytes* is ``None`` when the size is unknown. A cached artifact is
+    reported once, as complete.
     """
     if no_deps and deps_only:
         raise SDKError("--no-deps and --deps-only are mutually exclusive.", code=ExitKind.INVALID)
@@ -107,6 +114,7 @@ def pull(
                 no_shell=no_shell,
                 verify_attestation=verify_attestation,
                 attestation_signer=signer,
+                on_progress=on_progress,
             )
     except ResolutionError as exc:
         raise SDKError(str(exc), code=ExitKind.UNRESOLVABLE) from exc
