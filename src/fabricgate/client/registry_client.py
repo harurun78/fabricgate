@@ -319,6 +319,9 @@ class RegistryClient:
                 if on_progress is not None:
                     # Bytes on the wire, which is what Content-Length counts (also when compressed).
                     on_progress(resp.num_bytes_downloaded, total)
+            if on_progress is not None:
+                # The last chunk on the wire can decode to nothing (a gzip trailer), so report the end once more.
+                on_progress(resp.num_bytes_downloaded, total)
             return b"".join(chunks)
 
     # ---- Auth ----

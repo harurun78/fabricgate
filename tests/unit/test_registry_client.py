@@ -258,7 +258,7 @@ class TestDownloadArtifact:
         )
 
         assert result == raw
-        assert calls == [(0, 5000), (3000, 5000), (5000, 5000)]
+        assert calls == [(0, 5000), (3000, 5000), (5000, 5000), (5000, 5000)]
 
     def test_progress_total_is_none_without_content_length(self) -> None:
         def _handler(request: httpx2.Request) -> httpx2.Response:
@@ -275,9 +275,42 @@ class TestDownloadArtifact:
         assert calls[0] == (0, None)
         assert calls[-1] == (4, None)
 
+    def test_counts_compressed_bytes_up_to_the_end(self) -> None:
+        import gzip
+
+        raw = bytes(range(256)) * 40
+        wire = gzip.compress(raw)
+
+        def _handler(request: httpx2.Request) -> httpx2.Response:
+            # The 8-byte gzip trailer arrives last and decodes to nothing.
+            return httpx2.Response(
+                200,
+                content=iter([wire[:-8], wire[-8:]]),
+                headers={"Content-Length": str(len(wire)), "Content-Encoding": "gzip"},
+                request=request,
+            )
+
+        client = _make_client(httpx2.MockTransport(_handler))
+        calls: list[tuple[int, int | None]] = []
+
+        result = client.download_artifact(
+            "ns", "d", "1.0.0", "xc7z020", "pynq", "a.bit", on_progress=lambda *a: calls.append(a)
+        )
+
+        assert result == raw
+        assert calls[-1] == (len(wire), len(wire))
+        assert all(received <= len(wire) for received, _ in calls)
+
     def test_error_response_raises_registry_error(self) -> None:
-        body = {"error": {"code": "NOT_FOUND", "message": "no such artifact"}}
-        client = _make_client(_transport(404, body))
+        body = b'{"error": {"code": "NOT_FOUND", "message": "no such artifact"}}'
+
+        def _handler(request: httpx2.Request) -> httpx2.Response:
+            # Streamed, so the error body must be read before it is parsed.
+            return httpx2.Response(
+                404, content=iter([body]), headers={"content-type": "application/json"}, request=request
+            )
+
+        client = _make_client(httpx2.MockTransport(_handler))
 
         with pytest.raises(RegistryError) as exc_info:
             client.download_artifact("ns", "d", "1.0.0", "xc7z020", "pynq", "a.bit", on_progress=lambda *a: None)
