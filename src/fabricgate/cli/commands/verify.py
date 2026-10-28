@@ -23,7 +23,7 @@ from fabricgate.sdk import api as sdk_api
 def verify_cmd(
     obj: dict[str, object], directory: Path, ref: str | None, expected_platform: str | None, offline: bool
 ) -> None:
-    """Verify a pulled design directory against the registry and its manifest."""
+    """Verify a pulled design directory, its dependencies and shell, against the registry and their manifests."""
     # Not the global --platform (FG_PLATFORM): a pull that fell back to a generic-*
     # platform would then fail here.
     with sdk_errors():
@@ -31,27 +31,36 @@ def verify_cmd(
             directory, ref=ref, platform=expected_platform, offline=offline, registry=str(obj["registry"])
         )
 
-    if result.yanked:
-        reason = f": {result.yanked_reason}" if result.yanked_reason else ""
-        click.echo(f"⚠ {result.checked_ref} is yanked{reason}", err=True)
+    checked = [
+        ("", result),
+        *(("dependency ", d) for d in result.dependencies),
+        *(("shell ", d) for d in result.shells),
+    ]
+    for _, item in checked:
+        if item.yanked:
+            reason = f": {item.yanked_reason}" if item.yanked_reason else ""
+            click.echo(f"⚠ {item.checked_ref} is yanked{reason}", err=True)
+    failed = not all(artifact.verified for _, item in checked for artifact in item.artifacts)
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
-        if not all(artifact.verified for artifact in result.artifacts):
+        if failed:
             exit_with(FailureKind.INVALID)
         return
 
-    click.echo(f"Verifying {result.design_ref} ({result.platform}) ...")
-    if result.manifest_verified:
-        source = "" if ref is not None else " (version from the manifest's design_ref; pin it with --ref)"
-        click.echo(f"  manifest matches {result.checked_ref} ({result.checked_platform}){source}")
-    else:
-        click.echo("  manifest not checked against the registry (--offline)")
-    failed = False
-    for artifact in result.artifacts:
-        status = "OK" if artifact.verified else "FAIL"
-        click.echo(f"  {artifact.file} sha256:{artifact.sha256} {status}")
-        failed = failed or not artifact.verified
+    for kind, item in checked:
+        click.echo(f"Verifying {kind}{item.design_ref} ({item.platform}) ...")
+        if item.manifest_verified:
+            # Only the root's version can come from its own manifest; the others come from their paths.
+            source = "" if kind or ref is not None else " (version from the manifest's design_ref; pin it with --ref)"
+            click.echo(f"  manifest matches {item.checked_ref} ({item.checked_platform}){source}")
+        else:
+            click.echo("  manifest not checked against the registry (--offline)")
+        for artifact in item.artifacts:
+            status = "OK" if artifact.verified else "FAIL"
+            click.echo(f"  {artifact.file} sha256:{artifact.sha256} {status}")
+    for name in result.missing:
+        click.echo(f"Not pulled, not checked: {name}")
 
     if failed:
         exit_with(FailureKind.INVALID)

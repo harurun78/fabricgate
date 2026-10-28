@@ -110,6 +110,12 @@ class VerificationResult(FabricGateModel):
     """The registry platform whose digest matched (``None`` with ``offline``)."""
     yanked: bool = False
     yanked_reason: str | None = None
+    dependencies: list[VerificationResult] = Field(default_factory=list)
+    """Each ``deps/<namespace>/<design>/<version>/`` directory, checked the same way."""
+    shells: list[VerificationResult] = Field(default_factory=list)
+    """Each ``shell/<namespace>/<design>/<version>/`` directory, checked the same way."""
+    missing: list[str] = Field(default_factory=list)
+    """Dependencies (names) and the shell (ref) the manifest requires that were not pulled."""
 
 
 class DesignInfo(FabricGateModel):
