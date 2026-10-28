@@ -26,6 +26,10 @@ def _is_placeholder_sha256(sha256: str) -> bool:
     return len(sha256) == 64 and len(set(sha256)) == 1
 
 
+# `fabricgate push` shows its "compute real artifact hashes" tip for warnings that contain this.
+PLACEHOLDER_SHA256_WARNING = "has a placeholder sha256"
+
+
 def _manifest_digest(manifest: bytes) -> str:
     """Return the index ``digest`` of *manifest*.
 
@@ -161,7 +165,7 @@ def collect_artifacts(
                     # Placeholder sha256: skip verification but warn the caller.
                     if not skip_sha_check and sha_warnings is not None:
                         sha_warnings.append(
-                            f"Artifact {ref.file} has a placeholder sha256 "
+                            f"Artifact {ref.file} {PLACEHOLDER_SHA256_WARNING} "
                             "— run with real bitstream to get a verifiable hash"
                         )
                 elif artifact_path.exists():

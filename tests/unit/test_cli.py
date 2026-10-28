@@ -10,6 +10,7 @@ import pytest
 from click.testing import CliRunner
 
 from fabricgate.cli.main import main
+from fabricgate.client.publisher import PLACEHOLDER_SHA256_WARNING
 from fabricgate.models.api.responses import (
     DesignSummary,
     QuotaDesignsInfo,
@@ -345,7 +346,7 @@ def test_push_sdk_error(monkeypatch, tmp_path) -> None:
 @pytest.mark.parametrize(
     ("sha_warn", "tip"),
     [
-        ("Artifact design.bit has a placeholder sha256 — run with real bitstream", True),
+        (f"Artifact design.bit {PLACEHOLDER_SHA256_WARNING} — run with real bitstream", True),
         (
             "Index digest for xc7z020/pynq does not match xc7z020/pynq/manifest.yaml; push sends the manifest's digest",
             False,
