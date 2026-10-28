@@ -5603,3 +5603,71 @@ def test_verify_lists_a_dependency_whose_version_directory_is_gone(tmp_path: Pat
 
     assert result.dependencies == []
     assert result.missing == ["test-ns/lib"]
+
+
+# ---------------------------------------------------------------------------
+# verify: dependency constraints and transitive dependencies
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("version", "constraint", "expected"),
+    [
+        ("1.2.0", "1.2.0", True),
+        ("1.2.1", "1.2.0", False),
+        ("1.9.0", "^1.2.0", True),
+        ("2.0.0", "^1.2.0", False),
+        ("1.1.9", "^1.2.0", False),
+        ("0.9.0", "^0.2.0", True),  # the schema's ^0.x is wider than npm / Cargo
+        ("0.1.9", "^0.2.0", False),
+        ("1.2.9", "~1.2.0", True),
+        ("1.3.0", "~1.2.0", False),
+        ("7.0.0", "*", True),
+    ],
+)
+def test_satisfies_the_four_constraint_forms(version: str, constraint: str, expected: bool) -> None:
+    from fabricgate.sdk.designs.pull import _satisfies
+
+    assert _satisfies(version, constraint) is expected
+
+
+def test_verify_fails_for_a_dependency_version_outside_the_constraint(tmp_path: Path) -> None:
+    """A genuine older version in place of the resolved one fails, also offline."""
+    import shutil
+
+    _write_tree(tmp_path)
+    shutil.rmtree(tmp_path / "deps/test-ns/lib/1.2.0")
+    _write_pulled_dir(tmp_path / "deps/test-ns/lib/0.9.0", "test-ns/lib:0.9.0")
+
+    with pytest.raises(sdk_api.SDKError, match=r"test-ns/blink:1\.0\.0 needs test-ns/lib \^1\.0\.0") as exc_info:
+        sdk_api.verify(tmp_path, offline=True)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_verify_lists_a_missing_dependency_of_a_dependency(tmp_path: Path) -> None:
+    _write_tree(tmp_path)
+    _write_pulled_dir(
+        tmp_path / "deps/test-ns/lib/1.2.0",
+        "test-ns/lib:1.2.0",
+        extra=(
+            "dependencies:",
+            "  - name: test-ns/sub",
+            "    version: ~2.1.0",
+            "  - name: test-ns/sub-optional",
+            "    version: '*'",
+            "    optional: true",
+        ),
+    )
+
+    result = sdk_api.verify(tmp_path, offline=True)
+
+    assert result.missing == ["test-ns/sub"]
+
+
+def test_verify_rejects_an_unsupported_constraint(tmp_path: Path) -> None:
+    _write_pulled_dir(tmp_path, extra=("dependencies:", "  - name: test-ns/lib", "    version: 1.0.0 <2.0.0"))
+    _write_pulled_dir(tmp_path / "deps/test-ns/lib/1.2.0", "test-ns/lib:1.2.0")
+
+    with pytest.raises(sdk_api.SDKError, match="Unsupported dependency constraint") as exc_info:
+        sdk_api.verify(tmp_path, offline=True)
+    assert exc_info.value.code == ExitKind.INVALID
