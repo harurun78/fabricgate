@@ -52,7 +52,7 @@ A given kind of failure produces the same code in every subcommand.
 The per-command **Exit codes** sections below list the subset each command can
 emit (with command-specific phrasing), but the code values always conform to
 this table. New commands MUST follow it. Commands without an **Exit codes**
-section (e.g. `info` / `verify` / `search`) emit only the standard codes above.
+section (e.g. `info` / `search`) emit only the standard codes above.
 
 > **Permission (2) on read commands**: read コマンド（`pull` / `diff` / `info` /
 > `stats` / `quota` / `watch` / `license-check`）が叩くレジストリのリードエンドポイントは
