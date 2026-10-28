@@ -2665,6 +2665,30 @@ def test_verify_offline_says_the_manifest_was_not_checked(monkeypatch, tmp_path)
     assert "manifest not checked against the registry (--offline)" in result.output
 
 
+def test_verify_lists_dependencies_shell_and_missing(monkeypatch, tmp_path) -> None:
+    def _fake_verify(*_args, **_kwargs):
+        checked = {"manifest_verified": True, "checked_platform": "xc7z020/pynq"}
+        dep = _verified(tmp_path, **checked, checked_ref="ns/lib:1.2.0", yanked=True, yanked_reason="Old")
+        dep.design_ref = "ns/lib:1.2.0"
+        dep.artifacts[0].verified = False
+        shell = _verified(tmp_path, **checked, checked_ref="ns/shell:2.0.0")
+        shell.design_ref = "ns/shell:2.0.0"
+        return _verified(
+            tmp_path, **checked, checked_ref="ns/blink:1.0.0", dependencies=[dep], shells=[shell], missing=["ns/x"]
+        )
+
+    monkeypatch.setattr("fabricgate.cli.commands.verify.sdk_api.verify", _fake_verify)
+    result = CliRunner().invoke(main, ["verify", str(tmp_path)])
+    # A failed dependency artifact fails the command like a root one.
+    assert result.exit_code == 3
+    assert "Verifying dependency ns/lib:1.2.0 (xc7z020/pynq) ..." in result.output
+    # Only the root's version may come from its own manifest; the others come from their paths.
+    assert "  manifest matches ns/lib:1.2.0 (xc7z020/pynq)\n" in result.output
+    assert "Verifying shell ns/shell:2.0.0 (xc7z020/pynq) ..." in result.output
+    assert "Not pulled, not checked: ns/x" in result.output
+    assert "ns/lib:1.2.0 is yanked: Old" in result.stderr
+
+
 def test_verify_warns_about_a_yanked_version(monkeypatch, tmp_path) -> None:
     def _fake_verify(*_args, **_kwargs):
         return _verified(

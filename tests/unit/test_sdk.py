@@ -5280,9 +5280,19 @@ def test_pull_ignores_legacy_non_http_links(monkeypatch: pytest.MonkeyPatch, tmp
 # ---------------------------------------------------------------------------
 
 
-def _write_pulled_dir(directory: Path, design_ref: str = "test-ns/blink:1.0.0") -> str:
-    """Write a pulled design directory and return the manifest's ``sha256:`` digest."""
-    bitstream, hwh = b"bitstream-data", b"<hwh/>"
+def _write_pulled_dir(
+    directory: Path,
+    design_ref: str = "test-ns/blink:1.0.0",
+    *,
+    bitstream: bytes = b"bitstream-data",
+    extra: tuple[str, ...] = (),
+) -> str:
+    """Write a pulled design directory and return the manifest's ``sha256:`` digest.
+
+    *extra* lines are appended to the manifest (top-level keys).
+    """
+    hwh = b"<hwh/>"
+    directory.mkdir(parents=True, exist_ok=True)
     (directory / "design.bit").write_bytes(bitstream)
     (directory / "design.hwh").write_bytes(hwh)
     manifest = "\n".join(
@@ -5298,6 +5308,7 @@ def _write_pulled_dir(directory: Path, design_ref: str = "test-ns/blink:1.0.0") 
             "  hwh:",
             "    file: design.hwh",
             f"    sha256: {hashlib.sha256(hwh).hexdigest()}",
+            *extra,
         ]
     ).encode()
     (directory / "manifest.yaml").write_bytes(manifest)
@@ -5307,7 +5318,7 @@ def _write_pulled_dir(directory: Path, design_ref: str = "test-ns/blink:1.0.0") 
 def _verify_client(
     platforms: dict[str, dict[str, str]], *, yanked_reason: str | None = None, error: Exception | None = None
 ) -> tuple[type, list[str]]:
-    """A fake whose ``get_version`` serves *platforms* (version → {platform: digest}); records asked versions."""
+    """A fake whose ``get_version`` serves *platforms* ({ref or version: {platform: digest}}); records asked refs."""
     asked: list[str] = []
 
     class _Client:
@@ -5321,14 +5332,17 @@ def _verify_client(
             pass
 
         def get_version(self, namespace: str, design: str, version: str) -> VersionDetailResponse:
-            asked.append(f"{namespace}/{design}:{version}")
+            ref = f"{namespace}/{design}:{version}"
+            asked.append(ref)
             if error is not None:
                 raise error
             return VersionDetailResponse.model_validate(
                 {
                     "name": f"{namespace}/{design}",
                     "version": version,
-                    "platforms": [{"platform": p, "digest": d} for p, d in platforms[version].items()],
+                    "platforms": [
+                        {"platform": p, "digest": d} for p, d in platforms.get(ref, platforms.get(version, {})).items()
+                    ],
                     "published_at": datetime(2026, 3, 17, tzinfo=UTC),
                     "yanked": yanked_reason is not None,
                     "yanked_reason": yanked_reason,
@@ -5456,3 +5470,136 @@ def test_verify_offline_rejects_ref_and_platform(tmp_path: Path, kwargs: dict[st
     with pytest.raises(sdk_api.SDKError, match="cannot be combined with --offline") as exc_info:
         sdk_api.verify(tmp_path, offline=True, **kwargs)
     assert exc_info.value.code == ExitKind.INVALID
+
+
+# ---------------------------------------------------------------------------
+# verify: dependencies and the shell under deps/ and shell/
+# ---------------------------------------------------------------------------
+
+_SHELL_BITSTREAM = b"shell-bitstream"
+
+
+def _write_tree(root: Path, *, shell_bitstream: bytes = _SHELL_BITSTREAM, pulled: bool = True) -> dict[str, str]:
+    """Write a root that needs a dependency and a shell (and, when *pulled*, both directories); return the digests."""
+    digests = {
+        "test-ns/blink:1.0.0": _write_pulled_dir(
+            root,
+            extra=(
+                "bitstream_type: partial",
+                "shell_dependency:",
+                "  name: test-ns/shell",
+                "  version: =2.0.0",
+                f"  sha256: {hashlib.sha256(_SHELL_BITSTREAM).hexdigest()}",
+                "dependencies:",
+                "  - name: test-ns/lib",
+                "    version: ^1.0.0",
+                "  - name: test-ns/extra",
+                "    version: ^1.0.0",
+                "    optional: true",
+            ),
+        )
+    }
+    if pulled:
+        digests["test-ns/lib:1.2.0"] = _write_pulled_dir(root / "deps/test-ns/lib/1.2.0", "test-ns/lib:1.2.0")
+        digests["test-ns/shell:2.0.0"] = _write_pulled_dir(
+            root / "shell/test-ns/shell/2.0.0", "test-ns/shell:2.0.0", bitstream=shell_bitstream
+        )
+    return digests
+
+
+def test_verify_checks_dependencies_and_shell(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    digests = _write_tree(tmp_path)
+    client, asked = _verify_client({ref: {"xc7z020/pynq": d} for ref, d in digests.items()})
+    _patch_all_rc(monkeypatch, client)
+
+    result = sdk_api.verify(tmp_path)
+
+    assert asked == ["test-ns/blink:1.0.0", "test-ns/lib:1.2.0", "test-ns/shell:2.0.0"]
+    assert [(d.checked_ref, d.manifest_verified) for d in result.dependencies] == [("test-ns/lib:1.2.0", True)]
+    assert [(s.checked_ref, s.checked_platform) for s in result.shells] == [("test-ns/shell:2.0.0", "xc7z020/pynq")]
+    assert all(item.verified for d in [*result.dependencies, *result.shells] for item in d.artifacts)
+    assert result.missing == []  # the optional dependency was not pulled, and is not required
+
+
+def test_verify_fails_for_a_rewritten_dependency(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    digests = _write_tree(tmp_path)
+    digests["test-ns/lib:1.2.0"] = _OTHER_DIGEST
+    _patch_all_rc(monkeypatch, _verify_client({ref: {"xc7z020/pynq": d} for ref, d in digests.items()})[0])
+
+    with pytest.raises(sdk_api.SDKError, match=r"deps/test-ns/lib/1\.2\.0") as exc_info:
+        sdk_api.verify(tmp_path)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_verify_dependency_must_name_the_version_of_its_path(tmp_path: Path) -> None:
+    """A manifest moved under another version's directory fails, also offline."""
+    _write_tree(tmp_path)
+    (tmp_path / "deps/test-ns/lib/1.2.0").rename(tmp_path / "deps/test-ns/lib/1.3.0")
+
+    with pytest.raises(sdk_api.SDKError, match=r"names test-ns/lib:1\.2\.0, but its directory is for") as exc_info:
+        sdk_api.verify(tmp_path, offline=True)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_verify_shell_must_carry_the_pinned_artifact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A genuine manifest of another platform of the shell version passes the digest lookup but not the pin."""
+    digests = _write_tree(tmp_path, shell_bitstream=b"another-platform-shell")
+    _patch_all_rc(monkeypatch, _verify_client({ref: {"xc7z020/pynq": d} for ref, d in digests.items()})[0])
+
+    with pytest.raises(sdk_api.SDKError, match="shell_dependency pins") as exc_info:
+        sdk_api.verify(tmp_path)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_verify_lists_required_dependencies_and_shell_not_pulled(tmp_path: Path) -> None:
+    _write_tree(tmp_path, pulled=False)
+
+    result = sdk_api.verify(tmp_path, offline=True)
+
+    assert (result.dependencies, result.shells) == ([], [])
+    assert result.missing == ["test-ns/lib", "test-ns/shell:2.0.0"]
+
+
+def test_verify_offline_checks_dependency_artifacts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _write_tree(tmp_path)
+    (tmp_path / "deps/test-ns/lib/1.2.0/design.bit").write_bytes(b"rewritten")
+    client, asked = _verify_client({})
+    _patch_all_rc(monkeypatch, client)
+
+    result = sdk_api.verify(tmp_path, offline=True)
+
+    assert asked == []
+    assert [(i.file, i.verified) for i in result.dependencies[0].artifacts] == [
+        ("design.bit", False),
+        ("design.hwh", True),
+    ]
+    assert all(item.verified for item in result.shells[0].artifacts)
+
+
+def test_verify_shell_of_another_version_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Pull only places the pinned shell version, so a genuine other version in its place is a failure."""
+    import shutil
+
+    digests = _write_tree(tmp_path)
+    shutil.rmtree(tmp_path / "shell/test-ns/shell/2.0.0")
+    digests["test-ns/shell:1.9.0"] = _write_pulled_dir(tmp_path / "shell/test-ns/shell/1.9.0", "test-ns/shell:1.9.0")
+    _patch_all_rc(monkeypatch, _verify_client({ref: {"xc7z020/pynq": d} for ref, d in digests.items()})[0])
+
+    with pytest.raises(
+        sdk_api.SDKError, match=r"pins test-ns/shell:2\.0\.0, but the shell directory holds"
+    ) as exc_info:
+        sdk_api.verify(tmp_path)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_verify_lists_a_dependency_whose_version_directory_is_gone(tmp_path: Path) -> None:
+    """Only the version directories pull creates count: an empty deps/<ns>/<design>/ does not."""
+    import shutil
+
+    _write_tree(tmp_path)
+    shutil.rmtree(tmp_path / "deps/test-ns/lib/1.2.0")
+
+    result = sdk_api.verify(tmp_path, offline=True)
+
+    assert result.dependencies == []
+    assert result.missing == ["test-ns/lib"]

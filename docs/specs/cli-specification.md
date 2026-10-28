@@ -555,7 +555,11 @@ Verify integrity of a pulled design.
 fabricgate verify <directory> [--ref <design-ref>] [--platform <board_id/runtime>] [--offline]
 ```
 
-まずマニフェスト自体をレジストリと照合し、続けて各アーティファクトをマニフェストの sha256 と照合する。読むのは `<directory>` 直下のマニフェストだけで、`deps/` と `shell/` は対象外。
+まずマニフェスト自体をレジストリと照合し、続けて各アーティファクトをマニフェストの sha256 と照合する。pull が置いた依存(`deps/<namespace>/<design>/<version>/`)と shell(`shell/<namespace>/<design>/<version>/`)も同じ方法で照合する。
+
+- 依存と shell の照合先の版はディレクトリのパスから取る。マニフェストの `design_ref` がパスと異なれば失敗(exit 3、`--offline` でも同じ)。platform は版のどの platform と一致してもよい(一致した platform を表示する)。`--ref` / `--platform` はルートにだけ効く
+- ルートのマニフェストに `shell_dependency` があれば、shell のマニフェストはその `sha256` を持つアーティファクトを含まなければならない(exit 3)。同じ shell の版の別 platform の正規マニフェストへの差し替えを防ぐ。pull は `shell_dependency` が固定する版だけを置くので、`shell/` に別の版しか無い場合も失敗(exit 3)
+- ルートのマニフェストが宣言する必須の依存(`optional: false`)と `shell_dependency` のうち、版のディレクトリ(`deps/<namespace>/<design>/<version>/` など)が無いもの(`--no-deps` / `--no-shell` で pull した場合など)は、失敗にせず「Not pulled, not checked」と表示する。推移的な依存の欠落と、依存の版がルートの版制約を満たすかは確かめない
 
 - マニフェストの照合: `GET .../versions/{version}` が返す `platforms[].digest` に、マニフェストファイルの SHA-256 と一致するものがあれば合格。pull はレジストリが配信したバイトをそのまま保存するので、pull 後にマニフェストを書き換えると一致しなくなる
 - `--ref`: 照合先の版。省略時はマニフェストの `design_ref` を使い、その旨を表示する。書き換えたマニフェストは `design_ref` を別の版に向けられるため、照合した版を常に表示する
@@ -592,7 +596,7 @@ All artifacts verified.
 - 3: マニフェストがレジストリの digest と一致しない / アーティファクトの不一致 / `--offline` と `--ref` / `--platform` の併用
 - 4: レジストリに届かない
 
-`--json` では `VerificationResult` を出力する。この変更で `manifest_verified`(マニフェストをレジストリと照合して一致したか。`--offline` では `false`)、`checked_ref` / `checked_platform`(照合した版と platform。`--offline` では `null`)、`yanked` / `yanked_reason` が加わった。
+`--json` では `VerificationResult` を出力する。この変更で `manifest_verified`(マニフェストをレジストリと照合して一致したか。`--offline` では `false`)、`checked_ref` / `checked_platform`(照合した版と platform。`--offline` では `null`)、`yanked` / `yanked_reason` が加わった。依存と shell は `dependencies` / `shells`(それぞれ同じ形の結果のリスト)、pull されていない必須の依存と shell は `missing` に入る。
 
 ---
 
