@@ -2620,6 +2620,70 @@ def test_verify_success(monkeypatch, tmp_path) -> None:
     assert "All artifacts verified." in result.output
 
 
+def _verified(tmp_path, **fields) -> VerificationResult:
+    return VerificationResult(
+        design_ref="ns/blink:1.0.0",
+        platform="xc7z020/pynq",
+        directory=str(tmp_path),
+        artifacts=[VerificationItem(file="design.bit", sha256="abc123", verified=True)],
+        **fields,
+    )
+
+
+def test_verify_passes_options_and_names_what_it_checked(monkeypatch, tmp_path) -> None:
+    calls: list[dict[str, object]] = []
+
+    def _fake_verify(directory, **kwargs):
+        calls.append(kwargs)
+        return _verified(tmp_path, manifest_verified=True, checked_ref="ns/blink:1.0.0", checked_platform="zcu104/pynq")
+
+    monkeypatch.setattr("fabricgate.cli.commands.verify.sdk_api.verify", _fake_verify)
+    runner = CliRunner()
+    # The global --platform is not the expected platform: a generic fallback pull would fail.
+    result = runner.invoke(main, ["--platform", "kv260/pynq", "verify", str(tmp_path)])
+    assert result.exit_code == 0
+    assert calls[0]["ref"] is None and calls[0]["platform"] is None and calls[0]["offline"] is False
+    assert "manifest matches ns/blink:1.0.0 (zcu104/pynq) (version from the manifest's design_ref" in result.output
+
+    result = runner.invoke(main, ["verify", str(tmp_path), "--ref", "ns/blink:1.0.0", "--platform", "zcu104/pynq"])
+    assert result.exit_code == 0
+    assert (calls[1]["ref"], calls[1]["platform"]) == ("ns/blink:1.0.0", "zcu104/pynq")
+    assert "manifest matches ns/blink:1.0.0 (zcu104/pynq)\n" in result.output
+
+
+def test_verify_offline_says_the_manifest_was_not_checked(monkeypatch, tmp_path) -> None:
+    calls: list[dict[str, object]] = []
+
+    def _fake_verify(directory, **kwargs):
+        calls.append(kwargs)
+        return _verified(tmp_path)
+
+    monkeypatch.setattr("fabricgate.cli.commands.verify.sdk_api.verify", _fake_verify)
+    result = CliRunner().invoke(main, ["verify", str(tmp_path), "--offline"])
+    assert result.exit_code == 0
+    assert calls[0]["offline"] is True
+    assert "manifest not checked against the registry (--offline)" in result.output
+
+
+def test_verify_warns_about_a_yanked_version(monkeypatch, tmp_path) -> None:
+    def _fake_verify(*_args, **_kwargs):
+        return _verified(
+            tmp_path,
+            manifest_verified=True,
+            checked_ref="ns/blink:1.0.0",
+            checked_platform="xc7z020/pynq",
+            yanked=True,
+            yanked_reason="Timing bug",
+        )
+
+    monkeypatch.setattr("fabricgate.cli.commands.verify.sdk_api.verify", _fake_verify)
+    result = CliRunner().invoke(main, ["--json", "verify", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "ns/blink:1.0.0 is yanked: Timing bug" in result.stderr
+    data = json.loads(result.stdout)
+    assert (data["manifest_verified"], data["checked_platform"], data["yanked"]) == (True, "xc7z020/pynq", True)
+
+
 # ---------------------------------------------------------------------------
 # deprecate (additional paths) — lines 32, 34, 66
 # ---------------------------------------------------------------------------

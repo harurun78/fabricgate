@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -139,16 +140,68 @@ def pull(
     )
 
 
-def verify(directory: str | Path) -> VerificationResult:
-    """Verify artifact digests in a pulled design directory."""
+def verify(
+    directory: str | Path,
+    *,
+    ref: str | None = None,
+    platform: str | None = None,
+    offline: bool = False,
+    registry: str = "https://registry.fabricgate.dev/api/v1",
+) -> VerificationResult:
+    """Verify a pulled design directory.
+
+    First the manifest is checked against the registry: its SHA-256 must equal the
+    ``digest`` of a platform of *ref* (default: the manifest's own ``design_ref``),
+    or of *platform* when given. Then each artifact is checked against the manifest.
+    With *offline*, only the artifacts are checked.
+    """
+    if offline and (ref is not None or platform is not None):
+        raise SDKError("--ref and --platform cannot be combined with --offline.", code=ExitKind.INVALID)
     target_dir = Path(directory)
     manifest_path = _find_manifest_path(target_dir)
     try:
-        manifest = parse_platform_manifest(manifest_path.read_text(encoding="utf-8"))
+        # One read: the bytes that are parsed are the bytes that are hashed.
+        manifest_bytes = manifest_path.read_bytes()
+        manifest = parse_platform_manifest(manifest_bytes.decode("utf-8"))
     except (ValidationError, yaml.YAMLError, UnicodeDecodeError) as exc:
         raise SDKError(f"Invalid manifest {manifest_path}: {exc}", code=ExitKind.INVALID) from exc
     except OSError as exc:
         raise SDKError(f"Cannot read {manifest_path}: {exc}", code=ExitKind.INFRA) from exc
+
+    checked_ref: str | None = None
+    checked_platform: str | None = None
+    yanked = False
+    yanked_reason: str | None = None
+    if not offline:
+        # A rewritten manifest can name any version, so the caller sees which one was used.
+        checked_ref = ref if ref is not None else str(manifest.design_ref)
+        namespace, design, version = _parse_design_ref(checked_ref)
+        try:
+            with _registry_errors(), RegistryClient(base_url=registry) as client:
+                detail = client.get_version(namespace, design, version)
+        except SDKError as exc:
+            if exc.code == ExitKind.INFRA:
+                # No silent fallback to the artifact-only check: blocking the network must not downgrade it.
+                raise SDKError(f"{exc}\nUse --offline to check only the artifacts.", code=ExitKind.INFRA) from exc
+            raise
+        candidates = [entry for entry in detail.platforms if platform is None or str(entry.platform) == platform]
+        if not candidates:
+            available = ", ".join(str(entry.platform) for entry in detail.platforms)
+            raise SDKError(
+                f"Platform {platform} not found in {checked_ref}. Available: {available}", code=ExitKind.NOT_FOUND
+            )
+        # Not the manifest's board: a platform ID's board can differ from it (generic fallback).
+        digest = f"sha256:{hashlib.sha256(manifest_bytes).hexdigest()}"
+        matched = next((entry for entry in candidates if str(entry.digest) == digest), None)
+        if matched is None:
+            where = f"platform {platform} of {checked_ref}" if platform is not None else checked_ref
+            raise SDKError(
+                f"{manifest_path.name} does not match the registry's digest for {where}.",
+                code=ExitKind.INVALID,
+            )
+        checked_platform = str(matched.platform)
+        yanked = detail.yanked
+        yanked_reason = detail.yanked_reason
 
     results: list[VerificationItem] = []
     for artifact in artifact_refs(manifest):
@@ -175,4 +228,9 @@ def verify(directory: str | Path) -> VerificationResult:
         platform=f"{manifest.board}/{manifest.runtime}",
         directory=str(target_dir),
         artifacts=results,
+        manifest_verified=not offline,
+        checked_ref=checked_ref,
+        checked_platform=checked_platform,
+        yanked=yanked,
+        yanked_reason=yanked_reason,
     )

@@ -243,8 +243,9 @@ def test_verify_checks_local_artifacts(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    result = sdk_api.verify(tmp_path)
+    result = sdk_api.verify(tmp_path, offline=True)
     assert all(item.verified for item in result.artifacts)
+    assert result.manifest_verified is False
 
 
 def test_version_detail_to_index_strips_api_enrichment_fields() -> None:
@@ -3751,7 +3752,7 @@ def test_verify_invalid_artifact_path(tmp_path: Path) -> None:
     (tmp_path / "manifest.yaml").write_text(chr(10).join(manifest_lines))
 
     with pytest.raises(sdk_api.SDKError, match="Invalid artifact filename"):
-        sdk_api.verify(str(tmp_path))
+        sdk_api.verify(str(tmp_path), offline=True)
 
 
 def test_verify_artifact_not_found(tmp_path: Path) -> None:
@@ -3771,7 +3772,7 @@ def test_verify_artifact_not_found(tmp_path: Path) -> None:
     (tmp_path / "manifest.yaml").write_text(chr(10).join(manifest_lines))
 
     with pytest.raises(sdk_api.SDKError, match="Artifact not found"):
-        sdk_api.verify(str(tmp_path))
+        sdk_api.verify(str(tmp_path), offline=True)
 
 
 def test_quota_not_found_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -5272,3 +5273,175 @@ def test_pull_ignores_legacy_non_http_links(monkeypatch: pytest.MonkeyPatch, tmp
 
     assert result.name == "test-ns/blink"
     assert (tmp_path / "o" / "design.bit").read_bytes() == b"bitstream-data"
+
+
+# ---------------------------------------------------------------------------
+# verify: the manifest against the registry's platform digest
+# ---------------------------------------------------------------------------
+
+
+def _write_pulled_dir(directory: Path, design_ref: str = "test-ns/blink:1.0.0") -> str:
+    """Write a pulled design directory and return the manifest's ``sha256:`` digest."""
+    bitstream, hwh = b"bitstream-data", b"<hwh/>"
+    (directory / "design.bit").write_bytes(bitstream)
+    (directory / "design.hwh").write_bytes(hwh)
+    manifest = "\n".join(
+        [
+            "schema: fabricgate-platform/v1",
+            "runtime: pynq",
+            "board: pynq-z2",
+            f"design_ref: {design_ref}",
+            "artifacts:",
+            "  bitstream:",
+            "    file: design.bit",
+            f"    sha256: {hashlib.sha256(bitstream).hexdigest()}",
+            "  hwh:",
+            "    file: design.hwh",
+            f"    sha256: {hashlib.sha256(hwh).hexdigest()}",
+        ]
+    ).encode()
+    (directory / "manifest.yaml").write_bytes(manifest)
+    return f"sha256:{hashlib.sha256(manifest).hexdigest()}"
+
+
+def _verify_client(
+    platforms: dict[str, dict[str, str]], *, yanked_reason: str | None = None, error: Exception | None = None
+) -> tuple[type, list[str]]:
+    """A fake whose ``get_version`` serves *platforms* (version → {platform: digest}); records asked versions."""
+    asked: list[str] = []
+
+    class _Client:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> _Client:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            pass
+
+        def get_version(self, namespace: str, design: str, version: str) -> VersionDetailResponse:
+            asked.append(f"{namespace}/{design}:{version}")
+            if error is not None:
+                raise error
+            return VersionDetailResponse.model_validate(
+                {
+                    "name": f"{namespace}/{design}",
+                    "version": version,
+                    "platforms": [{"platform": p, "digest": d} for p, d in platforms[version].items()],
+                    "published_at": datetime(2026, 3, 17, tzinfo=UTC),
+                    "yanked": yanked_reason is not None,
+                    "yanked_reason": yanked_reason,
+                }
+            )
+
+    return _Client, asked
+
+
+_OTHER_DIGEST = "sha256:" + "1" * 64
+
+
+def test_verify_checks_the_manifest_against_the_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    digest = _write_pulled_dir(tmp_path)
+    # The registry platform's board differs from the manifest's (generic fallback): matched by digest, not board.
+    client, asked = _verify_client({"1.0.0": {"xc7z020/pynq": _OTHER_DIGEST, "generic-zynq7/pynq": digest}})
+    _patch_all_rc(monkeypatch, client)
+
+    result = sdk_api.verify(tmp_path)
+
+    assert asked == ["test-ns/blink:1.0.0"]
+    assert result.manifest_verified is True
+    assert (result.checked_ref, result.checked_platform) == ("test-ns/blink:1.0.0", "generic-zynq7/pynq")
+    assert all(item.verified for item in result.artifacts)
+    assert result.yanked is False
+
+
+def test_verify_fails_for_a_rewritten_manifest_and_artifacts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _write_pulled_dir(tmp_path)
+    _patch_all_rc(monkeypatch, _verify_client({"1.0.0": {"xc7z020/pynq": _OTHER_DIGEST}})[0])
+
+    with pytest.raises(sdk_api.SDKError, match="does not match the registry's digest") as exc_info:
+        sdk_api.verify(tmp_path)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_verify_platform_pins_the_expected_platform(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A genuine manifest of another platform of the same version passes only without --platform."""
+    digest = _write_pulled_dir(tmp_path)
+    _patch_all_rc(monkeypatch, _verify_client({"1.0.0": {"xc7z020/pynq": _OTHER_DIGEST, "zcu104/pynq": digest}})[0])
+
+    assert sdk_api.verify(tmp_path).checked_platform == "zcu104/pynq"
+    with pytest.raises(sdk_api.SDKError, match=r"platform xc7z020/pynq of test-ns/blink:1\.0\.0") as exc_info:
+        sdk_api.verify(tmp_path, platform="xc7z020/pynq")
+    assert exc_info.value.code == ExitKind.INVALID
+    with pytest.raises(sdk_api.SDKError, match="Platform kv260/pynq not found") as exc_info:
+        sdk_api.verify(tmp_path, platform="kv260/pynq")
+    assert exc_info.value.code == ExitKind.NOT_FOUND
+
+
+def test_verify_ref_pins_the_expected_version(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A manifest that names another (genuine) version passes only without --ref, and says which one it used."""
+    digest = _write_pulled_dir(tmp_path, design_ref="test-ns/blink:9.9.9")
+    client, asked = _verify_client({"1.0.0": {"xc7z020/pynq": _OTHER_DIGEST}, "9.9.9": {"xc7z020/pynq": digest}})
+    _patch_all_rc(monkeypatch, client)
+
+    assert sdk_api.verify(tmp_path).checked_ref == "test-ns/blink:9.9.9"
+    with pytest.raises(sdk_api.SDKError, match="does not match") as exc_info:
+        sdk_api.verify(tmp_path, ref="test-ns/blink:1.0.0")
+    assert exc_info.value.code == ExitKind.INVALID
+    assert asked == ["test-ns/blink:9.9.9", "test-ns/blink:1.0.0"]
+
+
+def test_verify_version_not_on_the_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from fabricgate.client.registry_client import RegistryError
+    from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
+
+    _write_pulled_dir(tmp_path)
+    error = RegistryError(404, ErrorResponse(error=ErrorDetail(code="NOT_FOUND", message="Version not found")))
+    _patch_all_rc(monkeypatch, _verify_client({}, error=error)[0])
+
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.verify(tmp_path)
+    assert exc_info.value.code == ExitKind.NOT_FOUND
+    assert "--offline" not in str(exc_info.value)
+
+
+def test_verify_reports_a_yanked_version(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    digest = _write_pulled_dir(tmp_path)
+    _patch_all_rc(monkeypatch, _verify_client({"1.0.0": {"xc7z020/pynq": digest}}, yanked_reason="Timing bug")[0])
+
+    result = sdk_api.verify(tmp_path)
+
+    assert (result.manifest_verified, result.yanked, result.yanked_reason) == (True, True, "Timing bug")
+
+
+def test_verify_unreachable_registry_does_not_fall_back(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from fabricgate.client.registry_client import NetworkError
+
+    _write_pulled_dir(tmp_path)
+    _patch_all_rc(monkeypatch, _verify_client({}, error=NetworkError("Network error: connection refused"))[0])
+
+    with pytest.raises(sdk_api.SDKError, match="Use --offline") as exc_info:
+        sdk_api.verify(tmp_path)
+    assert exc_info.value.code == ExitKind.INFRA
+
+
+def test_verify_offline_checks_only_the_artifacts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _write_pulled_dir(tmp_path)
+    client, asked = _verify_client({})
+    _patch_all_rc(monkeypatch, client)
+
+    result = sdk_api.verify(tmp_path, offline=True)
+
+    assert asked == []
+    assert result.manifest_verified is False
+    assert (result.checked_ref, result.checked_platform) == (None, None)
+    assert all(item.verified for item in result.artifacts)
+
+
+@pytest.mark.parametrize("kwargs", [{"ref": "test-ns/blink:1.0.0"}, {"platform": "xc7z020/pynq"}])
+def test_verify_offline_rejects_ref_and_platform(tmp_path: Path, kwargs: dict[str, str]) -> None:
+    _write_pulled_dir(tmp_path)
+    with pytest.raises(sdk_api.SDKError, match="cannot be combined with --offline") as exc_info:
+        sdk_api.verify(tmp_path, offline=True, **kwargs)
+    assert exc_info.value.code == ExitKind.INVALID

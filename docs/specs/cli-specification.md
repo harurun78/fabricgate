@@ -552,8 +552,18 @@ pico-ice/nanopynq:
 Verify integrity of a pulled design.
 
 ```
-fabricgate verify <directory>
+fabricgate verify <directory> [--ref <design-ref>] [--platform <board_id/runtime>] [--offline]
 ```
+
+まずマニフェスト自体をレジストリと照合し、続けて各アーティファクトをマニフェストの sha256 と照合する。読むのは `<directory>` 直下のマニフェストだけで、`deps/` と `shell/` は対象外。
+
+- マニフェストの照合: `GET .../versions/{version}` が返す `platforms[].digest` に、マニフェストファイルの SHA-256 と一致するものがあれば合格。pull はレジストリが配信したバイトをそのまま保存するので、pull 後にマニフェストを書き換えると一致しなくなる
+- `--ref`: 照合先の版。省略時はマニフェストの `design_ref` を使い、その旨を表示する。書き換えたマニフェストは `design_ref` を別の版に向けられるため、照合した版を常に表示する
+- `--platform`: 照合先の platform。省略時は版のどの platform と一致してもよく、一致した platform を表示する(同じ版の別 platform の正規マニフェストも一致するため)。マニフェストの `board` は使わない(generic フォールバックでは platform ID の board と異なる)。グローバルの `--platform` / `FG_PLATFORM` は使わない
+- `--offline`: マニフェストの照合を行わず、アーティファクトだけを照合する(この変更より前の挙動)。マニフェストを照合していない旨を表示する。`--ref` / `--platform` とは併用できない(exit 3)
+- レジストリに届かない場合は exit 4 で失敗し、`--offline` を案内する。アーティファクトだけの照合へ自動では切り替えない(ネットワークを遮断できる者が照合を弱められないように)
+- 照合した版が yank 済みなら、理由とともに stderr に警告を出す。終了コードは変わらない
+- この照合はレジストリを信頼する。pull 後の書き換えは検出するが、レジストリが整合したマニフェストとアーティファクトを差し替えた場合は検出しない。レジストリから独立した保証は `pull --verify-attestation`(署名)で得る
 
 **Behavior:**
 
@@ -561,11 +571,27 @@ fabricgate verify <directory>
 $ fabricgate verify ./blink-1.0.0/
 
 Verifying fabricgate/blink:1.0.0 (zcu104/pynq) ...
-  blink.bit  sha256:aabb...  ✓
-  blink.hwh  sha256:1122...  ✓
+  manifest matches fabricgate/blink:1.0.0 (zcu104/pynq) (version from the manifest's design_ref; pin it with --ref)
+  blink.bit sha256:aabb... OK
+  blink.hwh sha256:1122... OK
+All artifacts verified.
 
+$ fabricgate verify ./blink-1.0.0/ --ref fabricgate/blink:1.0.0 --platform zcu104/pynq
+
+Verifying fabricgate/blink:1.0.0 (zcu104/pynq) ...
+  manifest matches fabricgate/blink:1.0.0 (zcu104/pynq)
+  blink.bit sha256:aabb... OK
+  blink.hwh sha256:1122... OK
 All artifacts verified.
 ```
+
+**Exit codes:**
+
+- 1: 照合先の版、または `--platform` の platform がレジストリに無い
+- 3: マニフェストがレジストリの digest と一致しない / アーティファクトの不一致 / `--offline` と `--ref` / `--platform` の併用
+- 4: レジストリに届かない
+
+`--json` では `VerificationResult` を出力する。この変更で `manifest_verified`(マニフェストをレジストリと照合して一致したか。`--offline` では `false`)、`checked_ref` / `checked_platform`(照合した版と platform。`--offline` では `null`)、`yanked` / `yanked_reason` が加わった。
 
 ---
 

@@ -102,6 +102,14 @@ class VerificationResult(FabricGateModel):
     platform: PlatformId
     directory: str
     artifacts: list[VerificationItem]
+    manifest_verified: bool = False
+    """True when the manifest matched the registry's platform digest; False with ``offline``."""
+    checked_ref: str | None = None
+    """The version the manifest was checked against (``None`` with ``offline``)."""
+    checked_platform: PlatformId | None = None
+    """The registry platform whose digest matched (``None`` with ``offline``)."""
+    yanked: bool = False
+    yanked_reason: str | None = None
 
 
 class DesignInfo(FabricGateModel):
