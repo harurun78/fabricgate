@@ -171,15 +171,22 @@ def verify(
         result.shells = [_verify_dir(client, d, path_ref=_path_ref(d))[0] for d in _pulled_dirs(target_dir, "shell")]
 
     # Only what the root declares itself: transitive dependencies are declared by the dependencies.
+    # A checked directory's design_ref equals its path, so this sees exactly the version directories pull creates.
+    pulled = {d.design_ref.split(":", 1)[0] for d in result.dependencies}
     result.missing = [
-        str(dep.name)
-        for dep in manifest.dependencies
-        if not dep.optional and not (target_dir / "deps" / str(dep.name)).is_dir()
+        str(dep.name) for dep in manifest.dependencies if not dep.optional and str(dep.name) not in pulled
     ]
     pin = manifest.shell_dependency
     if pin is not None:
         shell_ref = f"{pin.name}:{pin.version.removeprefix('=')}"
         shell = next((s for s in result.shells if s.design_ref == shell_ref), None)
+        if shell is None and result.shells:
+            # Pull only ever places the pinned version, so another shell stands in for it.
+            raise SDKError(
+                f"The manifest's shell_dependency pins {shell_ref}, but the shell directory holds "
+                f"{', '.join(s.design_ref for s in result.shells)}.",
+                code=ExitKind.INVALID,
+            )
         if shell is None:
             result.missing.append(shell_ref)
         elif not any(item.sha256 == pin.sha256 for item in shell.artifacts):

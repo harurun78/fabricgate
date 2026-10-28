@@ -5574,3 +5574,32 @@ def test_verify_offline_checks_dependency_artifacts(monkeypatch: pytest.MonkeyPa
         ("design.hwh", True),
     ]
     assert all(item.verified for item in result.shells[0].artifacts)
+
+
+def test_verify_shell_of_another_version_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Pull only places the pinned shell version, so a genuine other version in its place is a failure."""
+    import shutil
+
+    digests = _write_tree(tmp_path)
+    shutil.rmtree(tmp_path / "shell/test-ns/shell/2.0.0")
+    digests["test-ns/shell:1.9.0"] = _write_pulled_dir(tmp_path / "shell/test-ns/shell/1.9.0", "test-ns/shell:1.9.0")
+    _patch_all_rc(monkeypatch, _verify_client({ref: {"xc7z020/pynq": d} for ref, d in digests.items()})[0])
+
+    with pytest.raises(
+        sdk_api.SDKError, match=r"pins test-ns/shell:2\.0\.0, but the shell directory holds"
+    ) as exc_info:
+        sdk_api.verify(tmp_path)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_verify_lists_a_dependency_whose_version_directory_is_gone(tmp_path: Path) -> None:
+    """Only the version directories pull creates count: an empty deps/<ns>/<design>/ does not."""
+    import shutil
+
+    _write_tree(tmp_path)
+    shutil.rmtree(tmp_path / "deps/test-ns/lib/1.2.0")
+
+    result = sdk_api.verify(tmp_path, offline=True)
+
+    assert result.dependencies == []
+    assert result.missing == ["test-ns/lib"]
