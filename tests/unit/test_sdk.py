@@ -5363,6 +5363,17 @@ def test_verify_fails_for_a_rewritten_manifest_and_artifacts(monkeypatch: pytest
     with pytest.raises(sdk_api.SDKError, match="does not match the registry's digest") as exc_info:
         sdk_api.verify(tmp_path)
     assert exc_info.value.code == ExitKind.INVALID
+    # A stale registry digest looks the same from here, so the message names both causes.
+    assert "stale" in str(exc_info.value) and "--offline" in str(exc_info.value)
+
+
+def test_verify_version_without_platforms_is_a_mismatch(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _write_pulled_dir(tmp_path)
+    _patch_all_rc(monkeypatch, _verify_client({"1.0.0": {}})[0])
+
+    with pytest.raises(sdk_api.SDKError, match="does not match") as exc_info:
+        sdk_api.verify(tmp_path)
+    assert exc_info.value.code == ExitKind.INVALID
 
 
 def test_verify_platform_pins_the_expected_platform(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

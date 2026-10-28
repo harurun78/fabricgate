@@ -185,7 +185,7 @@ def verify(
                 raise SDKError(f"{exc}\nUse --offline to check only the artifacts.", code=ExitKind.INFRA) from exc
             raise
         candidates = [entry for entry in detail.platforms if platform is None or str(entry.platform) == platform]
-        if not candidates:
+        if platform is not None and not candidates:
             available = ", ".join(str(entry.platform) for entry in detail.platforms)
             raise SDKError(
                 f"Platform {platform} not found in {checked_ref}. Available: {available}", code=ExitKind.NOT_FOUND
@@ -195,8 +195,11 @@ def verify(
         matched = next((entry for entry in candidates if str(entry.digest) == digest), None)
         if matched is None:
             where = f"platform {platform} of {checked_ref}" if platform is not None else checked_ref
+            # Versions published before the registry checked the index digest may carry a stale one.
             raise SDKError(
-                f"{manifest_path.name} does not match the registry's digest for {where}.",
+                f"{manifest_path.name} does not match the registry's digest for {where}. "
+                "Either the directory changed after the pull, or the registry's digest for this version is stale "
+                "(use --offline to check only the artifacts).",
                 code=ExitKind.INVALID,
             )
         checked_platform = str(matched.platform)
