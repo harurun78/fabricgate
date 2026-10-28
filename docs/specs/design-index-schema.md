@@ -159,6 +159,8 @@ Regex: ^sha256:[0-9a-f]{64}$
 
 Used for integrity verification and Platform Manifest retrieval.
 
+The registry rejects a publish whose `digest` is not the SHA-256 of the Platform Manifest it receives (`400 DIGEST_MISMATCH`). `fabricgate push` computes it from the manifest it uploads, so the placeholder that `fabricgate build` writes can stay in the file.
+
 #### `speed_grade`
 
 Optional. Declares speed grade compatibility.

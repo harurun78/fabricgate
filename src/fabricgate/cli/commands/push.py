@@ -204,4 +204,5 @@ def push_cmd(
         click.echo(f"  ⚠ {result.quota_warning}", err=True)
     if result.sha_warning:
         click.echo(f"  ⚠ Warning: {result.sha_warning}", err=True)
-        click.echo("    Tip: compute real artifact hashes after flashing to override the placeholder.", err=True)
+        if "placeholder sha256" in result.sha_warning:  # not the index digest warning, which needs no action
+            click.echo("    Tip: compute real artifact hashes after flashing to override the placeholder.", err=True)

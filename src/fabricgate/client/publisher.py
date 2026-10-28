@@ -26,6 +26,15 @@ def _is_placeholder_sha256(sha256: str) -> bool:
     return len(sha256) == 64 and len(set(sha256)) == 1
 
 
+def _manifest_digest(manifest: bytes) -> str:
+    """Return the index ``digest`` of *manifest*.
+
+    The registry rejects a publish whose index digest is not the manifest it receives
+    (``400 DIGEST_MISMATCH``), so push computes it instead of trusting the file.
+    """
+    return f"sha256:{hashlib.sha256(manifest).hexdigest()}"
+
+
 class PublishError(Exception):
     """Raised when a push package cannot be assembled."""
 
@@ -94,19 +103,15 @@ def collect_artifacts(
             raise PublishError(msg)
     unmatched_urls = set(artifact_urls)
 
-    # The file's own bytes, not a re-serialized *index*: promote_platforms edits these.
+    # Parsed from the file rather than dumped from *index*, so only the digests change.
     index_path = _find_index_path(project_dir)
+    index_data: dict[str, Any] | None = None
     if index_path is not None:
         files["index"] = index_path.read_bytes()
+        index_data = yaml.safe_load(files["index"])
 
     for entry in index.platforms:
         platform_key = entry.platform  # e.g. "xc7z020/pynq"
-        if _is_placeholder_sha256(str(entry.digest).removeprefix("sha256:")):
-            msg = (
-                f"Placeholder digest detected for {platform_key}. "
-                "Update platform digests before running 'fabricgate push'."
-            )
-            raise PublishError(msg)
 
         # Convention: manifest lives at <board_id>/<runtime>/manifest.yaml
         manifest_rel = f"{platform_key}/manifest.yaml"
@@ -116,7 +121,21 @@ def collect_artifacts(
             raise PublishError(msg)
 
         manifest = load_platform_manifest(manifest_path)
-        files[f"platform:{platform_key}:manifest"] = manifest_path.read_bytes()
+        manifest_bytes = manifest_path.read_bytes()
+        files[f"platform:{platform_key}:manifest"] = manifest_bytes
+
+        # `fabricgate build` writes a placeholder digest; anything else that differs was written by hand.
+        digest = _manifest_digest(manifest_bytes)
+        declared = str(entry.digest)
+        if declared != digest and not _is_placeholder_sha256(declared.removeprefix("sha256:")):
+            if sha_warnings is not None:
+                sha_warnings.append(
+                    f"Index digest for {platform_key} does not match {manifest_rel}; push sends the manifest's digest"
+                )
+        if index_data is not None:
+            for raw in index_data["platforms"]:
+                if raw["platform"] == platform_key:
+                    raw["digest"] = digest
 
         # Collect artifact files from the manifest
         artifact_dir = manifest_path.parent
@@ -179,6 +198,8 @@ def collect_artifacts(
         msg = f"Artifact URLs for files not declared in any platform manifest: {', '.join(sorted(unmatched_urls))}"
         raise PublishError(msg)
 
+    if index_data is not None:
+        files["index"] = yaml.safe_dump(index_data, sort_keys=False).encode()
     return files
 
 
@@ -226,7 +247,7 @@ def promote_platforms(files: Mapping[str, bytes], promotions: Mapping[str, str])
             for entry in index["platforms"]:
                 if entry["platform"] == platform_id:
                     entry["platform"] = new_id
-                    entry["digest"] = f"sha256:{hashlib.sha256(data).hexdigest()}"
+                    entry["digest"] = _manifest_digest(data)
         promoted[f"platform:{new_id}:{part}"] = data
     promoted["index"] = yaml.safe_dump(index, sort_keys=False).encode()
     return promoted

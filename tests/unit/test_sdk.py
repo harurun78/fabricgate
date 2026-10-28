@@ -1049,25 +1049,42 @@ def test_push_invalid_design_name(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         sdk_api.push(tmp_path, token="tok")
 
 
-def test_push_rejects_placeholder_digest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    _write_push_project(tmp_path, placeholder_digest=True)
-    _patch_all_rc(monkeypatch, _FakePushRegistryClient)
-    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
+@pytest.mark.parametrize(
+    ("declared", "warns"),
+    [
+        ("sha256:" + "a" * 64, False),  # the placeholder `fabricgate build` writes
+        ("sha256:" + "0" * 64, False),  # any uniform stand-in counts as a placeholder
+        ("sha256:" + "0" * 63 + "1", True),  # a hand-written digest that went stale
+    ],
+)
+def test_push_fills_index_digest_from_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, declared: str, warns: bool
+) -> None:
+    """The registry rejects an index digest that is not the manifest's, so push computes it."""
+    import yaml as _yaml
 
-    with pytest.raises(sdk_api.SDKError, match="Placeholder digest"):
-        sdk_api.push(tmp_path, token="tok-test")
+    captured: dict[str, object] = {}
 
+    class _RecordingClient(_FakePushRegistryClient):
+        def publish_version(self, namespace, design, version, files):
+            captured["files"] = dict(files)
+            return super().publish_version(namespace, design, version, files)
 
-def test_push_rejects_any_uniform_placeholder_digest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """The index digest uses the same placeholder rule as artifact sha256 (not only all 'a')."""
     _write_push_project(tmp_path, placeholder_digest=True)
     index_path = tmp_path / "fabricgate-index.yaml"
-    index_path.write_text(index_path.read_text().replace("a" * 64, "0" * 64))
-    _patch_all_rc(monkeypatch, _FakePushRegistryClient)
+    index_path.write_text(index_path.read_text().replace("sha256:" + "a" * 64, declared))
+    _patch_all_rc(monkeypatch, _RecordingClient)
     monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
 
-    with pytest.raises(sdk_api.SDKError, match="Placeholder digest"):
-        sdk_api.push(tmp_path, token="tok-test")
+    result = sdk_api.push(tmp_path, token="tok-test")
+
+    files = captured["files"]
+    manifest = files["platform:xc7z020/pynq:manifest"]
+    (entry,) = _yaml.safe_load(files["index"])["platforms"]
+    assert entry["digest"] == f"sha256:{hashlib.sha256(manifest).hexdigest()}"
+    assert ("Index digest for xc7z020/pynq" in (result.sha_warning or "")) is warns
+    # The local index is left as it was.
+    assert declared in index_path.read_text()
 
 
 def test_push_warns_on_placeholder_artifact_sha256(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
