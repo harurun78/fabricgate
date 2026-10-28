@@ -5664,8 +5664,9 @@ def test_verify_lists_a_missing_dependency_of_a_dependency(tmp_path: Path) -> No
     assert result.missing == ["test-ns/sub"]
 
 
-def test_verify_rejects_an_unsupported_constraint(tmp_path: Path) -> None:
-    _write_pulled_dir(tmp_path, extra=("dependencies:", "  - name: test-ns/lib", "    version: 1.0.0 <2.0.0"))
+@pytest.mark.parametrize("constraint", ["1.0.0 <2.0.0", "^1.0.0 .0"])  # the second one has only digits and dots
+def test_verify_rejects_an_unsupported_constraint(tmp_path: Path, constraint: str) -> None:
+    _write_pulled_dir(tmp_path, extra=("dependencies:", "  - name: test-ns/lib", f"    version: '{constraint}'"))
     _write_pulled_dir(tmp_path / "deps/test-ns/lib/1.2.0", "test-ns/lib:1.2.0")
 
     with pytest.raises(sdk_api.SDKError, match="Unsupported dependency constraint") as exc_info:

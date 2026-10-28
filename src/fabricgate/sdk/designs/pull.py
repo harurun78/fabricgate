@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
@@ -217,12 +218,12 @@ def _satisfies(version: str, constraint: str) -> bool:
     """
     if constraint == "*":
         return True
-    operator, base = (constraint[0], constraint[1:]) if constraint[0] in "^~" else ("", constraint)
-    try:
-        wanted = tuple(int(part) for part in base.split("."))
-    except ValueError:
+    match = re.fullmatch(r"([~^]?)([0-9]+)\.([0-9]+)\.([0-9]+)", constraint)
+    if match is None:
         # A trailing predicate passes the schema but the registry cannot resolve it, so nothing was pulled for it.
-        raise SDKError(f"Unsupported dependency constraint: {constraint!r}", code=ExitKind.INVALID) from None
+        raise SDKError(f"Unsupported dependency constraint: {constraint!r}", code=ExitKind.INVALID)
+    operator = match.group(1)
+    wanted = tuple(int(part) for part in match.group(2, 3, 4))
     found = tuple(int(part) for part in version.split("."))
     if operator == "^":
         return found >= wanted and found[0] == wanted[0]
