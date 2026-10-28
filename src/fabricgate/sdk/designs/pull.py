@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
@@ -165,17 +166,27 @@ def verify(
     target_dir = Path(directory)
     with nullcontext() if offline else RegistryClient(base_url=registry) as client:
         result, manifest = _verify_dir(client, target_dir, ref=ref, platform=platform)
-        result.dependencies = [
-            _verify_dir(client, d, path_ref=_path_ref(d))[0] for d in _pulled_dirs(target_dir, "deps")
-        ]
+        checked_deps = [_verify_dir(client, d, path_ref=_path_ref(d)) for d in _pulled_dirs(target_dir, "deps")]
+        result.dependencies = [checked for checked, _ in checked_deps]
         result.shells = [_verify_dir(client, d, path_ref=_path_ref(d))[0] for d in _pulled_dirs(target_dir, "shell")]
 
-    # Only what the root declares itself: transitive dependencies are declared by the dependencies.
     # A checked directory's design_ref equals its path, so this sees exactly the version directories pull creates.
-    pulled = {d.design_ref.split(":", 1)[0] for d in result.dependencies}
-    result.missing = [
-        str(dep.name) for dep in manifest.dependencies if not dep.optional and str(dep.name) not in pulled
-    ]
+    pulled: dict[str, list[str]] = {}
+    for checked in result.dependencies:
+        name, version = checked.design_ref.split(":", 1)
+        pulled.setdefault(name, []).append(version)
+    # The root and every dependency declare dependencies; pull resolves them for the root only, not the shell.
+    for declarer, declared in [(result, manifest), *checked_deps]:
+        for dep in declared.dependencies:
+            versions = pulled.get(str(dep.name), [])
+            if not versions:
+                if not dep.optional and str(dep.name) not in result.missing:
+                    result.missing.append(str(dep.name))
+            elif not any(_satisfies(version, dep.version) for version in versions):
+                raise SDKError(
+                    f"{declarer.design_ref} needs {dep.name} {dep.version}, but deps/ holds {', '.join(versions)}.",
+                    code=ExitKind.INVALID,
+                )
     pin = manifest.shell_dependency
     if pin is not None:
         shell_ref = f"{pin.name}:{pin.version.removeprefix('=')}"
@@ -196,6 +207,29 @@ def verify(
                 code=ExitKind.INVALID,
             )
     return result
+
+
+def _satisfies(version: str, constraint: str) -> bool:
+    """Return True if *version* satisfies a manifest dependency *constraint*.
+
+    The four forms of the Platform Manifest schema: ``1.2.0`` (exact), ``^1.2.0``
+    (same MAJOR; ``^0.2.0`` matches every ``0.Y.Z`` from ``0.2.0``), ``~1.2.0``
+    (same MAJOR.MINOR) and ``*``.
+    """
+    if constraint == "*":
+        return True
+    match = re.fullmatch(r"([~^]?)([0-9]+)\.([0-9]+)\.([0-9]+)", constraint)
+    if match is None:
+        # A trailing predicate passes the schema but the registry cannot resolve it, so nothing was pulled for it.
+        raise SDKError(f"Unsupported dependency constraint: {constraint!r}", code=ExitKind.INVALID)
+    operator = match.group(1)
+    wanted = tuple(int(part) for part in match.group(2, 3, 4))
+    found = tuple(int(part) for part in version.split("."))
+    if operator == "^":
+        return found >= wanted and found[0] == wanted[0]
+    if operator == "~":
+        return found >= wanted and found[:2] == wanted[:2]
+    return found == wanted
 
 
 def _pulled_dirs(target_dir: Path, kind: str) -> list[Path]:

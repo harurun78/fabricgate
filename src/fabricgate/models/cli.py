@@ -115,7 +115,7 @@ class VerificationResult(FabricGateModel):
     shells: list[VerificationResult] = Field(default_factory=list)
     """Each ``shell/<namespace>/<design>/<version>/`` directory, checked the same way."""
     missing: list[str] = Field(default_factory=list)
-    """Dependencies (names) and the shell (ref) the manifest requires that were not pulled."""
+    """Required dependencies (names) of the root and of each dependency, and the shell (ref), that were not pulled."""
 
 
 class DesignInfo(FabricGateModel):
