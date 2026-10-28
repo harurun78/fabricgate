@@ -197,6 +197,10 @@
             "in": "query",
             "required": false,
             "schema": {
+              "enum": [
+                "updated",
+                "popular"
+              ],
               "type": "string",
               "default": "updated",
               "title": "Sort"
