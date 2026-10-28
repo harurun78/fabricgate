@@ -255,7 +255,7 @@ Published: fabricgate/blink:1.0.0 (2 platforms)
 - Design Index schema validation
 - All Platform Manifests schema validation
 - All artifact files exist and match declared SHA-256 digests
-- Design Index digests match computed Platform Manifest hashes
+- Design Index digests are computed from the Platform Manifests being uploaded and written into the uploaded index (the local file is not changed). A hand-written digest that differs prints a warning; the placeholder that `fabricgate build` writes does not
 - `bitstream_type: partial` の場合、`shell_dependency` が指定されていること (`SHELL_DEPENDENCY_REQUIRED`)
 - `shell_dependency` の参照先デザイン・バージョンがレジストリに存在すること (`SHELL_NOT_FOUND`)
 - Design Index 内の全 Platform Manifest の `bitstream_type` が同一であること (`BITSTREAM_TYPE_CONFLICT`)
