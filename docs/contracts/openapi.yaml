@@ -2391,11 +2391,15 @@ paths:
         required: false
         schema:
           anyOf:
-          - type: string
+          - enum:
+            - success
+            - skipped
+            - failed
+            type: string
           - type: 'null'
-          description: Filter by status (success|failed|skipped)
+          description: Filter by status (success|skipped|failed)
           title: Status
-        description: Filter by status (success|failed|skipped)
+        description: Filter by status (success|skipped|failed)
       - name: page
         in: query
         required: false
