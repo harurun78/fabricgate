@@ -3747,16 +3747,21 @@
             "schema": {
               "anyOf": [
                 {
+                  "enum": [
+                    "success",
+                    "skipped",
+                    "failed"
+                  ],
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Filter by status (success|failed|skipped)",
+              "description": "Filter by status (success|skipped|failed)",
               "title": "Status"
             },
-            "description": "Filter by status (success|failed|skipped)"
+            "description": "Filter by status (success|skipped|failed)"
           },
           {
             "name": "page",
