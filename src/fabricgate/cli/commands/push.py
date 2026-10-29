@@ -11,7 +11,6 @@ import click
 
 from fabricgate.cli.exit_codes import exit_with, sdk_errors
 from fabricgate.client.errors import FailureKind
-from fabricgate.client.publisher import PLACEHOLDER_SHA256_WARNING
 from fabricgate.sdk import api as sdk_api
 
 
@@ -128,7 +127,7 @@ def _parse_artifact_urls(
     "--skip-sha-check",
     is_flag=True,
     default=False,
-    help="Suppress placeholder sha256 warnings (does NOT bypass verification of real hashes).",
+    hidden=True,  # No effect since push fills in placeholder sha256 values; kept so scripts keep working.
 )
 @click.option(
     "--artifact-url",
@@ -205,5 +204,3 @@ def push_cmd(
         click.echo(f"  ⚠ {result.quota_warning}", err=True)
     if result.sha_warning:
         click.echo(f"  ⚠ Warning: {result.sha_warning}", err=True)
-        if PLACEHOLDER_SHA256_WARNING in result.sha_warning:  # not the index digest warning, which needs no action
-            click.echo("    Tip: compute real artifact hashes after flashing to override the placeholder.", err=True)

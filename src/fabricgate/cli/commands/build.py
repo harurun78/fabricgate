@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import click
 import yaml
+from pydantic import TypeAdapter, ValidationError
 
 from fabricgate.cli.exit_codes import exit_with
 from fabricgate.client.errors import FailureKind
 from fabricgate.models.board_db import BoardDb
+from fabricgate.models.common import DesignName
 from fabricgate.models.platform_manifest import Interface
 from fabricgate.sdk.hwh_parser import HwhInfo, HwhParseError, ParsedInterface, find_hwh_files, parse_hwh
+
+# Artifact file names the manifest stub declares, next to manifest.yaml.
+_BITSTREAM_FILE = "design.bit"
+_HWH_FILE = "design.hwh"
+
+_DESIGN_NAME_ADAPTER: TypeAdapter[str] = TypeAdapter(DesignName)
 
 # ---------------------------------------------------------------------------
 # Board resolution helpers
@@ -95,8 +104,8 @@ def _make_manifest_stub(
 ) -> str:
     """Return a YAML string for a platform manifest stub.
 
-    Artifact hashes are placeholder values; the user must replace them
-    before running ``fabricgate push``.
+    Artifact hashes are placeholder values; ``fabricgate push`` replaces them
+    with the hashes of the files it uploads.
     """
     placeholder = "a" * 64
     data: dict[str, object] = {
@@ -105,8 +114,8 @@ def _make_manifest_stub(
         "board": board,
         "design_ref": design_ref,
         "artifacts": {
-            "bitstream": {"file": "design.bit", "sha256": placeholder},
-            "hwh": {"file": "design.hwh", "sha256": placeholder},
+            "bitstream": {"file": _BITSTREAM_FILE, "sha256": placeholder},
+            "hwh": {"file": _HWH_FILE, "sha256": placeholder},
         },
     }
     if device_family:
@@ -207,6 +216,7 @@ def build_cmd(
 class _BuildInputs:
     """What ``build`` reads from the HWH and asks the user, before generating YAML."""
 
+    hwh_path: Path
     hwh_info: HwhInfo
     board_id: str
     device_family: str | None
@@ -237,8 +247,11 @@ def _collect_inputs(
     click.echo("")
 
     ns_prompt = f"{namespace}/" if namespace else ""
-    raw_name = click.prompt(f"Design name [{ns_prompt}]", default=f"{ns_prompt}my-design")
-    design_name = raw_name.strip()
+    design_name: str = click.prompt(
+        f"Design name [{ns_prompt}]",
+        default=f"{ns_prompt}my-design",
+        value_proc=lambda raw: _to_design_name(raw, namespace),
+    )
 
     raw_version = click.prompt("Version", default=semver or "0.1.0")
     version = raw_version.strip()
@@ -251,6 +264,7 @@ def _collect_inputs(
     tag_list = [t.strip() for t in raw_tags.split(",") if t.strip()] if raw_tags else []
 
     return _BuildInputs(
+        hwh_path=hwh_path,
         hwh_info=hwh_info,
         board_id=board_id,
         device_family=device_family,
@@ -262,9 +276,27 @@ def _collect_inputs(
     )
 
 
+def _to_design_name(raw: str, namespace: str | None) -> str:
+    """Return *raw* as ``<namespace>/<design>``, asking for the namespace when *raw* has none.
+
+    push refuses an index whose name is not a :data:`DesignName`, so build checks it here;
+    raising :class:`click.BadParameter` makes ``click.prompt`` ask again.
+    """
+    name = raw.strip()
+    if "/" not in name:
+        ns = namespace or click.prompt("Namespace").strip()
+        name = f"{ns}/{name}"
+    try:
+        return _DESIGN_NAME_ADAPTER.validate_python(name)
+    except ValidationError:
+        msg = f"{name!r} is not <namespace>/<design> (lowercase letters, digits and hyphens)"
+        raise click.BadParameter(msg) from None
+
+
 def _select_hwh(directory: Path, hwh_path_opt: Path | None) -> Path:
     click.echo("Scanning for HWH files ...")
-    hwh_files = find_hwh_files(directory)
+    # An HWH next to a manifest.yaml is the copy an earlier build made, not a Vivado output.
+    hwh_files = [f for f in find_hwh_files(directory) if not (f.parent / "manifest.yaml").exists()]
     if not hwh_files:
         click.echo(f"Error: No .hwh files found in {directory}", err=True)
         exit_with(FailureKind.GENERIC)
@@ -377,11 +409,13 @@ def _write_outputs(
     # push reads <project>/<board_id>/<runtime>/manifest.yaml
     manifest_path = out_root / inputs.board_id / inputs.runtime / "manifest.yaml"
     index_path = out_root / "fabricgate-index.yaml"
+    hwh_path = manifest_path.parent / _HWH_FILE
 
     click.echo("\nGenerated:")
     if dry_run:
         click.echo(f"  (dry-run) {index_path}")
         click.echo(f"  (dry-run) {manifest_path}")
+        click.echo(f"  (dry-run) {hwh_path}")
         click.echo("\n--- fabricgate-index.yaml ---")
         click.echo(index_yaml)
         click.echo(f"--- {inputs.platform_id}/manifest.yaml ---")
@@ -391,6 +425,9 @@ def _write_outputs(
     try:
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(manifest_yaml, encoding="utf-8")
+        # push uploads the HWH from next to the manifest, under the name the manifest declares.
+        if inputs.hwh_path.resolve() != hwh_path.resolve():
+            shutil.copyfile(inputs.hwh_path, hwh_path)
         index_path.write_text(index_yaml, encoding="utf-8")
     except OSError as exc:
         click.echo(f"Error: Write failed: {exc}", err=True)
@@ -398,7 +435,8 @@ def _write_outputs(
 
     click.echo(f"  {index_path}  ✓")
     click.echo(f"  {manifest_path}  ✓")
-    click.echo(f"\nNote: Place bitstream files in {manifest_path.parent}/ before publishing.")
+    click.echo(f"  {hwh_path}  ✓")
+    click.echo(f"\nNote: Copy the bitstream to {manifest_path.parent / _BITSTREAM_FILE} before publishing.")
     click.echo(f"Run `fabricgate push {out_root}/` to publish.")
 
 

@@ -199,7 +199,7 @@ Authorization ヘッダを自動付与し、ダウンロード統計の pull 主
 Publish a design to the registry.
 
 ```
-fabricgate push <directory> [--namespace <ns>] [--yes] [--skip-sha-check] [--artifact-url <filename>=<url>]...
+fabricgate push <directory> [--namespace <ns>] [--yes] [--artifact-url <filename>=<url>]...
 ```
 
 **Arguments:**
@@ -211,7 +211,7 @@ fabricgate push <directory> [--namespace <ns>] [--yes] [--skip-sha-check] [--art
 |---|---|
 | `--namespace` | ネームスペースを上書きする |
 | `--yes` | AXI-only の `custom-*` デザインを `generic-*` プラットフォームに自動昇格する（TTY プロンプトを省略） |
-| `--skip-sha-check` | プレースホルダー sha256 (`a` × 64) の警告を抑制する（実際のハッシュ検証は行われる） |
+| `--skip-sha-check` | 効果なし。互換のために受け付けるだけで、`--help` には表示しない（下記「プレースホルダー SHA-256」） |
 | `--artifact-url <filename>=<url>` | `<filename>` をアップロードせず、既存の公開 `https` URL への参照として公開する（繰り返し可） |
 
 **Expected directory structure:**
@@ -300,25 +300,16 @@ Published: myns/my-design:1.0.0 (1 platform)
 
 `custom-*` でない通常ボード、`design_portability: board-specific`、または `io-constrained` の場合はプロンプト不要。
 
-**プレースホルダー SHA-256 の警告:**
+**プレースホルダー SHA-256:**
 
-`fabricgate build` が生成するマニフェストのアーティファクト sha256 は、ビルド直後は `aaaa...aaaa` (64字) のプレースホルダーになっている。実際のアーティファクトを配置した後、sha256 を正確な値に更新してから `fabricgate push` を実行すること。
+`fabricgate build` が生成するマニフェストのアーティファクト sha256 は `aaaa...aaaa` (64字) のプレースホルダーになっている。`fabricgate push` は、プレースホルダー（1 文字の 64 回繰り返し）の sha256 をアップロードするローカルファイルの SHA-256 に置き換えたマニフェストを送る。Design Index の digest は置き換え後のマニフェストから計算する。ローカルのマニフェストは変更しない。手で書いた sha256 はこれまでどおりローカルファイルと照合し、一致しなければエラーにする。
 
-プレースホルダーのまま push を試みると警告が表示される:
+次の場合は置き換えずにエラーにする（exit 3）:
 
-```
-$ fabricgate push ./my-design/
-⚠ Warning: artifact sha256 for design.bit is a placeholder (aaaa...aaaa).
-    Tip: compute real artifact hashes after flashing to override the placeholder.
-```
+- `--artifact-url` で指定したファイルの sha256 がプレースホルダー（ローカルで計算できず、サーバで必ず `DIGEST_MISMATCH` になるため。下記の表を参照）
+- `attestation` 付き（署名済み）マニフェストの sha256 がプレースホルダー（置き換えると署名対象のバイトが変わるため）。署名する前に sha256 を埋めること
 
-プレースホルダーでも push を続行したい場合（開発・テスト用途）:
-
-```
-$ fabricgate push ./my-design/ --skip-sha-check
-```
-
-`--skip-sha-check` は警告の抑制だけで、実際のハッシュが存在する場合の検証は省略しない。
+`--skip-sha-check` はプレースホルダーの警告を抑制するオプションだった。警告がなくなったため効果はなく、互換のために受け付けるだけ。
 
 **URL 参照による公開（`--artifact-url`）:**
 
@@ -352,7 +343,7 @@ fabricgate build <directory> [--namespace <ns>] [--version <semver>] [--tags <ta
 ```
 
 **Arguments:**
-- `<directory>`: `.xsa` または HWH ファイルを含むディレクトリ。サブディレクトリも再帰検索する。
+- `<directory>`: `.xsa` または HWH ファイルを含むディレクトリ。サブディレクトリも再帰検索する。`manifest.yaml` と同じディレクトリにある `.hwh` は、以前の build がコピーしたものとして検索対象から外す。
 
 **Options:**
 
@@ -386,7 +377,9 @@ fabricgate build <directory> [--namespace <ns>] [--version <semver>] [--tags <ta
    - `io-constrained`: AXI バスれだが特定ピンのインターフェース制約あり（`generic-*` 昇格の対象外）
 5. AXI マスター/スレーブアドレスマップを `interfaces` として抽出
 6. 名前・バージョン・説明などをインタラクティブに入力
-7. `fabricgate-manifest.yaml` と `fabricgate-index.yaml` を出力
+   - デザイン名に `/` が無い場合は `--namespace` の値を前に付ける。`--namespace` も無ければ `Namespace` を追加で尋ねる
+   - `<namespace>/<design>`（英小文字・数字・ハイフン）でない名前は、エラーを表示して再入力を求める
+7. `fabricgate-index.yaml` と `<board_id>/<runtime>/manifest.yaml` を出力し、パースした HWH を manifest と同じディレクトリに `design.hwh` としてコピーする。manifest は bitstream を `design.bit` として宣言するので、push の前にそのパスへ bitstream を置く。アーティファクトの sha256 はプレースホルダーのままでよい（push が埋める。§3.2）
 
 **Behavior:**
 
@@ -409,10 +402,11 @@ Description: My first design
 Tags: dma, axi
 
 Generated:
-  ./my-design/fabricgate-index.yaml              ✓
-  ./my-design/zcu104/pynq/manifest.yaml         ✓
+  my-design/fabricgate-index.yaml  ✓
+  my-design/zcu104/pynq/manifest.yaml  ✓
+  my-design/zcu104/pynq/design.hwh  ✓
 
-Note: Place bitstream files in ./my-design/zcu104/pynq/ before publishing.
+Note: Copy the bitstream to my-design/zcu104/pynq/design.bit before publishing.
 Run `fabricgate push ./my-design/` to publish.
 ```
 
@@ -446,8 +440,8 @@ Run `fabricgate push ./my-design/` to publish.
 
 **Exit codes:**
 - 0: 生成成功
-- 1: HWH ファイルが見つからない / HWH パース失敗 / 非 TTY で複数 HWH が見つかり `--hwh` 未指定 / Board DB 未登録ボードの確認プロンプトを中断
-- 4: Board DB 読み込み失敗 / 生成先ディレクトリへの書き込み失敗（infrastructure）
+- 1: HWH ファイルが見つからない / HWH パース失敗 / 非 TTY で複数 HWH が見つかり `--hwh` 未指定 / Board DB 未登録ボードの確認プロンプトを中断 / 正しいデザイン名が入力されないまま入力が終わった
+- 4: Board DB 読み込み失敗 / 生成先ディレクトリへの書き込み・HWH のコピー失敗（infrastructure）
 
 ---
 
