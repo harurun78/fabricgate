@@ -343,7 +343,7 @@ fabricgate build <directory> [--namespace <ns>] [--version <semver>] [--tags <ta
 ```
 
 **Arguments:**
-- `<directory>`: `.xsa` または HWH ファイルを含むディレクトリ。サブディレクトリも再帰検索する。
+- `<directory>`: `.xsa` または HWH ファイルを含むディレクトリ。サブディレクトリも再帰検索する。`manifest.yaml` と同じディレクトリにある `.hwh` は、以前の build がコピーしたものとして検索対象から外す。
 
 **Options:**
 

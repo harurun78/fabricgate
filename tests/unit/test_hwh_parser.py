@@ -869,6 +869,19 @@ class TestBuildOutputIsPushable:
         assert result.exit_code == 0, result.output
         assert copied.read_text() == "<unused/>"
 
+    def test_rebuild_ignores_the_hwh_an_earlier_build_copied(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Building again with the output inside the scanned folder finds only the Vivado HWH."""
+        out = tmp_path / "vivado" / "out"
+        assert _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, ["--output", str(out)], _BUILD_INPUT).exit_code == 0
+        assert (out / "zcu104" / "pynq" / "design.hwh").exists()
+        # Not a TTY: two HWH files would be an error.
+        result = CliRunner().invoke(build_cmd, [str(tmp_path / "vivado"), "--output", str(out)], input=_BUILD_INPUT)
+        assert result.exit_code == 0, result.output
+        assert "Found: vivado/design.hwh\n" in result.output
+        assert "out/zcu104" not in result.output.split("Parsing HWH")[0]
+
     @pytest.mark.parametrize(
         ("args", "stdin", "expected"),
         [
@@ -894,6 +907,13 @@ class TestBuildOutputIsPushable:
         assert "'MyNS/My_Design' is not <namespace>/<design>" in result.output
         index, _ = load_design_index(tmp_path / "my-design")
         assert str(index.name) == "myns/my-design"
+
+    def test_input_ending_without_a_valid_design_name_exits_1(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, [], "Not Valid/x\n")
+        assert result.exit_code == 1
+        assert not (tmp_path / "my-design").exists()
 
 
 def test_parse_hwh_refuses_entities_as_a_parse_error(tmp_path: Path) -> None:

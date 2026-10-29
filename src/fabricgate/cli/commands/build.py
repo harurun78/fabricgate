@@ -295,7 +295,8 @@ def _to_design_name(raw: str, namespace: str | None) -> str:
 
 def _select_hwh(directory: Path, hwh_path_opt: Path | None) -> Path:
     click.echo("Scanning for HWH files ...")
-    hwh_files = find_hwh_files(directory)
+    # An HWH next to a manifest.yaml is the copy an earlier build made, not a Vivado output.
+    hwh_files = [f for f in find_hwh_files(directory) if not (f.parent / "manifest.yaml").exists()]
     if not hwh_files:
         click.echo(f"Error: No .hwh files found in {directory}", err=True)
         exit_with(FailureKind.GENERIC)

@@ -29,7 +29,7 @@ def _is_placeholder_sha256(sha256: str) -> bool:
 def _fill_placeholder_sha256(manifest: bytes, hashes: Mapping[str, str]) -> bytes:
     """Return *manifest* with each placeholder artifact sha256 replaced by ``hashes[file]``.
 
-    Parsed from the bytes rather than dumped from the model, so only those values change.
+    Parsed from the bytes rather than dumped from the model, so the other fields keep the values written.
     """
     data = yaml.safe_load(manifest)
     for value in data["artifacts"].values():
