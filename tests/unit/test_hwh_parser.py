@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,7 @@ from fabricgate.cli.commands.build import (
     _resolve_board_id,
     build_cmd,
 )
-from fabricgate.client.publisher import load_design_index
+from fabricgate.client.publisher import collect_artifacts, load_design_index
 from fabricgate.models.board_db import BoardDb, BoardEntry
 from fabricgate.sdk.hwh_parser import (
     HwhInfo,
@@ -820,6 +821,79 @@ class TestBuildCmdBoardResolution:
         assert result.exit_code == 4
         assert "Error: Write failed" in result.output
         assert not (out / "fabricgate-index.yaml").exists()
+
+
+_ZCU104_INFO = HwhInfo("xilinx.com:zcu104:part0:1.1", "xczu7ev-ffvc1156-2-e", "xczu7ev", "ffvc1156")
+
+
+class TestBuildOutputIsPushable:
+    """#143: ``build`` then placing the bitstream is enough for ``push``."""
+
+    def test_push_collects_the_build_output_with_real_hashes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, [], _BUILD_INPUT)
+        assert result.exit_code == 0, result.output
+        out = tmp_path / "my-design"
+        platform_dir = out / "zcu104" / "pynq"
+        bit_path = platform_dir / "design.bit"
+        assert f"Copy the bitstream to {bit_path.relative_to(tmp_path)}" in result.output
+        # The HWH that build parsed sits next to the manifest under the declared name.
+        assert (platform_dir / "design.hwh").read_text() == "<unused/>"
+        bit_path.write_bytes(b"bitstream")
+
+        index, _ = load_design_index(out)
+        files = collect_artifacts(out, index)
+
+        # What the registry checks: each upload against the manifest, the manifest against the index.
+        manifest = files["platform:zcu104/pynq:manifest"]
+        artifacts = yaml.safe_load(manifest)["artifacts"]
+        for ref in artifacts.values():
+            content = files[f"platform:zcu104/pynq:artifact:{ref['file']}"]
+            assert ref["sha256"] == hashlib.sha256(content).hexdigest()
+        (entry,) = yaml.safe_load(files["index"])["platforms"]
+        assert entry["digest"] == f"sha256:{hashlib.sha256(manifest).hexdigest()}"
+
+    def test_dry_run_does_not_copy_the_hwh(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, ["--dry-run"], _BUILD_INPUT)
+        assert result.exit_code == 0, result.output
+        assert "(dry-run) my-design/zcu104/pynq/design.hwh" in result.output
+        assert not (tmp_path / "my-design").exists()
+
+    def test_hwh_already_in_place_is_kept(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Building again from the HWH build copied must not fail on copying it onto itself."""
+        assert _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, [], _BUILD_INPUT).exit_code == 0
+        copied = tmp_path / "my-design" / "zcu104" / "pynq" / "design.hwh"
+        # The patches from the first run are still active.
+        result = CliRunner().invoke(build_cmd, [str(tmp_path / "vivado"), "--hwh", str(copied)], input=_BUILD_INPUT)
+        assert result.exit_code == 0, result.output
+        assert copied.read_text() == "<unused/>"
+
+    @pytest.mark.parametrize(
+        ("args", "stdin", "expected"),
+        [
+            ([], "blink\nmyns\n1.0.0\npynq\n\n\n", "myns/blink"),  # asks for the namespace
+            ([], "\nmyns\n1.0.0\npynq\n\n\n", "myns/my-design"),  # the default has no namespace
+            (["--namespace", "myns"], "blink\n1.0.0\npynq\n\n\n", "myns/blink"),
+            (["--namespace", "myns"], "other/blink\n1.0.0\npynq\n\n\n", "other/blink"),
+        ],
+        ids=["no-namespace", "default", "namespace-option", "typed-namespace-wins"],
+    )
+    def test_design_name_gets_a_namespace(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, args: list[str], stdin: str, expected: str
+    ) -> None:
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, [*args, "--output", "out"], stdin)
+        assert result.exit_code == 0, result.output
+        index, _ = load_design_index(tmp_path / "out")
+        assert str(index.name) == expected
+
+    def test_invalid_design_name_is_asked_again(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        stdin = "MyNS/My_Design\nmyns/my-design\n1.0.0\npynq\n\n\n"
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, [], stdin)
+        assert result.exit_code == 0, result.output
+        assert "'MyNS/My_Design' is not <namespace>/<design>" in result.output
+        index, _ = load_design_index(tmp_path / "my-design")
+        assert str(index.name) == "myns/my-design"
 
 
 def test_parse_hwh_refuses_entities_as_a_parse_error(tmp_path: Path) -> None:

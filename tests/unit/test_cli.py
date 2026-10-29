@@ -10,7 +10,6 @@ import pytest
 from click.testing import CliRunner
 
 from fabricgate.cli.main import main
-from fabricgate.client.publisher import PLACEHOLDER_SHA256_WARNING
 from fabricgate.models.api.responses import (
     DesignSummary,
     QuotaDesignsInfo,
@@ -343,22 +342,14 @@ def test_push_sdk_error(monkeypatch, tmp_path) -> None:
     assert result.exit_code == 3
 
 
-@pytest.mark.parametrize(
-    ("sha_warn", "tip"),
-    [
-        (f"Artifact design.bit {PLACEHOLDER_SHA256_WARNING} — run with real bitstream", True),
-        (
-            "Index digest for xc7z020/pynq does not match xc7z020/pynq/manifest.yaml; push sends the manifest's digest",
-            False,
-        ),
-    ],
-)
-def test_push_cmd_shows_sha_warning(monkeypatch, tmp_path, sha_warn: str, tip: bool) -> None:
-    """sha_warning in PushResult causes '⚠ Warning:' to appear in stderr; the Tip is for artifact placeholders only."""
+def test_push_cmd_shows_sha_warning(monkeypatch, tmp_path) -> None:
+    """sha_warning in PushResult causes '⚠ Warning:' to appear in stderr."""
 
     def _fake_push(*_args, **_kwargs):
         payload = _PUSH_RESULT.model_dump()
-        payload["sha_warning"] = sha_warn
+        payload["sha_warning"] = (
+            "Index digest for xc7z020/pynq does not match xc7z020/pynq/manifest.yaml; push sends the manifest's digest"
+        )
         return PushResult(**payload)
 
     monkeypatch.setattr("fabricgate.cli.commands.push.sdk_api.push", _fake_push)
@@ -366,7 +357,6 @@ def test_push_cmd_shows_sha_warning(monkeypatch, tmp_path, sha_warn: str, tip: b
     result = runner.invoke(main, ["push", str(tmp_path)])
     assert result.exit_code == 0
     assert "⚠ Warning:" in result.stderr
-    assert ("Tip:" in result.stderr) is tip
 
 
 def test_push_cmd_skip_sha_check_flag(monkeypatch, tmp_path) -> None:

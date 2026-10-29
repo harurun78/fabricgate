@@ -879,6 +879,51 @@ def test_collect_artifacts_rejects_dot_dot_bundle(tmp_path: Path) -> None:
         collect_artifacts(tmp_path, idx)
 
 
+def test_collect_artifacts_rejects_signed_manifest_with_placeholder(tmp_path: Path) -> None:
+    """#143: filling the placeholder would change the bytes the attestation signs."""
+    TestPublisher()._write_project(tmp_path)
+    manifest_path = tmp_path / "xc7z020" / "pynq" / "manifest.yaml"
+    data = yaml.safe_load(manifest_path.read_text())
+    data["artifacts"]["bitstream"]["sha256"] = "a" * 64
+    manifest_path.write_text(yaml.safe_dump(data))
+    _add_attestation(tmp_path, "cosign.bundle")
+    idx, _ = load_design_index(tmp_path)
+    with pytest.raises(PublishError, match=r"signed \(attestation\) but has placeholder sha256 values \(design\.bit\)"):
+        collect_artifacts(tmp_path, idx)
+
+
+def test_collect_artifacts_fills_placeholder_in_lists(tmp_path: Path) -> None:
+    """#143: list fields such as linux-fpgamgr ``modules`` are filled too; real hashes stay."""
+    platform_dir = tmp_path / "xc7z020" / "linux-fpgamgr"
+    platform_dir.mkdir(parents=True)
+    (platform_dir / "design.bin").write_bytes(b"bit")
+    (platform_dir / "mymodule.ko").write_bytes(b"ko")
+    bit_sha = hashlib.sha256(b"bit").hexdigest()
+    manifest_data = {
+        "schema": "fabricgate-platform/v1",
+        "runtime": "linux-fpgamgr",
+        "board": "test-board",
+        "design_ref": "test-ns/blink:1.0.0",
+        "artifacts": {
+            "bitstream": {"file": "design.bin", "sha256": bit_sha},
+            "modules": [{"file": "mymodule.ko", "sha256": "0" * 64, "module_name": "mymodule"}],
+        },
+    }
+    (platform_dir / "manifest.yaml").write_text(yaml.safe_dump(manifest_data))
+    idx_data = {
+        "schema": "fabricgate-index/v1",
+        "name": "test-ns/blink",
+        "version": "1.0.0",
+        "platforms": [{"platform": "xc7z020/linux-fpgamgr", "digest": "sha256:" + "a" * 64}],
+    }
+    (tmp_path / "fabricgate-index.yaml").write_text(yaml.safe_dump(idx_data))
+    idx, _ = load_design_index(tmp_path)
+    files = collect_artifacts(tmp_path, idx)
+    artifacts = yaml.safe_load(files["platform:xc7z020/linux-fpgamgr:manifest"])["artifacts"]
+    assert artifacts["modules"][0]["sha256"] == hashlib.sha256(b"ko").hexdigest()
+    assert artifacts["bitstream"]["sha256"] == bit_sha
+
+
 def test_cache_ignores_an_unreadable_index(tmp_path: Path) -> None:
     """#69: a half-written index.json no longer breaks pull / list."""
     from fabricgate.client import cache

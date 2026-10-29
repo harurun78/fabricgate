@@ -88,6 +88,9 @@ def push(
     board_override:
         When provided (e.g. ``"generic-xczu7ev"``), replace the ``custom-*``
         board prefix in all platform IDs before publishing.
+    skip_sha_check:
+        No effect; kept for compatibility.  A placeholder artifact ``sha256``
+        is replaced by the hash of the local file in the uploaded manifest.
     artifact_urls:
         ``{filename: https_url}`` for artifacts the registry should fetch from an
         existing public URL instead of receiving an upload.  The manifest still

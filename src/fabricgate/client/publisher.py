@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 import yaml
 
-from fabricgate.client.validator import artifact_refs, is_single_filename, sha256_digest
+from fabricgate.client.validator import artifact_refs, is_single_filename, sha256_digest, sha256_hex
 from fabricgate.models.design_index import DesignIndex
 from fabricgate.models.platform_manifest import PlatformManifest, parse_platform_manifest
 
@@ -21,13 +21,26 @@ def _is_placeholder_sha256(sha256: str) -> bool:
     ``fabricgate build`` fills artifact sha256 fields and the index digest with
     ``'a' * 64`` because the real hash is not known at generation time. Any single
     repeated character counts, so hand-written stand-ins such as ``'0' * 64`` are
-    caught too. Uploading such a placeholder makes ``fabricgate pull --verify`` always fail.
+    caught too. Push replaces them with the hash of the file it uploads.
     """
     return len(sha256) == 64 and len(set(sha256)) == 1
 
 
-# `fabricgate push` shows its "compute real artifact hashes" tip for warnings that contain this.
-PLACEHOLDER_SHA256_WARNING = "has a placeholder sha256"
+def _fill_placeholder_sha256(manifest: bytes, hashes: Mapping[str, str]) -> bytes:
+    """Return *manifest* with each placeholder artifact sha256 replaced by ``hashes[file]``.
+
+    Parsed from the bytes rather than dumped from the model, so only those values change.
+    """
+    data = yaml.safe_load(manifest)
+    for value in data["artifacts"].values():
+        for entry in value if isinstance(value, list) else [value]:
+            if (
+                isinstance(entry, dict)
+                and entry.get("file") in hashes
+                and _is_placeholder_sha256(str(entry.get("sha256")))
+            ):
+                entry["sha256"] = hashes[entry["file"]]
+    return yaml.safe_dump(data, sort_keys=False).encode()
 
 
 def _manifest_digest(manifest: bytes) -> str:
@@ -98,6 +111,10 @@ def collect_artifacts(
     fetches instead of receiving the bytes.  It applies to every platform that
     declares that filename.  A local copy is optional; when present its digest is
     still checked against the manifest.
+
+    A placeholder artifact ``sha256`` (see :func:`_is_placeholder_sha256`) is replaced
+    by the hash of the local file in the uploaded manifest; the file on disk is not
+    changed. *skip_sha_check* has no effect and is kept for compatibility.
     """
     files: dict[str, bytes] = {}
     artifact_urls = dict(artifact_urls or {})
@@ -128,21 +145,9 @@ def collect_artifacts(
         manifest_bytes = manifest_path.read_bytes()
         files[f"platform:{platform_key}:manifest"] = manifest_bytes
 
-        # `fabricgate build` writes a placeholder digest; anything else that differs was written by hand.
-        digest = _manifest_digest(manifest_bytes)
-        declared = str(entry.digest)
-        if declared != digest and not _is_placeholder_sha256(declared.removeprefix("sha256:")):
-            if sha_warnings is not None:
-                sha_warnings.append(
-                    f"Index digest for {platform_key} does not match {manifest_rel}; push sends the manifest's digest"
-                )
-        if index_data is not None:
-            for raw in index_data["platforms"]:
-                if raw["platform"] == platform_key:
-                    raw["digest"] = digest
-
         # Collect artifact files from the manifest
         artifact_dir = manifest_path.parent
+        filled: dict[str, str] = {}
         for ref in artifact_refs(manifest):
             # Checked before any read: a name that escapes the manifest directory
             # would otherwise upload an arbitrary local file.
@@ -162,12 +167,8 @@ def collect_artifacts(
                         # placeholder is a guaranteed DIGEST_MISMATCH — fail early.
                         msg = f"Artifact {ref.file} is published by URL but its sha256 is a placeholder"
                         raise PublishError(msg)
-                    # Placeholder sha256: skip verification but warn the caller.
-                    if not skip_sha_check and sha_warnings is not None:
-                        sha_warnings.append(
-                            f"Artifact {ref.file} {PLACEHOLDER_SHA256_WARNING} "
-                            "— run with real bitstream to get a verifiable hash"
-                        )
+                    # The registry checks the upload against this value, so send the real hash.
+                    filled[ref.file] = sha256_hex(artifact_path)
                 elif artifact_path.exists():
                     actual = sha256_digest(artifact_path)
                     expected = f"sha256:{ref.sha256}"
@@ -179,6 +180,29 @@ def collect_artifacts(
                 files[f"platform:{platform_key}:artifact-url:{ref.file}"] = url.encode()
             else:
                 files[f"platform:{platform_key}:artifact:{ref.file}"] = artifact_path.read_bytes()
+
+        if filled:
+            if manifest.attestation is not None:
+                msg = (
+                    f"{manifest_rel} is signed (attestation) but has placeholder sha256 values "
+                    f"({', '.join(sorted(filled))}). Fill them in before signing."
+                )
+                raise PublishError(msg)
+            manifest_bytes = _fill_placeholder_sha256(manifest_bytes, filled)
+            files[f"platform:{platform_key}:manifest"] = manifest_bytes
+
+        # `fabricgate build` writes a placeholder digest; anything else that differs was written by hand.
+        digest = _manifest_digest(manifest_bytes)
+        declared = str(entry.digest)
+        if declared != digest and not _is_placeholder_sha256(declared.removeprefix("sha256:")):
+            if sha_warnings is not None:
+                sha_warnings.append(
+                    f"Index digest for {platform_key} does not match {manifest_rel}; push sends the manifest's digest"
+                )
+        if index_data is not None:
+            for raw in index_data["platforms"]:
+                if raw["platform"] == platform_key:
+                    raw["digest"] = digest
 
         # The cosign bundle signs manifest.yaml, so the manifest cannot pin it by sha256
         # and it cannot use the direct upload; it travels as its own inline part and the

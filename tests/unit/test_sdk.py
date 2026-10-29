@@ -1088,25 +1088,37 @@ def test_push_fills_index_digest_from_manifest(
     assert declared in index_path.read_text()
 
 
-def test_push_warns_on_placeholder_artifact_sha256(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Artifact with placeholder sha256 produces sha_warning in PushResult."""
-    _write_push_project(tmp_path, placeholder_artifact_sha=True)
-    _patch_all_rc(monkeypatch, _FakePushRegistryClient)
+@pytest.mark.parametrize("skip_sha_check", [False, True])
+def test_push_fills_placeholder_artifact_sha256(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, skip_sha_check: bool
+) -> None:
+    """#143: the registry checks each upload against the manifest, so push sends the real hash."""
+    import yaml as _yaml
+
+    captured: dict[str, object] = {}
+
+    class _RecordingClient(_FakePushRegistryClient):
+        def publish_version(self, namespace, design, version, files):
+            captured["files"] = dict(files)
+            return super().publish_version(namespace, design, version, files)
+
+    _write_push_project(tmp_path, placeholder_digest=True, placeholder_artifact_sha=True)
+    manifest_path = tmp_path / "xc7z020" / "pynq" / "manifest.yaml"
+    before = manifest_path.read_bytes()
+    _patch_all_rc(monkeypatch, _RecordingClient)
     monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
 
-    result = sdk_api.push(tmp_path, token="tok-test")
-    assert result.sha_warning is not None
-    assert "placeholder" in result.sha_warning.lower() or "sha256" in result.sha_warning.lower()
+    result = sdk_api.push(tmp_path, token="tok-test", skip_sha_check=skip_sha_check)
 
-
-def test_push_no_warning_when_skip_sha_check(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """skip_sha_check=True suppresses placeholder sha256 warning."""
-    _write_push_project(tmp_path, placeholder_artifact_sha=True)
-    _patch_all_rc(monkeypatch, _FakePushRegistryClient)
-    monkeypatch.setattr(sdk_api.auth, "load_credentials", lambda _reg: None)
-
-    result = sdk_api.push(tmp_path, token="tok-test", skip_sha_check=True)
+    files = captured["files"]
+    manifest = files["platform:xc7z020/pynq:manifest"]
+    bitstream = (tmp_path / "xc7z020" / "pynq" / "design.bit").read_bytes()
+    assert _yaml.safe_load(manifest)["artifacts"]["bitstream"]["sha256"] == hashlib.sha256(bitstream).hexdigest()
+    (entry,) = _yaml.safe_load(files["index"])["platforms"]
+    assert entry["digest"] == f"sha256:{hashlib.sha256(manifest).hexdigest()}"
     assert result.sha_warning is None
+    # The local manifest is left as it was.
+    assert manifest_path.read_bytes() == before
 
 
 def test_is_placeholder_sha256() -> None:
