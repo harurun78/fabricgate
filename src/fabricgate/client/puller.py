@@ -92,6 +92,7 @@ class PullOutcome:
     shell: str | None = None
     deprecated_warning: str | None = None
     shell_yanked_warning: str | None = None
+    dependency_yanked_warnings: list[str] = field(default_factory=list)
     fallback_from: str | None = None
     """Originally requested platform when generic family fallback was used."""
 
@@ -264,10 +265,11 @@ def _resolve_and_download_deps(
     signer: AttestationSigner | None = None,
     cache_dir: Path | None = None,
     on_progress: ProgressCallback | None = None,
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     """Resolve dependencies and download them into deps/ subdirectory.
 
-    Returns list of dependency refs (``ns/design:version``) that were downloaded.
+    Returns the dependency refs (``ns/design:version``) that were downloaded, and a
+    warning for each one that is yanked.
     """
     try:
         deps_resp = client.get_dependencies(
@@ -281,13 +283,14 @@ def _resolve_and_download_deps(
     except RegistryError as exc:
         if exc.status_code == 404:
             # No dependencies endpoint or no deps — not an error
-            return []
+            return [], []
         raise
 
     if not deps_resp.dependencies:
-        return []
+        return [], []
 
     dep_refs: list[str] = []
+    yanked_warnings: list[str] = []
     deps_dir = target_dir / "deps"
     deps_dir.mkdir(parents=True, exist_ok=True)
 
@@ -317,8 +320,12 @@ def _resolve_and_download_deps(
             on_progress=on_progress,
         )
         dep_refs.append(dep_ref)
+        # An exact constraint still resolves to a yanked version; say so like `verify` does.
+        if dep.yanked:
+            reason = f": {dep.yanked_reason}" if dep.yanked_reason else ""
+            yanked_warnings.append(f"Dependency {dep_ref} is yanked{reason}")
 
-    return dep_refs
+    return dep_refs, yanked_warnings
 
 
 def _maybe_download_shell(
@@ -462,8 +469,9 @@ def pull_design(
 
     # --- Dependency resolution ---
     dep_refs: list[str] = []
+    dependency_yanked_warnings: list[str] = []
     if not no_deps:
-        dep_refs = _resolve_and_download_deps(
+        dep_refs, dependency_yanked_warnings = _resolve_and_download_deps(
             client,
             namespace,
             design,
@@ -525,5 +533,6 @@ def pull_design(
         shell=shell_ref,
         deprecated_warning=deprecated_warning,
         shell_yanked_warning=shell_yanked_warning,
+        dependency_yanked_warnings=dependency_yanked_warnings,
         fallback_from=resolution.fallback_from,
     )
