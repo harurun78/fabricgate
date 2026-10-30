@@ -1327,6 +1327,25 @@ def test_pull_deprecated_shows_warning(monkeypatch, tmp_path) -> None:
     assert "deprecated" in result.stderr
 
 
+def test_pull_yanked_shell_shows_warning(monkeypatch, tmp_path) -> None:
+    """A yanked shell is reported on stderr, keeping stdout for the result."""
+    yanked_shell_result = PullResult(
+        name="test-ns/blink",
+        version="1.0.0",
+        platform="xc7z020/pynq",
+        path="/tmp/out",
+        artifacts=["design.bit"],
+        cached=False,
+        shell="shell-ns/shell-design:2.0.0",
+        shell_yanked_warning="Shell shell-ns/shell-design:2.0.0 is yanked: Timing bug",
+    )
+    monkeypatch.setattr("fabricgate.cli.commands.pull.sdk_api.pull", lambda *_a, **_kw: yanked_shell_result)
+    result = CliRunner().invoke(main, ["pull", "test-ns/blink:1.0.0"])
+    assert result.exit_code == 0
+    assert "\u26a0  Shell shell-ns/shell-design:2.0.0 is yanked: Timing bug" in result.stderr
+    assert "is yanked" not in result.stdout
+
+
 def test_pull_exit_code_5(monkeypatch, tmp_path) -> None:
     """DEPENDENCY_UNRESOLVABLEのexit code 5。"""
     from fabricgate.sdk.api import SDKError

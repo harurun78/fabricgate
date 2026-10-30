@@ -24,6 +24,7 @@ from fabricgate.client.registry_client import RegistryClientProtocol, RegistryEr
 from fabricgate.client.resolver import resolve_platform_detailed
 from fabricgate.client.validator import artifact_refs, is_single_filename
 from fabricgate.models.api.errors import ErrorCode
+from fabricgate.models.api.responses import ShellInfo
 from fabricgate.models.design_index import DesignIndex, PlatformEntry
 from fabricgate.models.platform_manifest import PlatformManifest, parse_platform_manifest
 
@@ -90,6 +91,7 @@ class PullOutcome:
     dependencies: list[str] = field(default_factory=list)
     shell: str | None = None
     deprecated_warning: str | None = None
+    shell_yanked_warning: str | None = None
     fallback_from: str | None = None
     """Originally requested platform when generic family fallback was used."""
 
@@ -333,10 +335,10 @@ def _maybe_download_shell(
     signer: AttestationSigner | None = None,
     cache_dir: Path | None = None,
     on_progress: ProgressCallback | None = None,
-) -> str | None:
+) -> ShellInfo | None:
     """Download the static shell for a partial bitstream if applicable.
 
-    Returns the shell ref string if downloaded, or None.
+    Returns the registry's shell info if downloaded, or None.
     """
     if no_shell:
         # Skip shell download entirely — caller handles the warning output
@@ -353,7 +355,6 @@ def _maybe_download_shell(
             return None
         raise
     shell_info = shell_resp.shell
-    shell_ref = f"{shell_info.name}:{shell_info.version}"
 
     shell_ns, shell_design = str(shell_info.name).split("/", 1)
     shell_dir = target_dir / "shell" / shell_ns / shell_design / str(shell_info.version)
@@ -377,7 +378,7 @@ def _maybe_download_shell(
         on_progress=on_progress,
     )
 
-    return shell_ref
+    return shell_info
 
 
 def pull_design(
@@ -479,8 +480,10 @@ def pull_design(
 
     # --- Shell auto-download ---
     shell_ref: str | None = None
+    shell_yanked_warning: str | None = None
+    shell_info: ShellInfo | None = None
     if not deps_only:
-        shell_ref = _maybe_download_shell(
+        shell_info = _maybe_download_shell(
             client,
             namespace,
             design,
@@ -494,6 +497,12 @@ def pull_design(
             cache_dir=cache_path,
             on_progress=on_progress,
         )
+    if shell_info is not None:
+        shell_ref = f"{shell_info.name}:{shell_info.version}"
+        # The pin is an exact version, so a yanked shell still resolves; say so like `verify` does.
+        if shell_info.yanked:
+            reason = f": {shell_info.yanked_reason}" if shell_info.yanked_reason else ""
+            shell_yanked_warning = f"Shell {shell_ref} is yanked{reason}"
 
     if cache_path is not None and not deps_only:
         cache.store(
@@ -515,5 +524,6 @@ def pull_design(
         dependencies=dep_refs,
         shell=shell_ref,
         deprecated_warning=deprecated_warning,
+        shell_yanked_warning=shell_yanked_warning,
         fallback_from=resolution.fallback_from,
     )
