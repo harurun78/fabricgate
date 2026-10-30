@@ -1536,6 +1536,7 @@ class TestResolvedDependency:
         )
         assert rd.yanked is True
         assert rd.yanked_reason == "Timing bug"
+        assert "added_later" not in rd.model_dump()
 
 
 class TestShellDependency:
