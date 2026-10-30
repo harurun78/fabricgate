@@ -469,6 +469,8 @@ class ShellInfo(ApiResponseModel):
     bitstream_type: str
     artifacts: list[ShellArtifactInfo]
     pull_url: str
+    yanked: bool = False
+    yanked_reason: str | None = None
 
 
 class ShellResponse(ApiResponseModel):

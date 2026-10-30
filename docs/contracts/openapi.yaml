@@ -4256,6 +4256,15 @@ components:
         pull_url:
           type: string
           title: Pull Url
+        yanked:
+          type: boolean
+          title: Yanked
+          default: false
+        yanked_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Yanked Reason
       type: object
       required:
       - name

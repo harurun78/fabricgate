@@ -1594,10 +1594,48 @@ def test_pull_shell_auto_download(
     )
 
     assert result.shell == "shell-ns/shell-design:2.0.0"
+    assert result.shell_yanked_warning is None
     shell_dir = tmp_path / "shell" / "shell-ns" / "shell-design" / "2.0.0"
     assert shell_dir.exists()
     assert (shell_dir / "manifest.yaml").exists()
     assert (shell_dir / "shell.bit").exists()
+
+
+@pytest.mark.parametrize(
+    ("yanked_reason", "expected"),
+    [
+        ("Timing bug", "Shell shell-ns/shell-design:2.0.0 is yanked: Timing bug"),
+        (None, "Shell shell-ns/shell-design:2.0.0 is yanked"),
+    ],
+    ids=["with-reason", "without-reason"],
+)
+def test_pull_yanked_shell_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    yanked_reason: str | None,
+    expected: str,
+) -> None:
+    """A yanked shell is still pulled (its pin is exact), with a warning."""
+
+    class _Client(_FakeRegistryClientWithDeps):
+        def get_shell(self, *args, **kwargs):
+            resp = super().get_shell(*args, **kwargs)
+            return resp.model_copy(
+                update={"shell": resp.shell.model_copy(update={"yanked": True, "yanked_reason": yanked_reason})}
+            )
+
+    _patch_all_rc(monkeypatch, _Client)
+
+    result = sdk_api.pull(
+        "test-ns/blink:1.0.0",
+        platform="xc7z020/pynq",
+        output=tmp_path,
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert result.shell == "shell-ns/shell-design:2.0.0"
+    assert (tmp_path / "shell" / "shell-ns" / "shell-design" / "2.0.0" / "shell.bit").exists()
+    assert result.shell_yanked_warning == expected
 
 
 def test_pull_no_shell_skips(
