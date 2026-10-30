@@ -1346,6 +1346,26 @@ def test_pull_yanked_shell_shows_warning(monkeypatch, tmp_path) -> None:
     assert "is yanked" not in result.stdout
 
 
+def test_pull_yanked_dependencies_show_warnings(monkeypatch, tmp_path) -> None:
+    """Each yanked dependency is reported on stderr, keeping stdout for the result."""
+    yanked_deps_result = PullResult(
+        name="test-ns/blink",
+        version="1.0.0",
+        platform="xc7z020/pynq",
+        path="/tmp/out",
+        artifacts=["design.bit"],
+        cached=False,
+        dependencies=["a/b:1.0.0", "c/d:2.0.0"],
+        dependency_yanked_warnings=["Dependency a/b:1.0.0 is yanked: Timing bug", "Dependency c/d:2.0.0 is yanked"],
+    )
+    monkeypatch.setattr("fabricgate.cli.commands.pull.sdk_api.pull", lambda *_a, **_kw: yanked_deps_result)
+    result = CliRunner().invoke(main, ["pull", "test-ns/blink:1.0.0"])
+    assert result.exit_code == 0
+    assert "\u26a0  Dependency a/b:1.0.0 is yanked: Timing bug" in result.stderr
+    assert "\u26a0  Dependency c/d:2.0.0 is yanked" in result.stderr
+    assert "is yanked" not in result.stdout
+
+
 def test_pull_exit_code_5(monkeypatch, tmp_path) -> None:
     """DEPENDENCY_UNRESOLVABLEのexit code 5。"""
     from fabricgate.sdk.api import SDKError

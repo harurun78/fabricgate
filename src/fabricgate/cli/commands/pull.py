@@ -101,6 +101,8 @@ def pull_cmd(
         click.echo(f"\u26a0  {result.deprecated_warning}", err=True)
     if result.shell_yanked_warning:
         click.echo(f"\u26a0  {result.shell_yanked_warning}", err=True)
+    for warning in result.dependency_yanked_warnings:
+        click.echo(f"\u26a0  {warning}", err=True)
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))

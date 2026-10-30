@@ -1393,10 +1393,47 @@ def test_pull_resolves_dependencies(
     )
 
     assert result.dependencies == ["dep-ns/dep-design:0.1.0"]
+    assert result.dependency_yanked_warnings == []
     dep_dir = tmp_path / "deps" / "dep-ns" / "dep-design" / "0.1.0"
     assert dep_dir.exists()
     assert (dep_dir / "manifest.yaml").exists()
     assert (dep_dir / "dep.bit").exists()
+
+
+@pytest.mark.parametrize(
+    ("yanked_reason", "expected"),
+    [
+        ("Timing bug", "Dependency dep-ns/dep-design:0.1.0 is yanked: Timing bug"),
+        (None, "Dependency dep-ns/dep-design:0.1.0 is yanked"),
+    ],
+    ids=["with-reason", "without-reason"],
+)
+def test_pull_yanked_dependency_warning(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    yanked_reason: str | None,
+    expected: str,
+) -> None:
+    """A yanked dependency is still pulled (an exact constraint resolves to it), with a warning."""
+
+    class _Client(_FakeRegistryClientWithDeps):
+        def get_dependencies(self, *args, **kwargs):
+            resp = super().get_dependencies(*args, **kwargs)
+            dep = resp.dependencies[0].model_copy(update={"yanked": True, "yanked_reason": yanked_reason})
+            return resp.model_copy(update={"dependencies": [dep]})
+
+    _patch_all_rc(monkeypatch, _Client)
+
+    result = sdk_api.pull(
+        "test-ns/blink:1.0.0",
+        platform="xc7z020/pynq",
+        output=tmp_path,
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert result.dependencies == ["dep-ns/dep-design:0.1.0"]
+    assert (tmp_path / "deps" / "dep-ns" / "dep-design" / "0.1.0" / "dep.bit").exists()
+    assert result.dependency_yanked_warnings == [expected]
 
 
 def test_pull_no_deps_skips_resolution(
@@ -4085,7 +4122,7 @@ def test_resolve_and_download_deps_404_returns_empty(tmp_path: Path) -> None:
             raise RegistryError(404, ErrorResponse(error=ErrorDetail(code="NOT_FOUND", message="not found")))
 
     result = _resolve_and_download_deps(_Client(), "a", "b", "1.0.0", "xc7z020", "pynq", tmp_path, True)
-    assert result == []
+    assert result == ([], [])
 
 
 def test_resolve_and_download_deps_reraises_unhandled_registry_error(tmp_path: Path) -> None:
@@ -4237,7 +4274,7 @@ def test_resolve_and_download_deps_names_joined_by_hyphen_do_not_collide(tmp_pat
         def download_artifact(self, ns, design, *_a):
             return f"{ns}/{design}".encode()
 
-    refs = _resolve_and_download_deps(_Client(), "root", "top", "1.0.0", "xc7z020", "pynq", tmp_path, True)
+    refs, _ = _resolve_and_download_deps(_Client(), "root", "top", "1.0.0", "xc7z020", "pynq", tmp_path, True)
 
     assert refs == ["a-b/c:1.0.0", "a/b-c:1.0.0"]
     for ns, design in (("a-b", "c"), ("a", "b-c")):

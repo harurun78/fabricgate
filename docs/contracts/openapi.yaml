@@ -4137,7 +4137,15 @@ components:
           type: string
           maxLength: 256
           title: Required By
-      additionalProperties: false
+        yanked:
+          type: boolean
+          title: Yanked
+          default: false
+        yanked_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Yanked Reason
       type: object
       required:
       - name
@@ -4147,7 +4155,16 @@ components:
       - depth
       - required_by
       title: ResolvedDependency
-      description: Resolved dependency entry (API response / SDK internal).
+      description: 'Resolved dependency entry (API response / SDK internal).
+
+
+        ``yanked`` / ``yanked_reason``: an exact constraint still resolves to a yanked
+        version,
+
+        which can be pulled with a warning. Unknown fields are ignored, so that fields
+        a newer
+
+        registry adds do not break older clients.'
     SearchResponse:
       properties:
         designs:

@@ -1503,6 +1503,40 @@ class TestResolvedDependency:
                 required_by="a" * 257,
             )
 
+    def test_yanked_defaults_to_false(self):
+        from fabricgate.models.platform_manifest import ResolvedDependency
+
+        rd = ResolvedDependency(
+            name="acme/core",
+            resolved_version="1.0.0",
+            platform="xczu7ev/pynq",
+            optional=False,
+            depth=1,
+            required_by="acme/top:1.0.0",
+        )
+        assert rd.yanked is False
+        assert rd.yanked_reason is None
+
+    def test_unknown_field_ignored(self):
+        """An API response model: a field added by a newer registry must not break this client."""
+        from fabricgate.models.platform_manifest import ResolvedDependency
+
+        rd = ResolvedDependency.model_validate(
+            {
+                "name": "acme/core",
+                "resolved_version": "1.0.0",
+                "platform": "xczu7ev/pynq",
+                "optional": False,
+                "depth": 1,
+                "required_by": "acme/top:1.0.0",
+                "yanked": True,
+                "yanked_reason": "Timing bug",
+                "added_later": "x",
+            }
+        )
+        assert rd.yanked is True
+        assert rd.yanked_reason == "Timing bug"
+
 
 class TestShellDependency:
     """MODEL-DEPS-001: ShellDependency model validation."""

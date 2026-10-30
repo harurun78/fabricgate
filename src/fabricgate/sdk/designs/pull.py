@@ -139,6 +139,7 @@ def pull(
         shell=outcome.shell,
         deprecated_warning=outcome.deprecated_warning,
         shell_yanked_warning=outcome.shell_yanked_warning,
+        dependency_yanked_warnings=outcome.dependency_yanked_warnings,
         fallback_from=outcome.fallback_from,
     )
 

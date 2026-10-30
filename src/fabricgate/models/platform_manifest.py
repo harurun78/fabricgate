@@ -14,6 +14,7 @@ import yaml
 from pydantic import ConfigDict, Discriminator, Field, Tag, TypeAdapter, model_validator
 
 from fabricgate.models.common import (
+    ApiResponseModel,
     DesignName,
     DesignRef,
     FabricGateModel,
@@ -109,8 +110,13 @@ class Dependency(FabricGateModel):
     optional: bool = False
 
 
-class ResolvedDependency(FabricGateModel):
-    """Resolved dependency entry (API response / SDK internal)."""
+class ResolvedDependency(ApiResponseModel):
+    """Resolved dependency entry (API response / SDK internal).
+
+    ``yanked`` / ``yanked_reason``: an exact constraint still resolves to a yanked version,
+    which can be pulled with a warning. Unknown fields are ignored, so that fields a newer
+    registry adds do not break older clients.
+    """
 
     name: DesignName
     resolved_version: SemVer
@@ -118,6 +124,8 @@ class ResolvedDependency(FabricGateModel):
     optional: bool
     depth: int = Field(ge=1, le=100)
     required_by: str = Field(max_length=256)
+    yanked: bool = False
+    yanked_reason: str | None = None
 
 
 class ShellDependency(FabricGateModel):
