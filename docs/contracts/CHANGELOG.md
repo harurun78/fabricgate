@@ -6,6 +6,8 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-01
+
 ### Added
 
 - `fabricgate pull` shows a download bar per artifact (root, dependencies, shell) on stderr while stderr is a terminal; cached artifacts show as complete. Nothing changes when stderr is not a terminal, and stdout (including `--json`) is unchanged. The SDK's `pull()` and `fabricgate.client.puller.pull_design()` accept `on_progress(label, bytes_received, total_bytes)`, and `RegistryClient.download_artifact()` accepts `on_progress(bytes_received, total_bytes)`, which `pull_design()` passes only when a callback is given, so existing `RegistryClientProtocol` implementations keep working at runtime (type-checked implementations need the new keyword argument to match the protocol). `total_bytes` is the `Content-Length`, or `None` without one. No API or schema change.
