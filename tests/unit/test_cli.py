@@ -34,6 +34,7 @@ from fabricgate.models.cli import (
     PullResult,
     PushResult,
     SearchResult,
+    SearchResults,
     StatsSeriesItem,
     StatsTopDesign,
     TokenCreateResult,
@@ -53,14 +54,17 @@ from fabricgate.sdk import api as sdk_api
 
 def test_search_json_output(monkeypatch) -> None:
     def _fake_search(*_args, **_kwargs):
-        return [
-            SearchResult(
-                name="test-ns/blink",
-                version="1.0.0",
-                summary="Blink demo",
-                platforms=["xc7z020/pynq"],
-            )
-        ]
+        return SearchResults(
+            [
+                SearchResult(
+                    name="test-ns/blink",
+                    version="1.0.0",
+                    summary="Blink demo",
+                    platforms=["xc7z020/pynq"],
+                )
+            ],
+            total=1,
+        )
 
     monkeypatch.setattr("fabricgate.cli.commands.search.sdk_api.search", _fake_search)
     runner = CliRunner()
@@ -71,14 +75,17 @@ def test_search_json_output(monkeypatch) -> None:
 
 def test_search_text_output(monkeypatch) -> None:
     def _fake_search(*_args, **_kwargs):
-        return [
-            SearchResult(
-                name="test-ns/blink",
-                version="1.0.0",
-                summary="Blink demo",
-                platforms=["xc7z020/pynq", "xczu3eg/ultra96"],
-            )
-        ]
+        return SearchResults(
+            [
+                SearchResult(
+                    name="test-ns/blink",
+                    version="1.0.0",
+                    summary="Blink demo",
+                    platforms=["xc7z020/pynq", "xczu3eg/ultra96"],
+                )
+            ],
+            total=1,
+        )
 
     monkeypatch.setattr("fabricgate.cli.commands.search.sdk_api.search", _fake_search)
     runner = CliRunner()
@@ -97,7 +104,7 @@ def test_search_device_filter(monkeypatch, option: str) -> None:
 
     def _fake_search(*_args, **kwargs):
         seen.update(kwargs)
-        return []
+        return SearchResults([], total=0)
 
     monkeypatch.setattr("fabricgate.cli.commands.search.sdk_api.search", _fake_search)
     result = CliRunner().invoke(main, ["search", option, "xczu7ev"])
@@ -112,7 +119,7 @@ def test_search_help_shows_only_device() -> None:
 
 
 def test_search_no_results(monkeypatch) -> None:
-    monkeypatch.setattr("fabricgate.cli.commands.search.sdk_api.search", lambda *a, **k: [])
+    monkeypatch.setattr("fabricgate.cli.commands.search.sdk_api.search", lambda *a, **k: SearchResults([], total=0))
     runner = CliRunner()
     result = runner.invoke(main, ["search", "nothing"])
     assert result.exit_code == 0
@@ -3638,7 +3645,9 @@ def _evil_outputs() -> list[tuple[str, str, object, list[str]]]:
         (
             "search.sdk_api.search",
             "search",
-            [SearchResult.model_construct(name=_EVIL, version=_EVIL, summary=_EVIL, platforms=[_EVIL])],
+            SearchResults(
+                [SearchResult.model_construct(name=_EVIL, version=_EVIL, summary=_EVIL, platforms=[_EVIL])], total=1
+            ),
             ["search", "x"],
         ),
         (
@@ -3879,3 +3888,40 @@ def test_webhook_create_rejects_a_bad_url_with_exit_3(url: str, message: str) ->
     )
     assert result.exit_code == 3, result.output
     assert message in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# search --limit (#160)
+# ---------------------------------------------------------------------------
+
+
+def _results(n: int, total: int) -> SearchResults:
+    return SearchResults(
+        [SearchResult(name=f"ns/d{i}", version="1.0.0", platforms=["a/pynq"]) for i in range(n)], total=total
+    )
+
+
+@pytest.mark.parametrize("json_output", [False, True])
+def test_search_says_when_results_stop_at_the_limit(monkeypatch, json_output: bool) -> None:
+    """#160: the note goes to stderr, so the table and the --json list stay as they are."""
+    seen: dict[str, object] = {}
+
+    def _fake_search(*_a, **kwargs):
+        seen.update(kwargs)
+        return _results(20, total=45)
+
+    monkeypatch.setattr("fabricgate.cli.commands.search.sdk_api.search", _fake_search)
+    args = ["--json", "search", "x"] if json_output else ["search", "x"]
+    result = CliRunner().invoke(main, args)
+    assert result.exit_code == 0, result.output
+    assert seen["limit"] == 20
+    assert "Showing 20 of 45 designs. Use --limit (up to 1000) or narrow the search." in result.stderr
+    if json_output:
+        assert len(json.loads(result.stdout)) == 20
+
+
+def test_search_says_nothing_when_every_result_is_shown(monkeypatch) -> None:
+    monkeypatch.setattr("fabricgate.cli.commands.search.sdk_api.search", lambda *_a, **_kw: _results(3, total=3))
+    result = CliRunner().invoke(main, ["search", "x", "--limit", "50"])
+    assert result.exit_code == 0, result.output
+    assert "Showing" not in result.stderr
