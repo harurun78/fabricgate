@@ -3805,7 +3805,7 @@ def test_login_error_reaches_the_terminal_without_control_characters(monkeypatch
 _CLOSED = {"FG_REGISTRY": "http://127.0.0.1:9/api/v1"}  # nothing leaves the machine
 
 
-@pytest.mark.parametrize("args", [["search", "foo"], ["login"]], ids=["search", "login"])
+@pytest.mark.parametrize("args", [["search", "foo"], ["login"], ["verify", "."]], ids=["search", "login", "verify"])
 def test_malformed_registry_url_exits_3(args: list[str]) -> None:
     """#158: a typo in the port is invalid configuration (exit 3), for login --registry too."""
     bad = "https://registry.example:80a/api/v1"

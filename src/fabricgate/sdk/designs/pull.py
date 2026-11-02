@@ -169,7 +169,9 @@ def verify(
     if offline and (ref is not None or platform is not None):
         raise SDKError("--ref and --platform cannot be combined with --offline.", code=ExitKind.INVALID)
     target_dir = Path(directory)
-    with nullcontext() if offline else RegistryClient(base_url=registry) as client:
+    with _registry_errors():  # the client is built here, so a malformed registry URL is an INVALID SDKError
+        registry_client = nullcontext() if offline else RegistryClient(base_url=registry)
+    with registry_client as client:
         result, manifest = _verify_dir(client, target_dir, ref=ref, platform=platform)
         checked_deps = [_verify_dir(client, d, path_ref=_path_ref(d)) for d in _pulled_dirs(target_dir, "deps")]
         result.dependencies = [checked for checked, _ in checked_deps]
