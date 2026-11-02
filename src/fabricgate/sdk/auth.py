@@ -97,7 +97,16 @@ def login(
     """
     with _registry_errors():
         with RegistryClient(base_url=registry) as client:
-            device_resp = client.device_authorization()
+            try:
+                device_resp = client.device_authorization()
+            except RegistryError as exc:
+                # A host-only URL misses the API prefix: the request went to <host>/oauth/... (#148).
+                if exc.status_code == 404 and urlparse(registry).path in ("", "/"):
+                    raise SDKError(
+                        f"{exc}. The registry URL must include the API prefix, e.g. {registry.rstrip('/')}/api/v1.",
+                        code=exc.kind,
+                    ) from exc
+                raise
 
         user_code: str = device_resp["user_code"]
         verification_uri: str = device_resp.get("verification_uri_complete", device_resp["verification_uri"])
