@@ -167,6 +167,60 @@ def test_info_text_output(monkeypatch) -> None:
     assert "Name: test-ns/blink" in result.output
 
 
+def _info_with_details() -> DesignInfo:
+    from fabricgate.models.api.responses import ApiPlatformEntry, ArtifactInfo
+
+    def _artifact(name: str) -> ArtifactInfo:
+        return ArtifactInfo.model_validate({"filename": name, "sha256": "b" * 64, "size": 4})
+
+    return DesignInfo(
+        name="test-ns/blink",
+        version="1.0.0",
+        platforms=[
+            ApiPlatformEntry(
+                platform="zcu104/pynq",
+                digest="sha256:" + "a" * 64,
+                size=256 * 1024,
+                speed_grade={"min": "-2", "tested": ["-2"]},
+                artifacts=[_artifact("blink.bit"), _artifact("blink.hwh")],
+            ),
+            PlatformEntry(platform="myboard/linux-fpgamgr", digest="sha256:" + "c" * 64),
+        ],
+    )
+
+
+def test_info_text_shows_platform_details(monkeypatch, tmp_path) -> None:
+    """#165: spec §3.5 lists Board, Speed grade, Size and Artifacts per platform; absent values are left out."""
+    monkeypatch.setattr("fabricgate.models.board_db._DEFAULT_OFFICIAL", tmp_path / "none.yaml")
+    monkeypatch.setattr("fabricgate.models.board_db._DEFAULT_CUSTOM", tmp_path / "none.yaml")
+    monkeypatch.setattr("fabricgate.cli.commands.info.sdk_api.info", lambda *_a, **_k: _info_with_details())
+    result = CliRunner().invoke(main, ["info", "test-ns/blink:1.0.0"])
+    assert result.exit_code == 0, result.output
+    assert result.output.endswith(
+        "Platforms:\n"
+        "  zcu104/pynq\n"
+        "    Board:       zcu104  (Xilinx ZCU104 Evaluation Board)\n"
+        "    Speed grade: min -2, tested [-2]\n"
+        "    Size:        256 KB\n"
+        "    Artifacts:   blink.bit, blink.hwh\n"
+        "\n"
+        "  myboard/linux-fpgamgr\n"
+        "    Board:       myboard\n"
+    )
+
+
+def test_info_text_survives_an_unreadable_board_db(monkeypatch, tmp_path) -> None:
+    """The board name is only a label: a broken custom.yaml leaves it out instead of failing info."""
+    broken = tmp_path / "custom.yaml"
+    broken.write_text("boards: [\n")
+    monkeypatch.setattr("fabricgate.models.board_db._DEFAULT_OFFICIAL", tmp_path / "none.yaml")
+    monkeypatch.setattr("fabricgate.models.board_db._DEFAULT_CUSTOM", broken)
+    monkeypatch.setattr("fabricgate.cli.commands.info.sdk_api.info", lambda *_a, **_k: _info_with_details())
+    result = CliRunner().invoke(main, ["info", "test-ns/blink:1.0.0"])
+    assert result.exit_code == 0, result.output
+    assert "    Board:       zcu104\n" in result.output
+
+
 def test_verify_failure_uses_exit_code_3(monkeypatch, tmp_path: Path) -> None:
     def _fake_verify(*_args, **_kwargs):
         return VerificationResult(
@@ -2562,6 +2616,24 @@ def test_watch_text_new_version_found(monkeypatch) -> None:
     assert "xc7z020/pynq" in result.output
 
 
+def test_watch_shell_text_uses_shell_wording(monkeypatch) -> None:
+    """#165: spec §3.8b prints "New shell version found: <ns/design>:<version>" for --shell."""
+
+    def _fake_watch(*_args, **_kwargs):
+        return WatchResult(
+            design_name="community/zcu104-shell",
+            new_version_found=True,
+            latest_version="1.3.0",
+            new_versions=["1.3.0"],
+            platforms=["zcu104/pynq"],
+        )
+
+    monkeypatch.setattr("fabricgate.cli.commands.watch.sdk_api.watch", _fake_watch)
+    result = CliRunner().invoke(main, ["watch", "--shell", "community/zcu104-shell", "--since-version", "1.2.0"])
+    assert result.exit_code == 0
+    assert result.output == "New shell version found: community/zcu104-shell:1.3.0\n"
+
+
 def test_watch_text_no_new_version(monkeypatch) -> None:
     def _fake_watch(*_args, **_kwargs):
         return WatchResult(
@@ -2862,6 +2934,36 @@ def test_login_triggers_user_code_callback(monkeypatch) -> None:
     assert "https://login.example.com/activate" in result.output
     assert "ABCD-1234" in result.output
     assert "Waiting for authorization" in result.output
+
+
+def test_login_json_stdout_is_only_json(monkeypatch) -> None:
+    """#163: with --json the guidance goes to stderr, so stdout parses as JSON."""
+
+    def _fake_login(registry: str, on_user_code, **_kwargs):
+        on_user_code("https://login.example.com/activate", "ABCD-1234")
+        return LoginResult(registry=registry, storage="file (~/.fabricgate)")
+
+    monkeypatch.setattr("fabricgate.cli.commands.login.sdk_api.login", _fake_login)
+    result = CliRunner().invoke(main, ["--json", "login"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["storage"] == "file (~/.fabricgate)"
+    for text in ("Using registry", "https://login.example.com/activate", "ABCD-1234", "Waiting for authorization", "✓"):
+        assert text in result.stderr
+
+
+def test_login_json_failure_keeps_stdout_empty(monkeypatch) -> None:
+    from fabricgate.sdk.api import SDKError
+
+    def _fake_login(registry: str, on_user_code, **_kwargs):
+        on_user_code("https://login.example.com/activate", "ABCD-1234")
+        raise SDKError("device code expired")
+
+    monkeypatch.setattr("fabricgate.cli.commands.login.sdk_api.login", _fake_login)
+    result = CliRunner().invoke(main, ["--json", "login"])
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Waiting for authorization ... ✗" in result.stderr
+    assert "device code expired" in result.stderr
 
 
 # ---------------------------------------------------------------------------

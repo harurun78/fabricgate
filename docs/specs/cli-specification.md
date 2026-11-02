@@ -648,6 +648,9 @@ Platforms:
     Artifacts:   blink.bit, blink.dtbo
 ```
 
+Board の括弧内はローカルの Board DB（`official.yaml` / `custom.yaml`）にあるボードの表示名で、見つからない・読めない場合は省く。
+Speed grade・Size・Artifacts は値が無いプラットフォームでは行ごと省く。
+
 `--json` では `platforms[].artifacts[]` にサーバ応答の `filename` / `sha256` / `size` / `source` をそのまま出力する。
 `source` は `"registry"`（レジストリ保管）または `"external"`（`push --artifact-url` による URL 参照。download は
 その URL へリダイレクト）。`source` を返さない旧サーバでは `null` になる（加算的フィールド、ADR-014 tolerant reader）。
@@ -677,6 +680,9 @@ Waiting for authorization ... ✓
 
 Logged in. Token saved to OS keychain (registry.fabricgate.dev).
 ```
+
+With `--json`, stdout carries only the JSON result (no "Logged in." line). "Using registry", the URL
+and code, and "Waiting for authorization ... ✓ / ✗" go to stderr so they stay visible.
 
 Token is stored in the **OS keychain** (Windows Credential Manager /
 macOS Keychain / Linux Secret Service). Plaintext fallback to
