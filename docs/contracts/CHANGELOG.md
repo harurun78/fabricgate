@@ -6,6 +6,17 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+### Fixed
+
+- Errors that ended in a Python traceback (exit 1) now print a message and exit with the code for their kind (ADR-008). No API or schema change.
+  - A response that is not the API's — an HTML page with `200`, or a `3xx` from an SSO or captive portal — is an infrastructure error (exit 4): "Unexpected response from the registry ..." / "Unexpected redirect ...". This includes a device-authorization response without `device_code` / `user_code` / `verification_uri`, and a token response without `expires_in` (the token's lifetime would be unknown). The client no longer follows a redirect from an API call; artifact downloads still follow them.
+  - A registry URL that cannot be parsed (`--registry`, `FG_REGISTRY`, `config.yaml`, `login --registry`), such as a port that is not a number, is invalid configuration (exit 3). The SDK raises `InvalidRegistryURLError`, a `RegistryError` whose `kind` is `INVALID`.
+  - `fabricgate push` with an index or manifest that is not valid YAML, fails the schema, or is not UTF-8: exit 3, as the SDK's `push()` reports it.
+  - A `~/.fabricgate/config.yaml` that is not UTF-8: exit 3 "invalid configuration". A `~/.fabricgate/credentials.json` that is not a JSON object: exit 3 "Cannot read stored credentials".
+  - `fabricgate stats --version` that is not SemVer: exit 3. `fabricgate webhook create --url` that cannot be parsed, has a port that is not a number, or carries a user name or password: exit 3, before anything is sent.
+  - `fabricgate pull` with a manifest from the registry that the client cannot read: exit 3. Pull also no longer validates index fields it does not use (`summary`, `tags`, `license`, `author`), so a version whose summary the current schema would reject can still be pulled.
+  - `fabricgate verify` with an artifact path that is a directory: exit 3 "Artifact not found"; an artifact that cannot be read: exit 4.
+
 ## [0.5.1] - 2026-11-02
 
 ### Security

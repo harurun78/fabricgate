@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 from urllib.parse import quote
 
 import httpx2
+from pydantic import BaseModel
 
 from fabricgate.client.errors import FailureKind
 from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
@@ -100,6 +101,42 @@ class NetworkError(RegistryError):
         return FailureKind.INFRA
 
 
+class InvalidRegistryURLError(RegistryError):
+    """Raised when the registry URL (``--registry`` / ``FG_REGISTRY`` / config) cannot be used as a URL.
+
+    It is invalid configuration, not a transport failure: ``kind`` is ``FailureKind.INVALID``.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.status_code = 0
+        self.error = None
+        Exception.__init__(self, message)
+
+    @property
+    def kind(self) -> FailureKind:
+        return FailureKind.INVALID
+
+
+def _unexpected_response(resp: httpx2.Response, expected: str) -> NetworkError:
+    """The error for a response that is not the API's: a proxy, captive portal or SSO page answered."""
+    content_type = resp.headers.get("Content-Type", "no content type")
+    return NetworkError(
+        f"Unexpected response from the registry (HTTP {resp.status_code}, {content_type}), not {expected}. "
+        "Check the registry URL; a proxy or login page may be answering."
+    )
+
+
+_Model = TypeVar("_Model", bound=BaseModel)
+
+
+def _parse(model: type[_Model], resp: httpx2.Response) -> _Model:
+    """Validate *resp*'s JSON body as *model*; a body that is not one is an unexpected response."""
+    try:
+        return model.model_validate_json(resp.content)
+    except ValueError as exc:  # pydantic's ValidationError is a ValueError
+        raise _unexpected_response(resp, f"the expected {model.__name__}") from exc
+
+
 def _seg(value: str | int) -> str:
     """Percent-encode one URL path segment.
 
@@ -134,7 +171,17 @@ def _oauth_error_response(resp: httpx2.Response) -> ErrorResponse | None:
 
 
 def _raise_for_status(resp: httpx2.Response) -> None:
-    """Raise :class:`RegistryError` for a 4xx / 5xx response (its body must be read)."""
+    """Raise :class:`RegistryError` for a 4xx / 5xx response (its body must be read).
+
+    A redirect is not followed: the API does not redirect, so a 3xx comes from something
+    in front of it (an SSO or captive portal sending the client to a login page).
+    """
+    if 300 <= resp.status_code < 400:
+        location = resp.headers.get("Location", "no location")
+        raise NetworkError(
+            f"Unexpected redirect from the registry (HTTP {resp.status_code} to {location}). "
+            "Check the registry URL; a proxy or login page may be answering."
+        )
     if resp.status_code < 400:
         return
     err: ErrorResponse | None
@@ -155,6 +202,8 @@ def _raise_for_status(resp: httpx2.Response) -> None:
 def _transport_errors() -> Iterator[None]:
     try:
         yield
+    except httpx2.InvalidURL as exc:
+        raise InvalidRegistryURLError(f"Invalid registry URL: {exc}") from exc
     except httpx2.HTTPError as exc:
         # Transport failures (connect/DNS/timeout) surface as ``httpx2.HTTPError``.
         # Translate them into ``NetworkError`` so ``httpx2`` stays confined to this
@@ -203,6 +252,9 @@ class RegistryClient:
             # The SSL context is built here, so an SSL_CERT_FILE that does not exist
             # fails before any request; report it like other transport failures.
             raise NetworkError(f"Network error: {exc}") from exc
+        except httpx2.InvalidURL as exc:
+            # e.g. a typo in the port of --registry / FG_REGISTRY / config (not an OSError or HTTPError).
+            raise InvalidRegistryURLError(f"Invalid registry URL {base_url!r}: {exc}") from exc
 
     def close(self) -> None:
         self._client.close()
@@ -251,11 +303,11 @@ class RegistryClient:
         if tag:
             params["tag"] = tag
         resp = self._request("GET", "/designs", params=params)
-        return SearchResponse.model_validate_json(resp.content)
+        return _parse(SearchResponse, resp)
 
     def get_design(self, namespace: str, design: str) -> DesignDetailResponse:
         resp = self._request("GET", f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}")
-        return DesignDetailResponse.model_validate_json(resp.content)
+        return _parse(DesignDetailResponse, resp)
 
     def get_version(
         self,
@@ -267,7 +319,7 @@ class RegistryClient:
             "GET",
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}",
         )
-        return VersionDetailResponse.model_validate_json(resp.content)
+        return _parse(VersionDetailResponse, resp)
 
     def get_platform_manifest_bytes(
         self,
@@ -328,7 +380,13 @@ class RegistryClient:
 
     def device_authorization(self) -> dict[str, Any]:
         resp = self._request("POST", "/oauth/device_authorization")
-        result: dict[str, Any] = resp.json()
+        try:
+            result = resp.json()
+        except ValueError as exc:
+            raise _unexpected_response(resp, "a device authorization response") from exc
+        required = ("device_code", "user_code", "verification_uri")
+        if not isinstance(result, dict) or not all(isinstance(result.get(key), str) for key in required):
+            raise _unexpected_response(resp, "a device authorization response")
         return result
 
     def token_exchange(self, **kwargs: str) -> LoginResponse:
@@ -339,10 +397,15 @@ class RegistryClient:
         reader, the flat ``{token, expires_at, scopes}`` shape.
         """
         resp = self._request("POST", "/oauth/token", json=kwargs)
-        body = resp.json()
+        try:
+            body = resp.json()
+        except ValueError as exc:
+            raise _unexpected_response(resp, "a token response") from exc
         if not (isinstance(body, dict) and "access_token" in body):
-            return LoginResponse.model_validate_json(resp.content)
-        oauth = OAuthTokenResponse.model_validate_json(resp.content)
+            return _parse(LoginResponse, resp)
+        # Without expires_in (RFC 6749 only RECOMMENDS it) the token's lifetime is unknown:
+        # an unexpected response rather than a guessed expiry.
+        oauth = _parse(OAuthTokenResponse, resp)
         return LoginResponse(
             token=oauth.access_token,
             expires_at=datetime.now(tz=UTC) + timedelta(seconds=oauth.expires_in),
@@ -369,7 +432,7 @@ class RegistryClient:
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/uploads",
             json={"artifacts": artifacts},
         )
-        return ArtifactUploadResponse.model_validate_json(resp.content)
+        return _parse(ArtifactUploadResponse, resp)
 
     def upload_artifact(self, ticket: ArtifactUploadTicket, data: bytes) -> None:
         """PUT one artifact straight to object storage.
@@ -419,7 +482,7 @@ class RegistryClient:
             data=url_fields,
             files=multipart_files,
         )
-        return PublishResponse.model_validate_json(resp.content)
+        return _parse(PublishResponse, resp)
 
     # ---- Yank ----
 
@@ -435,7 +498,7 @@ class RegistryClient:
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}",
             json={"reason": reason},
         )
-        return YankResponse.model_validate_json(resp.content)
+        return _parse(YankResponse, resp)
 
     def deprecate_version(
         self,
@@ -454,7 +517,7 @@ class RegistryClient:
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/deprecate",
             json=body,
         )
-        return DeprecateResponse.model_validate_json(resp.content)
+        return _parse(DeprecateResponse, resp)
 
     def undeprecate_version(
         self,
@@ -467,7 +530,7 @@ class RegistryClient:
             "DELETE",
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/deprecate",
         )
-        return DeprecateResponse.model_validate_json(resp.content)
+        return _parse(DeprecateResponse, resp)
 
     # ---- Namespace ----
 
@@ -477,7 +540,7 @@ class RegistryClient:
 
     def get_namespace(self, namespace: str) -> NamespaceResponse:
         resp = self._request("GET", f"/namespaces/{_seg(namespace)}")
-        return NamespaceResponse.model_validate_json(resp.content)
+        return _parse(NamespaceResponse, resp)
 
     # ---- Dependencies ----
 
@@ -500,7 +563,7 @@ class RegistryClient:
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/platforms/{_seg(board_id)}/{_seg(runtime)}/dependencies",
             params=params,
         )
-        return DependenciesResponse.model_validate_json(resp.content)
+        return _parse(DependenciesResponse, resp)
 
     # ---- Shell ----
 
@@ -517,7 +580,7 @@ class RegistryClient:
             "GET",
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/platforms/{_seg(board_id)}/{_seg(runtime)}/shell",
         )
-        return ShellResponse.model_validate_json(resp.content)
+        return _parse(ShellResponse, resp)
 
     # ---- API Keys ----
 
@@ -532,12 +595,12 @@ class RegistryClient:
         if expires_at:
             body["expires_at"] = expires_at
         resp = self._request("POST", "/users/me/api-keys", json=body)
-        return ApiKeyCreateResponse.model_validate_json(resp.content)
+        return _parse(ApiKeyCreateResponse, resp)
 
     def list_api_keys(self) -> ApiKeyListResponse:
         """List all API keys for the current user."""
         resp = self._request("GET", "/users/me/api-keys")
-        return ApiKeyListResponse.model_validate_json(resp.content)
+        return _parse(ApiKeyListResponse, resp)
 
     def delete_api_key(self, key_id: int) -> None:
         """Revoke an API key."""
@@ -560,12 +623,12 @@ class RegistryClient:
         if design:
             body["design"] = design
         resp = self._request("POST", f"/namespaces/{_seg(namespace)}/webhooks", json=body)
-        return WebhookCreateResponse.model_validate_json(resp.content)
+        return _parse(WebhookCreateResponse, resp)
 
     def list_webhooks(self, namespace: str) -> WebhookListResponse:
         """List all webhooks for a namespace."""
         resp = self._request("GET", f"/namespaces/{_seg(namespace)}/webhooks")
-        return WebhookListResponse.model_validate_json(resp.content)
+        return _parse(WebhookListResponse, resp)
 
     def delete_webhook(self, namespace: str, webhook_id: int) -> None:
         """Delete a webhook."""
@@ -577,7 +640,7 @@ class RegistryClient:
             "POST",
             f"/namespaces/{_seg(namespace)}/webhooks/{_seg(webhook_id)}/test",
         )
-        return WebhookTestResponse.model_validate_json(resp.content)
+        return _parse(WebhookTestResponse, resp)
 
     def list_webhook_deliveries(
         self,
@@ -594,7 +657,7 @@ class RegistryClient:
             f"/namespaces/{_seg(namespace)}/webhooks/{_seg(webhook_id)}/deliveries",
             params=params,
         )
-        return WebhookDeliveriesResponse.model_validate_json(resp.content)
+        return _parse(WebhookDeliveriesResponse, resp)
 
     # ---- Version Diff ----
 
@@ -615,7 +678,7 @@ class RegistryClient:
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/diff",
             params=params,
         )
-        return VersionDiffResponse.model_validate_json(resp.content)
+        return _parse(VersionDiffResponse, resp)
 
     # ---- License Check ----
 
@@ -638,7 +701,7 @@ class RegistryClient:
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/license-check",
             params=params,
         )
-        return LicenseCheckResponse.model_validate_json(resp.content)
+        return _parse(LicenseCheckResponse, resp)
 
     # ---- Download Stats ----
 
@@ -664,7 +727,7 @@ class RegistryClient:
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/stats",
             params=params,
         )
-        return DesignStatsResponse.model_validate_json(resp.content)
+        return _parse(DesignStatsResponse, resp)
 
     def get_version_stats(
         self,
@@ -689,17 +752,17 @@ class RegistryClient:
             f"/namespaces/{_seg(namespace)}/designs/{_seg(design)}/versions/{_seg(version)}/stats",
             params=params,
         )
-        return VersionStatsResponse.model_validate_json(resp.content)
+        return _parse(VersionStatsResponse, resp)
 
     def get_namespace_stats(self, namespace: str) -> NamespaceStatsResponse:
         """Fetch namespace-level download summary."""
         resp = self._request("GET", f"/namespaces/{_seg(namespace)}/stats")
-        return NamespaceStatsResponse.model_validate_json(resp.content)
+        return _parse(NamespaceStatsResponse, resp)
 
     def get_namespace_quota(self, namespace: str) -> QuotaResponse:
         """Fetch namespace quota usage."""
         resp = self._request("GET", f"/namespaces/{_seg(namespace)}/quota")
-        return QuotaResponse.model_validate_json(resp.content)
+        return _parse(QuotaResponse, resp)
 
 
 @runtime_checkable

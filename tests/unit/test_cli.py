@@ -3796,3 +3796,86 @@ def test_login_error_reaches_the_terminal_without_control_characters(monkeypatch
     result = CliRunner().invoke(main, ["login"])
     assert "evil?" in result.stderr
     assert not any(c in result.stderr for c in _CONTROLS)
+
+
+# ---------------------------------------------------------------------------
+# Inputs that ended in a traceback (#158, #159, #161)
+# ---------------------------------------------------------------------------
+
+_CLOSED = {"FG_REGISTRY": "http://127.0.0.1:9/api/v1"}  # nothing leaves the machine
+
+
+@pytest.mark.parametrize("args", [["search", "foo"], ["login"]], ids=["search", "login"])
+def test_malformed_registry_url_exits_3(args: list[str]) -> None:
+    """#158: a typo in the port is invalid configuration (exit 3), for login --registry too."""
+    bad = "https://registry.example:80a/api/v1"
+    full = ["--registry", bad, *args] if args[0] != "login" else ["login", "--registry", bad]
+    result = CliRunner().invoke(main, full)
+    assert result.exit_code == 3, result.output
+    assert "Invalid registry URL" in result.stderr
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+_INDEX = (
+    "schema: fabricgate-index/v1\nname: ns/x\nversion: 1.0.0\n"
+    "platforms:\n  - platform: zcu104/pynq\n    digest: sha256:" + "a" * 64 + "\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("index", "manifest"),
+    [
+        (b"name: [\n", None),
+        (b"name: ns/x\nversion: v1\n", None),
+        ("# \u65e5\u672c\n".encode("shift_jis") + _INDEX.encode(), None),
+        (_INDEX.encode(), b"runtime: [\n"),
+    ],
+    ids=["index-yaml", "index-schema", "index-not-utf8", "manifest-yaml"],
+)
+def test_push_reports_a_broken_project_with_exit_3(tmp_path, index: bytes, manifest: bytes | None) -> None:
+    """#159: the CLI's pre-scan leaves a broken index or manifest to the SDK, which exits 3."""
+    (tmp_path / "fabricgate-index.yaml").write_bytes(index)
+    if manifest is not None:
+        (tmp_path / "zcu104" / "pynq").mkdir(parents=True)
+        (tmp_path / "zcu104" / "pynq" / "manifest.yaml").write_bytes(manifest)
+    result = CliRunner().invoke(main, ["push", str(tmp_path)], env=_CLOSED)
+    assert result.exit_code == 3, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_config_that_is_not_utf8_is_invalid_configuration(monkeypatch, tmp_path) -> None:
+    """#161: a Shift-JIS comment in config.yaml is reported, not a UnicodeDecodeError."""
+    import fabricgate.client.config as config_mod
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_bytes("# \u65e5\u672c\n".encode("shift_jis"))
+    monkeypatch.setattr(config_mod, "_DEFAULT_CONFIG_FILE", cfg)
+    result = CliRunner().invoke(main, ["list"])
+    assert result.exit_code == 3
+    assert "invalid configuration" in result.stderr
+
+
+def test_stats_version_that_is_not_semver_exits_3() -> None:
+    """#161: like a bad version in a design ref; '..' used to raise ValueError from the URL builder."""
+    result = CliRunner().invoke(main, ["stats", "ns/d", "--version", ".."], env=_CLOSED)
+    assert result.exit_code == 3, result.output
+    assert "Invalid version" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("url", "message"),
+    [
+        ("https://[bad", "Invalid webhook URL"),
+        ("https://example.com:abc/x", "Invalid webhook URL"),
+        ("https://user:pw@example.com/x", "must not contain a user name or password"),
+    ],
+)
+def test_webhook_create_rejects_a_bad_url_with_exit_3(url: str, message: str) -> None:
+    """#161: checked before credentials are read or anything is sent."""
+    result = CliRunner().invoke(
+        main,
+        ["webhook", "create", "--namespace", "alice", "--url", url, "--events", "design.version.published"],
+        env=_CLOSED,
+    )
+    assert result.exit_code == 3, result.output
+    assert message in result.stderr

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import click
+import yaml
 
 from fabricgate.cli.exit_codes import exit_with, sdk_errors
 from fabricgate.client.errors import FailureKind
@@ -32,14 +33,13 @@ def _detect_platforms(directory: Path) -> list[_PlatformInfo]:
 
     Returns an empty list if the directory does not contain a valid design index.
     """
-    from pydantic import ValidationError
-
     from fabricgate.client.publisher import PublishError, load_design_index
     from fabricgate.models.platform_manifest import parse_platform_manifest
 
+    # A broken index or manifest is left for the SDK's push to report (exit 3), not a traceback here.
     try:
         index, _ = load_design_index(directory)
-    except (PublishError, OSError):
+    except (PublishError, OSError, ValueError, yaml.YAMLError):
         return []
 
     infos: list[_PlatformInfo] = []
@@ -54,7 +54,7 @@ def _detect_platforms(directory: Path) -> list[_PlatformInfo]:
         if manifest_path.exists():
             try:
                 manifest = parse_platform_manifest(manifest_path.read_text(encoding="utf-8"))
-            except (ValidationError, OSError):
+            except (OSError, ValueError, yaml.YAMLError):
                 pass
             else:
                 info.device_family = getattr(manifest, "device_family", None)

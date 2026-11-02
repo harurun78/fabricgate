@@ -335,7 +335,7 @@ class TestDownloadArtifact:
 
 class TestDeviceAuthorization:
     def test_returns_dict(self) -> None:
-        body = {"device_code": "abc", "user_code": "1234", "interval": 5}
+        body = {"device_code": "abc", "user_code": "1234", "verification_uri": "https://r/device", "interval": 5}
         client = _make_client(_transport(200, body))
 
         result = client.device_authorization()
@@ -1260,3 +1260,63 @@ def test_dot_and_empty_segments_are_rejected(segment: str) -> None:
     with pytest.raises(ValueError, match="Invalid URL path segment"):
         client.delete_webhook(segment, 1)
     assert paths == []
+
+
+# ---------------------------------------------------------------------------
+# Responses that are not the API's (#157) and unusable registry URLs (#158)
+# ---------------------------------------------------------------------------
+
+_LOGIN_PAGE = b"<html><body>Sign in</body></html>"
+
+
+@pytest.mark.parametrize(
+    ("call", "transport", "message"),
+    [
+        (
+            lambda c: c.get_version("ns", "x", "1.0.0"),
+            _transport(200, _LOGIN_PAGE, "text/html"),
+            "not the expected VersionDetailResponse",
+        ),
+        (
+            lambda c: c.get_version("ns", "x", "1.0.0"),
+            httpx2.MockTransport(lambda r: httpx2.Response(302, headers={"Location": "https://sso/login"}, request=r)),
+            "Unexpected redirect from the registry (HTTP 302 to https://sso/login)",
+        ),
+        (
+            lambda c: c.device_authorization(),
+            _transport(200, _LOGIN_PAGE, "text/html"),
+            "not a device authorization response",
+        ),
+        (
+            lambda c: c.device_authorization(),
+            _transport(200, {"device_code": "d"}),
+            "not a device authorization response",
+        ),
+        (lambda c: c.token_exchange(grant_type="g"), _transport(200, _LOGIN_PAGE, "text/html"), "not a token response"),
+        (
+            # RFC 6749 only RECOMMENDS expires_in; without it the token's lifetime is unknown.
+            lambda c: c.token_exchange(grant_type="g"),
+            _transport(200, {"access_token": "t", "token_type": "Bearer"}),
+            "not the expected OAuthTokenResponse",
+        ),
+    ],
+    ids=["html-200", "redirect", "device-html", "device-missing-keys", "token-html", "token-no-expires-in"],
+)
+def test_a_response_that_is_not_the_apis_is_an_infra_error(call, transport, message: str) -> None:
+    """#157: a proxy, captive portal or SSO page answering is reported, not a traceback."""
+    from fabricgate.client.errors import FailureKind
+
+    with pytest.raises(NetworkError) as exc_info:
+        call(_make_client(transport))
+    assert message in str(exc_info.value)
+    assert exc_info.value.kind == FailureKind.INFRA
+
+
+def test_a_malformed_registry_url_is_invalid_configuration() -> None:
+    """#158: a typo in the port is exit 3 (invalid), raised before any request."""
+    from fabricgate.client.errors import FailureKind
+    from fabricgate.client.registry_client import InvalidRegistryURLError
+
+    with pytest.raises(InvalidRegistryURLError, match="Invalid registry URL") as exc_info:
+        RegistryClient(base_url="https://registry.example:80a/api/v1")
+    assert exc_info.value.kind == FailureKind.INVALID

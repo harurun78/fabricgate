@@ -124,6 +124,9 @@ def pull(
         raise SDKError(str(exc), code=ExitKind.INFRA) from exc
     except (IntegrityError, AttestationError) as exc:
         raise SDKError(str(exc), code=ExitKind.INVALID) from exc
+    except (ValidationError, yaml.YAMLError, UnicodeDecodeError) as exc:
+        # A manifest from the registry that this client cannot read, as verify reports it.
+        raise SDKError(f"Invalid platform manifest from the registry: {exc}", code=ExitKind.INVALID) from exc
     except OSError as exc:
         raise SDKError(str(exc), code=ExitKind.INFRA) from exc
 
@@ -308,15 +311,13 @@ def _verify_dir(
             )
 
         artifact_path = target_dir / artifact_name
-        if not artifact_path.exists():
+        if not artifact_path.is_file():
             raise SDKError(f"Artifact not found: {artifact_path}", code=ExitKind.INVALID)
-        results.append(
-            VerificationItem(
-                file=artifact_name,
-                sha256=artifact.sha256,
-                verified=verify_artifact(artifact_path, artifact.sha256),
-            )
-        )
+        try:
+            verified = verify_artifact(artifact_path, artifact.sha256)
+        except OSError as exc:
+            raise SDKError(f"Cannot read artifact {artifact_path}: {exc}", code=ExitKind.INFRA) from exc
+        results.append(VerificationItem(file=artifact_name, sha256=artifact.sha256, verified=verified))
 
     result = VerificationResult(
         design_ref=manifest.design_ref,
