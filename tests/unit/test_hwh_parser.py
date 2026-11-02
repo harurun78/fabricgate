@@ -699,7 +699,7 @@ def _invoke_build(
 ) -> Result:
     """Run ``build`` with *info* as the parsed HWH and a Board DB that only knows the ZCU104."""
     src = tmp_path / "vivado"
-    src.mkdir()
+    src.mkdir(exist_ok=True)
     (src / "design.hwh").write_text("<unused/>")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("fabricgate.cli.commands.build.parse_hwh", lambda _path: info)
@@ -907,6 +907,65 @@ class TestBuildOutputIsPushable:
         assert "'MyNS/My_Design' is not <namespace>/<design>" in result.output
         index, _ = load_design_index(tmp_path / "my-design")
         assert str(index.name) == "myns/my-design"
+
+    def test_linux_fpgamgr_output_is_pushable_without_a_hwh(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """#152: the linux-fpgamgr manifest has no hwh artifact, so build neither declares nor copies one."""
+        stdin = "myns/my-design\n1.0.0\nlinux-fpgamgr\n\n\n"
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, [], stdin)
+        assert result.exit_code == 0, result.output
+        platform_dir = tmp_path / "my-design" / "zcu104" / "linux-fpgamgr"
+        assert not (platform_dir / "design.hwh").exists()
+        assert "design.hwh" not in result.output.split("Generated:")[1]
+        (platform_dir / "design.bit").write_bytes(b"bitstream")
+
+        index, _ = load_design_index(tmp_path / "my-design")
+        files = collect_artifacts(tmp_path / "my-design", index)
+        artifacts = yaml.safe_load(files["platform:zcu104/linux-fpgamgr:manifest"])["artifacts"]
+        assert list(artifacts) == ["bitstream"]
+
+    def test_nanopynq_is_not_offered(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """#152: build cannot fill nanopynq's transport and mtu, so the runtime is asked again."""
+        stdin = "myns/my-design\n1.0.0\nnanopynq\npynq\n\n\n"
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, [], stdin)
+        assert result.exit_code == 0, result.output
+        assert "'nanopynq' is not one of" in result.output
+        assert (tmp_path / "my-design" / "zcu104" / "pynq" / "manifest.yaml").exists()
+
+    def test_invalid_version_is_asked_again(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """#152: push refuses a version that is not SemVer, so build asks again."""
+        stdin = "myns/my-design\nv1.0\n1.0.0\npynq\n\n\n"
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, [], stdin)
+        assert result.exit_code == 0, result.output
+        assert "'v1.0' is not a SemVer version" in result.output
+        index, _ = load_design_index(tmp_path / "my-design")
+        assert str(index.version) == "1.0.0"
+
+    def test_output_push_would_reject_is_not_written(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """#152: the generated index goes through push's checks before anything is written (here: > 10 tags)."""
+        tags = ",".join(f"t{i}" for i in range(11))
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, ["--tags", tags], "myns/my-design\n1.0.0\npynq\n\n")
+        assert result.exit_code == 3, result.output
+        assert "fabricgate-index.yaml would be rejected by push" in result.output
+        assert not (tmp_path / "my-design").exists()
+
+    def test_manifest_push_would_reject_is_not_written(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """#152: the generated manifest goes through push's parser too (here: a stub missing the hwh)."""
+        monkeypatch.setattr("fabricgate.cli.commands.build._HWH_RUNTIME", "none")
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, [], _BUILD_INPUT)
+        assert result.exit_code == 3, result.output
+        assert "manifest.yaml would be rejected by push" in result.output
+        assert not (tmp_path / "my-design").exists()
+
+    def test_explicit_hwh_next_to_a_manifest_is_used(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """#152: --hwh is used as given, even where the scan would skip it as an earlier build's copy."""
+        src = tmp_path / "vivado"
+        src.mkdir()
+        (src / "manifest.yaml").write_text("")
+        result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, ["--hwh", str(src / "design.hwh")], _BUILD_INPUT)
+        assert result.exit_code == 0, result.output
+        assert "No .hwh files found" not in result.output
 
     def test_input_ending_without_a_valid_design_name_exits_1(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

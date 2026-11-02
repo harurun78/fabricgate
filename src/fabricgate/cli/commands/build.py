@@ -14,15 +14,19 @@ from pydantic import TypeAdapter, ValidationError
 from fabricgate.cli.exit_codes import exit_with
 from fabricgate.client.errors import FailureKind
 from fabricgate.models.board_db import BoardDb
-from fabricgate.models.common import DesignName
-from fabricgate.models.platform_manifest import Interface
+from fabricgate.models.common import DesignName, SemVer
+from fabricgate.models.design_index import DesignIndex
+from fabricgate.models.platform_manifest import Interface, parse_platform_manifest
 from fabricgate.sdk.hwh_parser import HwhInfo, HwhParseError, ParsedInterface, find_hwh_files, parse_hwh
 
 # Artifact file names the manifest stub declares, next to manifest.yaml.
 _BITSTREAM_FILE = "design.bit"
 _HWH_FILE = "design.hwh"
+# Of the runtimes build offers, only pynq's manifest has an hwh artifact.
+_HWH_RUNTIME = "pynq"
 
 _DESIGN_NAME_ADAPTER: TypeAdapter[str] = TypeAdapter(DesignName)
+_SEMVER_ADAPTER: TypeAdapter[str] = TypeAdapter(SemVer)
 
 # ---------------------------------------------------------------------------
 # Board resolution helpers
@@ -108,15 +112,15 @@ def _make_manifest_stub(
     with the hashes of the files it uploads.
     """
     placeholder = "a" * 64
+    artifacts = {"bitstream": {"file": _BITSTREAM_FILE, "sha256": placeholder}}
+    if runtime == _HWH_RUNTIME:
+        artifacts["hwh"] = {"file": _HWH_FILE, "sha256": placeholder}
     data: dict[str, object] = {
         "schema": "fabricgate-platform/v1",
         "runtime": runtime,
         "board": board,
         "design_ref": design_ref,
-        "artifacts": {
-            "bitstream": {"file": _BITSTREAM_FILE, "sha256": placeholder},
-            "hwh": {"file": _HWH_FILE, "sha256": placeholder},
-        },
+        "artifacts": artifacts,
     }
     if device_family:
         data["device_family"] = device_family
@@ -209,6 +213,7 @@ def build_cmd(
     """Generate Platform Manifest and Design Index from a Vivado HWH file."""
     inputs = _collect_inputs(directory, hwh_path_opt, namespace=namespace, semver=semver, tags=tags)
     index_yaml, manifest_yaml = _render_stubs(inputs)
+    _check_pushable(index_yaml, manifest_yaml)
     _write_outputs(inputs, index_yaml, manifest_yaml, output_dir=output_dir, dry_run=dry_run)
 
 
@@ -253,8 +258,7 @@ def _collect_inputs(
         value_proc=lambda raw: _to_design_name(raw, namespace),
     )
 
-    raw_version = click.prompt("Version", default=semver or "0.1.0")
-    version = raw_version.strip()
+    version: str = click.prompt("Version", default=semver or "0.1.0", value_proc=_to_version)
 
     runtime = _prompt_runtime()
 
@@ -293,7 +297,32 @@ def _to_design_name(raw: str, namespace: str | None) -> str:
         raise click.BadParameter(msg) from None
 
 
+def _to_version(raw: str) -> str:
+    """Return *raw* stripped; push refuses an index whose version is not SemVer, so ask again."""
+    version = raw.strip()
+    try:
+        return _SEMVER_ADAPTER.validate_python(version)
+    except ValidationError:
+        raise click.BadParameter(f"{version!r} is not a SemVer version (e.g. 1.0.0)") from None
+
+
+def _check_pushable(index_yaml: str, manifest_yaml: str) -> None:
+    """Run push's checks on the generated YAML, so build never writes what push rejects."""
+    for name, check in (
+        ("fabricgate-index.yaml", lambda: DesignIndex.model_validate(yaml.safe_load(index_yaml))),
+        ("manifest.yaml", lambda: parse_platform_manifest(manifest_yaml)),
+    ):
+        try:
+            check()
+        except ValidationError as exc:
+            click.echo(f"Error: The generated {name} would be rejected by push: {exc}", err=True)
+            exit_with(FailureKind.INVALID)
+
+
 def _select_hwh(directory: Path, hwh_path_opt: Path | None) -> Path:
+    if hwh_path_opt is not None:
+        # Used as given: the scan's skipping of earlier builds' copies does not apply.
+        return hwh_path_opt
     click.echo("Scanning for HWH files ...")
     # An HWH next to a manifest.yaml is the copy an earlier build made, not a Vivado output.
     hwh_files = [f for f in find_hwh_files(directory) if not (f.parent / "manifest.yaml").exists()]
@@ -303,8 +332,6 @@ def _select_hwh(directory: Path, hwh_path_opt: Path | None) -> Path:
     for f in hwh_files:
         click.echo(f"  Found: {f.relative_to(directory.parent)}")
 
-    if hwh_path_opt is not None:
-        return hwh_path_opt
     if len(hwh_files) > 1:
         if not _stdin_is_tty():
             # Non-interactive: error — user must specify via --hwh
@@ -409,13 +436,15 @@ def _write_outputs(
     # push reads <project>/<board_id>/<runtime>/manifest.yaml
     manifest_path = out_root / inputs.board_id / inputs.runtime / "manifest.yaml"
     index_path = out_root / "fabricgate-index.yaml"
-    hwh_path = manifest_path.parent / _HWH_FILE
+    # Only a manifest that declares the hwh artifact needs the HWH next to it.
+    hwh_path = manifest_path.parent / _HWH_FILE if inputs.runtime == _HWH_RUNTIME else None
 
     click.echo("\nGenerated:")
     if dry_run:
         click.echo(f"  (dry-run) {index_path}")
         click.echo(f"  (dry-run) {manifest_path}")
-        click.echo(f"  (dry-run) {hwh_path}")
+        if hwh_path is not None:
+            click.echo(f"  (dry-run) {hwh_path}")
         click.echo("\n--- fabricgate-index.yaml ---")
         click.echo(index_yaml)
         click.echo(f"--- {inputs.platform_id}/manifest.yaml ---")
@@ -426,7 +455,7 @@ def _write_outputs(
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         manifest_path.write_text(manifest_yaml, encoding="utf-8")
         # push uploads the HWH from next to the manifest, under the name the manifest declares.
-        if inputs.hwh_path.resolve() != hwh_path.resolve():
+        if hwh_path is not None and inputs.hwh_path.resolve() != hwh_path.resolve():
             shutil.copyfile(inputs.hwh_path, hwh_path)
         index_path.write_text(index_yaml, encoding="utf-8")
     except OSError as exc:
@@ -435,7 +464,8 @@ def _write_outputs(
 
     click.echo(f"  {index_path}  ✓")
     click.echo(f"  {manifest_path}  ✓")
-    click.echo(f"  {hwh_path}  ✓")
+    if hwh_path is not None:
+        click.echo(f"  {hwh_path}  ✓")
     click.echo(f"\nNote: Copy the bitstream to {manifest_path.parent / _BITSTREAM_FILE} before publishing.")
     click.echo(f"Run `fabricgate push {out_root}/` to publish.")
 
@@ -443,7 +473,8 @@ def _write_outputs(
 def _prompt_runtime() -> str:
     result: str = click.prompt(
         "Runtime",
-        type=click.Choice(["pynq", "linux-fpgamgr", "nanopynq"]),
+        # Not nanopynq: its manifest needs transport and mtu, which an HWH does not give.
+        type=click.Choice(["pynq", "linux-fpgamgr"]),
         default="pynq",
     )
     return result
