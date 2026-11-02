@@ -6,6 +6,8 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-02
+
 ### Security
 
 - `fabricgate login` no longer passes control characters in the verification URL and user code from the registry to the terminal (GHSA-2j7g-8j32-64w8); they become `?`, as other registry-supplied text has since 0.5.1 (GHSA-52f8-qqmp-xqw6). No API or schema change.
