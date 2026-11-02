@@ -443,7 +443,7 @@ Run `fabricgate push ./my-design/` to publish.
 
 **Exit codes:**
 - 0: 生成成功
-- 1: HWH ファイルが見つからない / HWH パース失敗 / 非 TTY で複数 HWH が見つかり `--hwh` 未指定 / Board DB 未登録ボードの確認プロンプトを中断 / 正しいデザイン名が入力されないまま入力が終わった
+- 1: HWH ファイルが見つからない / HWH パース失敗 / 非 TTY で複数 HWH が見つかり `--hwh` 未指定 / Board DB 未登録ボードの確認プロンプトを中断 / 正しいデザイン名か SemVer のバージョンが入力されないまま入力が終わった
 - 3: 生成した index か manifest が push の検証を通らない（何も書かない）
 - 4: Board DB 読み込み失敗 / 生成先ディレクトリへの書き込み・HWH のコピー失敗（infrastructure）
 
