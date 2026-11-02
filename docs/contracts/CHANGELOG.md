@@ -10,6 +10,11 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 - `fabricgate search --limit <n>` (1 to 1000, default 20) and the SDK's `search(limit=...)`: results are the most recently updated designs, fetched across pages of the registry (at most 100 per page) when the limit is over 100. When more designs match than are shown, search says so on stderr ("Showing 20 of 45 designs ..."); before, everything after the first 20 was dropped silently. `search()` now returns `SearchResults`, a list with a `total` attribute (the number of matching designs), so existing code that treats the result as a list keeps working. An out-of-range limit is exit 3. No API or schema change.
 
+### Changed
+
+- Design Index / Platform Manifest: `shell_dependency.version` must be `=X.Y.Z` without leading zeros (`=01.2.3` is rejected), like every other version. A pin with leading zeros could never match a published shell. `docs/contracts/schemas/` is regenerated.
+- Board DB (`official.yaml` / `custom.yaml`): an interface's `direction` must be `tx`, `rx` or `inout`, `source` must be `vivado-boardstore`, `manual` or `community`, and `count` must be 0 or more, as board-db-schema lists them. A `custom.yaml` with other values no longer loads (`build` reports "Board DB load failed"). `board-db.schema.json` is regenerated.
+
 ### Fixed
 
 - Errors that ended in a Python traceback (exit 1) now print a message and exit with the code for their kind (ADR-008). No API or schema change.
@@ -24,6 +29,9 @@ first shipped the change. Changes not yet in a tagged release are listed under
 - A `~/.fabricgate/config.yaml` that is not a mapping (a bare URL, a YAML list) is invalid configuration (exit 3); it was ignored, so the public registry was used instead. An empty file still means the defaults. No API or schema change.
 - `~` in `--cache-dir` and `FG_CACHE_DIR` is expanded to the home directory, as it already was in `config.yaml`; it created a directory named `~` in the working directory. No API or schema change.
 - `fabricgate token create --expires` with a date or datetime more than 3650 days ahead is exit 3, as `<N>d` over 3650 already was (CLI spec §3.8); it created a key with that expiry. No API or schema change.
+- `fabricgate build` with an HWH whose device is given only on the root `PART` (no `<SYSTEMINFO>`) and a 7-series part such as `xc7z020clg400-1` now reads device family `xc7z020` and package `clg400`; it read `xc7z020clg400` and `1`. HWH files from current Vivado (with `<SYSTEMINFO>`) were not affected.
+- SDK: `RegistryClient.list_namespaces()` parses `GET /namespaces` as the paginated `NamespaceListResponse` (with `q`, `page`, `per_page`). It expected a list and always failed.
+- design-index-schema: `shell_dependency.sha256` is documented as required, as the model, platform-manifest-schema §2.6 and ADR-009 already had it.
 
 ## [0.5.1] - 2026-11-02
 

@@ -1574,6 +1574,9 @@ class TestShellDependency:
             "~1.0.0",
             "*",
             ">=1.0.0",
+            "=01.0.0",
+            "=1.002.3",
+            "=1.0.00",
         ],
     )
     def test_rejects_non_exact_version(self, version: str):
@@ -1581,6 +1584,13 @@ class TestShellDependency:
 
         with pytest.raises(ValidationError):
             ShellDependency(name="acme/shell", version=version, sha256="ab" * 32)
+
+    @pytest.mark.parametrize("version", ["=0.0.0", "=0.10.0", "=10.20.30"])
+    def test_accepts_semver_pin(self, version: str):
+        """#166: a pin is SemVer without leading zeros, so it can match a published shell."""
+        from fabricgate.models.platform_manifest import ShellDependency
+
+        assert ShellDependency(name="acme/shell", version=version, sha256="ab" * 32).version == version
 
     def test_rejects_invalid_sha256(self):
         from fabricgate.models.platform_manifest import ShellDependency
@@ -2134,6 +2144,21 @@ class TestBoardInterface:
 
         iface = BoardInterface(type="uart", unknown_field="x")
         assert iface.type == "uart"
+
+    @pytest.mark.parametrize(
+        "fields", [{"direction": "out"}, {"source": "vendor"}, {"count": -1}], ids=["direction", "source", "count"]
+    )
+    def test_rejects_values_outside_the_schema(self, fields):
+        """#166: board-db-schema lists direction tx/rx/inout, source vivado-boardstore/manual/community."""
+        from fabricgate.models.board_db import BoardInterface
+
+        with pytest.raises(ValidationError):
+            BoardInterface(type="pmod", **fields)
+
+    def test_bundled_official_db_still_loads(self):
+        from fabricgate.models.board_db import _parse_bundled_official
+
+        assert _parse_bundled_official()
 
 
 class TestBoardEntry:

@@ -41,7 +41,7 @@ platforms:
     shell_dependency:              # Optional: partial bitstream only — static shell dependency
       name: <namespace>/<design>
       version: =<X.Y.Z>            # Exact match only
-      sha256: <64-hex>             # Optional: shell bitstream hex digest
+      sha256: <64-hex>             # Required: shell bitstream hex digest (ADR-009 pin)
 ```
 
 ## 3. Field Specifications
@@ -181,7 +181,7 @@ Required when the corresponding Platform Manifest has `bitstream_type: partial`.
 |-------|-------------|
 | `name` | Shell design reference (`namespace/design`) |
 | `version` | Exact shell version (`=X.Y.Z`) — no ranges allowed |
-| `sha256` | Optional hex digest of the shell bitstream for extra integrity check |
+| `sha256` | Required. SHA-256 hex digest of the shell's bitstream artifact on the same platform (ADR-009 pin, as in platform-manifest-schema §2.6) |
 
 ## 4. Examples
 

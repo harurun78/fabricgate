@@ -101,6 +101,11 @@
         "direction": {
           "anyOf": [
             {
+              "enum": [
+                "tx",
+                "rx",
+                "inout"
+              ],
               "type": "string"
             },
             {
@@ -112,11 +117,17 @@
         },
         "count": {
           "default": 1,
+          "minimum": 0,
           "title": "Count",
           "type": "integer"
         },
         "source": {
           "default": "manual",
+          "enum": [
+            "vivado-boardstore",
+            "manual",
+            "community"
+          ],
           "title": "Source",
           "type": "string"
         }

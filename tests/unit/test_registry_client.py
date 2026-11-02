@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 
 import httpx2
 import pytest
-from pydantic import ValidationError
 
 from fabricgate.client.registry_client import NetworkError, RegistryClient, RegistryError
 
@@ -590,16 +589,21 @@ class TestUndeprecateVersion:
 
 
 class TestListNamespaces:
-    def test_strict_mode_rejects_str_datetime(self) -> None:
-        body = [{"name": "demo", "display_name": "Demo", "description": "", "status": "active", "created_at": _NOW}]
+    def test_parses_the_paginated_object(self) -> None:
+        """#166: GET /namespaces returns NamespaceListResponse (an object), with ISO datetimes."""
+        seen: dict[str, str] = {}
+        ns = {"name": "demo", "display_name": "Demo", "description": "", "status": "active", "created_at": _NOW}
+        body = {"namespaces": [ns], "total": 1, "page": 2, "per_page": 5}
 
-        transport = _transport(200, body)
-        client = _make_client(transport)
+        def _handler(request: httpx2.Request) -> httpx2.Response:
+            seen.update(request.url.params)
+            return httpx2.Response(200, json=body)
 
-        # list_namespaces uses model_validate (not model_validate_json);
-        # strict mode prevents str→datetime coercion — verify it raises.
-        with pytest.raises(ValidationError):
-            client.list_namespaces()
+        client = _make_client(httpx2.MockTransport(_handler))
+        result = client.list_namespaces(q="de", page=2, per_page=5)
+        assert seen == {"q": "de", "page": "2", "per_page": "5"}
+        assert [n.name for n in result.namespaces] == ["demo"]
+        assert result.total == 1
 
 
 class TestGetNamespace:

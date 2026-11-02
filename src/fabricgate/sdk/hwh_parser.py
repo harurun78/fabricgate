@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -80,9 +81,13 @@ class HwhInfo:
 def _extract_device_family_and_package(part: str) -> tuple[str | None, str | None]:
     """Split a Vivado PART string into ``(device_family, package)``.
 
-    Example: ``"xczu7ev-ffvc1156-2-e"`` → ``("xczu7ev", "ffvc1156")``
+    Examples: ``"xczu7ev-ffvc1156-2-e"`` → ``("xczu7ev", "ffvc1156")``;
+    7-series parts have no dash before the package: ``"xc7z020clg400-1"`` → ``("xc7z020", "clg400")``,
+    ``"xc7a35ticsg324-1L"`` → ``("xc7a35ti", "csg324")`` (as SYSTEMINFO's DEVICE / PACKAGE give them).
     """
     segments = part.lower().split("-")
+    if seven_series := re.fullmatch(r"(xc7[a-z]+[0-9]+t?i?)([a-z]+[0-9]+)", segments[0]):
+        return seven_series.group(1), seven_series.group(2)
     device_family = segments[0] if segments else None
     package = segments[1] if len(segments) >= 2 else None
     return device_family, package
