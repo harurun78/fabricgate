@@ -21,13 +21,15 @@ from fabricgate.sdk import api as sdk_api
 def login_cmd(obj: dict[str, object], registry: str | None) -> None:
     """Authenticate with the registry."""
     reg: str = registry or str(obj["registry"])
-    click.echo(f"Using registry: {reg}\n")
+    # With --json, stdout carries only the JSON; the guidance goes to stderr, where the user still sees the code.
+    to_stderr = bool(obj["json"])
+    click.echo(f"Using registry: {reg}\n", err=to_stderr)
 
     def _on_user_code(verification_uri: str, user_code: str) -> None:
-        click.echo("To authenticate, visit:")
-        click.echo(f"  {verification_uri}")
-        click.echo(f"  and enter code: {user_code}\n")
-        click.echo("Waiting for authorization ...", nl=False)
+        click.echo("To authenticate, visit:", err=to_stderr)
+        click.echo(f"  {verification_uri}", err=to_stderr)
+        click.echo(f"  and enter code: {user_code}\n", err=to_stderr)
+        click.echo("Waiting for authorization ...", nl=False, err=to_stderr)
 
     try:
         result = sdk_api.login(
@@ -36,11 +38,11 @@ def login_cmd(obj: dict[str, object], registry: str | None) -> None:
         )
     # Not sdk_errors(): the "Waiting for authorization ..." line needs its " ✗" first.
     except sdk_api.SDKError as exc:
-        click.echo(" ✗", err=False)
+        click.echo(" ✗", err=to_stderr)
         click.echo(sanitize_lines(str(exc)), err=True)
         raise click.exceptions.Exit(exit_code_for(exc)) from exc
 
-    click.echo(" ✓\n")
+    click.echo(" ✓\n", err=to_stderr)
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))

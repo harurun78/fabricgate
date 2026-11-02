@@ -24,6 +24,9 @@ first shipped the change. Changes not yet in a tagged release are listed under
 - A `~/.fabricgate/config.yaml` that is not a mapping (a bare URL, a YAML list) is invalid configuration (exit 3); it was ignored, so the public registry was used instead. An empty file still means the defaults. No API or schema change.
 - `~` in `--cache-dir` and `FG_CACHE_DIR` is expanded to the home directory, as it already was in `config.yaml`; it created a directory named `~` in the working directory. No API or schema change.
 - `fabricgate token create --expires` with a date or datetime more than 3650 days ahead is exit 3, as `<N>d` over 3650 already was (CLI spec §3.8); it created a key with that expiry. No API or schema change.
+- `fabricgate --json login` prints only the JSON result on stdout; the registry, verification URL, code and ✓ / ✗ go to stderr. Before, they came first on stdout, so the output did not parse as JSON. No API or schema change.
+- `fabricgate watch --shell` says "New shell version found: <ns/design>:<version>" as in CLI spec §3.8b. No API or schema change.
+- `fabricgate info` lists each platform's board (with its name from the Board DB), speed grade, size and artifacts, as in CLI spec §3.5; it printed only the platform ID. `--json` is unchanged. No API or schema change.
 
 ## [0.5.1] - 2026-11-02
 
