@@ -6,7 +6,6 @@ from pathlib import Path
 
 import click
 import yaml
-from pydantic import ValidationError
 
 from fabricgate._version import __version__
 from fabricgate.cli.commands.build import build_cmd
@@ -61,7 +60,8 @@ def main(
     """FabricGate — FPGA design registry CLI."""
     try:
         config = load_config()
-    except (ValidationError, yaml.YAMLError, OSError) as exc:
+    # ValueError: a ValidationError, or a UnicodeDecodeError for a file that is not UTF-8.
+    except (ValueError, yaml.YAMLError, OSError) as exc:
         click.echo(f"Error: invalid configuration (~/.fabricgate/config.yaml or FG_* variables): {exc}", err=True)
         raise click.exceptions.Exit(EXIT_CODE[FailureKind.INVALID]) from exc
     ctx.obj = {

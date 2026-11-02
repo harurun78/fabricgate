@@ -6115,3 +6115,65 @@ def test_verify_rejects_an_unsupported_constraint(tmp_path: Path, constraint: st
     with pytest.raises(sdk_api.SDKError, match="Unsupported dependency constraint") as exc_info:
         sdk_api.verify(tmp_path, offline=True)
     assert exc_info.value.code == ExitKind.INVALID
+
+
+# ---------------------------------------------------------------------------
+# Inputs that ended in a traceback (#161)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("content", ["null", "[]"])
+def test_credentials_file_that_is_not_an_object_is_a_value_error(tmp_path: Path, content: str) -> None:
+    """Callers report a ValueError as a damaged credential store (exit 3); an AttributeError was a traceback."""
+    from fabricgate.client import auth
+
+    path = tmp_path / "credentials.json"
+    path.write_text(content)
+    with pytest.raises(ValueError, match="not a JSON object"):
+        auth._load_creds_file(path)
+
+
+class _UnreadableManifestClient(_FakeRegistryClientWithDeps):
+    def get_platform_manifest_bytes(self, *_a):
+        return b"runtime: [\n"
+
+
+def test_pull_reports_a_manifest_it_cannot_read_with_exit_3(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _patch_all_rc(monkeypatch, _UnreadableManifestClient)
+    with pytest.raises(sdk_api.SDKError, match="Invalid platform manifest from the registry") as exc_info:
+        sdk_api.pull("test-ns/blink:1.0.0", platform="xc7z020/pynq", output=tmp_path, cache_dir=None)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+class _LongSummaryClient(_FakeRegistryClientWithDeps):
+    def get_version(self, namespace, design, version):
+        detail = super().get_version(namespace, design, version)
+        return detail.model_copy(update={"summary": "x" * 201, "tags": [f"t{i}" for i in range(11)]})
+
+
+def test_pull_ignores_index_fields_it_does_not_use(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A summary or tags the current schema would reject must not make pull fail (#161)."""
+    _patch_all_rc(monkeypatch, _LongSummaryClient)
+    result = sdk_api.pull("test-ns/blink:1.0.0", platform="xc7z020/pynq", output=tmp_path, cache_dir=None, no_deps=True)
+    assert result.artifacts
+
+
+def test_sdk_push_manifest_that_is_not_utf8_is_invalid(tmp_path: Path) -> None:
+    index = (
+        "schema: fabricgate-index/v1\nname: ns/x\nversion: 1.0.0\n"
+        "platforms:\n  - platform: zcu104/pynq\n    digest: sha256:" + "a" * 64 + "\n"
+    )
+    (tmp_path / "fabricgate-index.yaml").write_text(index)
+    (tmp_path / "zcu104" / "pynq").mkdir(parents=True)
+    (tmp_path / "zcu104" / "pynq" / "manifest.yaml").write_bytes("# \u65e5\u672c\n".encode("shift_jis"))
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        sdk_api.push(tmp_path, registry="http://127.0.0.1:9/api/v1")
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_verify_artifact_path_that_is_a_directory_is_not_found(tmp_path: Path) -> None:
+    (tmp_path / "manifest.yaml").write_bytes(_FakeRegistryClientWithDeps().manifest_bytes)
+    (tmp_path / "design.bit").mkdir()
+    with pytest.raises(sdk_api.SDKError, match="Artifact not found") as exc_info:
+        sdk_api.verify(tmp_path, offline=True)
+    assert exc_info.value.code == ExitKind.INVALID

@@ -72,6 +72,9 @@ def _load_creds_file(path: Path) -> dict[str, Credentials]:
     if not path.exists():
         return {}
     data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        # Callers report a ValueError as a damaged credential store (exit 3), not a traceback.
+        raise ValueError("the credentials file is not a JSON object")
     return {k: Credentials.model_validate_json(json.dumps(v)) for k, v in data.items()}
 
 

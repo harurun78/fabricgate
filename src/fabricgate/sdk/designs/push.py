@@ -7,7 +7,6 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import yaml
-from pydantic import ValidationError
 
 from fabricgate.client.publisher import PublishError, collect_artifacts, load_design_index, promote_platforms
 from fabricgate.client.registry_client import RegistryClient, RegistryError
@@ -107,7 +106,7 @@ def push(
         index, _index_path = load_design_index(project_dir)
     except PublishError as exc:
         raise SDKError(str(exc), code=ExitKind.INVALID) from exc
-    except (ValidationError, yaml.YAMLError) as exc:
+    except (ValueError, yaml.YAMLError) as exc:  # ValidationError, or a file that is not UTF-8
         raise SDKError(f"Invalid design index: {exc}", code=ExitKind.INVALID) from exc
     except OSError as exc:
         raise SDKError(f"Cannot read the design index: {exc}", code=ExitKind.INFRA) from exc
@@ -140,7 +139,7 @@ def push(
             files = promote_platforms(files, promotions)
     except PublishError as exc:
         raise SDKError(str(exc), code=ExitKind.INVALID) from exc
-    except (ValidationError, yaml.YAMLError) as exc:
+    except (ValueError, yaml.YAMLError) as exc:  # ValidationError, or a file that is not UTF-8
         raise SDKError(f"Invalid platform manifest: {exc}", code=ExitKind.INVALID) from exc
     except OSError as exc:
         raise SDKError(f"Cannot read the project files: {exc}", code=ExitKind.INFRA) from exc

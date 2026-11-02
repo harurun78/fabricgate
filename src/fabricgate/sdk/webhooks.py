@@ -48,9 +48,15 @@ def webhook_create(
         Base URL for the registry API.
     """
     _validate_namespace_name(namespace)
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+        parsed.port  # noqa: B018 - raises ValueError for a port that is not a number in range
+    except ValueError as exc:
+        raise SDKError(f"Invalid webhook URL: {exc}", code=ExitKind.INVALID) from exc
     if parsed.scheme != "https" or not parsed.hostname:
         raise SDKError("Webhook URL must use HTTPS.", code=ExitKind.INVALID)
+    if parsed.username is not None or parsed.password is not None:
+        raise SDKError("Webhook URL must not contain a user name or password.", code=ExitKind.INVALID)
 
     token = _require_token(registry)
 

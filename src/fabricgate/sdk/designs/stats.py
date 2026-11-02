@@ -14,6 +14,7 @@ from fabricgate.sdk._helpers import (
     _registry_errors,
     _sum_days,
     _validate_namespace_name,
+    _validate_semver,
     _validate_stats_date_range,
 )
 
@@ -67,6 +68,7 @@ def stats(
         resolved_version = version or ref_version
 
         if resolved_version:
+            _validate_semver(resolved_version)
             version_resp = client.get_version_stats(
                 parsed_namespace,
                 design,

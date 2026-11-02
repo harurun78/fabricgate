@@ -110,10 +110,9 @@ def _version_detail_to_index(data: dict[str, Any]) -> DesignIndex:
     # added to the API model later does not make pull fail.
     if "platforms" in data:
         data["platforms"] = [{k: v for k, v in p.items() if k in PlatformEntry.model_fields} for p in data["platforms"]]
-    # Versions published before #47 may carry non-http(s) links; pull does not use them.
-    data.pop("repository", None)
-    data.pop("docs", None)
-    return DesignIndex.model_validate(data)
+    # Only what pull uses: a summary, tags or links the current schema would reject (e.g. versions
+    # published before #47 with non-http(s) links) must not make pull fail.
+    return DesignIndex.model_validate({k: data[k] for k in ("schema", "name", "version", "platforms") if k in data})
 
 
 def _validate_artifact_filename(artifact_name: str, *, context: str) -> Path:
