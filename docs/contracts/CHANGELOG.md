@@ -10,6 +10,11 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 - `fabricgate search --limit <n>` (1 to 1000, default 20) and the SDK's `search(limit=...)`: results are the most recently updated designs, fetched across pages of the registry (at most 100 per page) when the limit is over 100. When more designs match than are shown, search says so on stderr ("Showing 20 of 45 designs ..."); before, everything after the first 20 was dropped silently. `search()` now returns `SearchResults`, a list with a `total` attribute (the number of matching designs), so existing code that treats the result as a list keeps working. An out-of-range limit is exit 3. No API or schema change.
 
+### Changed
+
+- Design Index / Platform Manifest: `shell_dependency.version` must be `=X.Y.Z` without leading zeros (`=01.2.3` is rejected), like every other version. A pin with leading zeros could never match a published shell. `docs/contracts/schemas/` is regenerated.
+- Board DB (`official.yaml` / `custom.yaml`): an interface's `direction` must be `tx`, `rx` or `inout`, `source` must be `vivado-boardstore`, `manual` or `community`, and `count` must be 0 or more, as board-db-schema lists them. A `custom.yaml` with other values no longer loads (`build` reports "Board DB load failed"). `board-db.schema.json` is regenerated.
+
 ### Fixed
 
 - Errors that ended in a Python traceback (exit 1) now print a message and exit with the code for their kind (ADR-008). No API or schema change.
@@ -27,6 +32,9 @@ first shipped the change. Changes not yet in a tagged release are listed under
 - `fabricgate --json login` prints only the JSON result on stdout; the registry, verification URL, code and ✓ / ✗ go to stderr. Before, they came first on stdout, so the output did not parse as JSON. No API or schema change.
 - `fabricgate watch --shell` says "New shell version found: <ns/design>:<version>" as in CLI spec §3.8b. No API or schema change.
 - `fabricgate info` lists each platform's board (with its name from the Board DB), speed grade, size and artifacts, as in CLI spec §3.5; it printed only the platform ID. `--json` is unchanged. No API or schema change.
+- `fabricgate build` with an HWH whose device is given only on the root `PART` (no `<SYSTEMINFO>`) and a 7-series part such as `xc7z020clg400-1` now reads device family `xc7z020` and package `clg400`; it read `xc7z020clg400` and `1`. HWH files from current Vivado (with `<SYSTEMINFO>`) were not affected.
+- SDK: `RegistryClient.list_namespaces()` parses `GET /namespaces` as the paginated `NamespaceListResponse` (with `q`, `page`, `per_page`). It expected a list and always failed.
+- design-index-schema: `shell_dependency.sha256` is documented as required, as the model, platform-manifest-schema §2.6 and ADR-009 already had it.
 
 ## [0.5.1] - 2026-11-02
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import importlib.resources
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -36,9 +36,9 @@ class BoardInterface(FabricGateModel):
     model_config = _EXTRA_IGNORE
 
     type: str
-    direction: str | None = None  # "tx" | "rx" | "inout"
-    count: int = 1
-    source: str = "manual"  # "vivado-boardstore" | "manual" | "community"
+    direction: Literal["tx", "rx", "inout"] | None = None
+    count: int = Field(default=1, ge=0)
+    source: Literal["vivado-boardstore", "manual", "community"] = "manual"
 
 
 class BoardEntry(FabricGateModel):

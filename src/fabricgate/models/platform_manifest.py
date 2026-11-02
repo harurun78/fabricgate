@@ -137,7 +137,7 @@ class ShellDependency(FabricGateModel):
 
     name: DesignName
     version: str = Field(
-        pattern=r"^=[0-9]+\.[0-9]+\.[0-9]+$",
+        pattern=r"^=(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
         max_length=64,
     )
     sha256: str = Field(

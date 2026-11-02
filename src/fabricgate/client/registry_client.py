@@ -25,6 +25,7 @@ from fabricgate.models.api.responses import (
     DesignStatsResponse,
     LicenseCheckResponse,
     LoginResponse,
+    NamespaceListResponse,
     NamespaceResponse,
     NamespaceStatsResponse,
     OAuthTokenResponse,
@@ -570,9 +571,12 @@ class RegistryClient:
 
     # ---- Namespace ----
 
-    def list_namespaces(self) -> list[NamespaceResponse]:
-        resp = self._request("GET", "/namespaces")
-        return [NamespaceResponse.model_validate(ns) for ns in resp.json()]
+    def list_namespaces(self, q: str | None = None, page: int = 1, per_page: int = 20) -> NamespaceListResponse:
+        params: dict[str, Any] = {"page": page, "per_page": per_page}
+        if q:
+            params["q"] = q
+        resp = self._request("GET", "/namespaces", params=params)
+        return _parse(NamespaceListResponse, resp)
 
     def get_namespace(self, namespace: str) -> NamespaceResponse:
         resp = self._request("GET", f"/namespaces/{_seg(namespace)}")
