@@ -34,9 +34,13 @@ def verify_digest(path: Path, expected_digest: str) -> bool:
 
 
 def is_single_filename(name: str) -> bool:
-    """Return True if *name* is one non-empty path segment (no absolute path, ``..`` or ``/``)."""
+    """Return True if *name* is one non-empty path segment (no absolute path, ``..`` or ``/``).
+
+    Control and other non-printable characters are refused too: a manifest's file names
+    end up in terminal output and on disk.
+    """
     parts = Path(name).parts
-    return bool(name) and not Path(name).is_absolute() and ".." not in parts and len(parts) == 1
+    return bool(name) and name.isprintable() and not Path(name).is_absolute() and ".." not in parts and len(parts) == 1
 
 
 def artifact_refs(manifest: PlatformManifest) -> list[ArtifactRef | KernelModule]:

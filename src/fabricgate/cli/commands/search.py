@@ -7,6 +7,7 @@ import json
 import click
 
 from fabricgate.cli.exit_codes import sdk_errors
+from fabricgate.cli.formatting import sanitize
 from fabricgate.sdk import api as sdk_api
 
 
@@ -54,4 +55,4 @@ def search_cmd(
     for result in results:
         platforms = ",".join(result.platforms)
         summary = result.summary or ""
-        click.echo(f"{result.name} {result.version} {platforms} {summary}".rstrip())
+        click.echo(sanitize(f"{result.name} {result.version} {platforms} {summary}".rstrip()))

@@ -7,6 +7,7 @@ import json
 import click
 
 from fabricgate.cli.exit_codes import exit_with, sdk_errors
+from fabricgate.cli.formatting import sanitize
 from fabricgate.client.errors import FailureKind
 from fabricgate.sdk import api as sdk_api
 
@@ -42,21 +43,22 @@ def license_check_cmd(
             exit_with(FailureKind.INVALID)
         return
 
-    click.echo(f"Design:   {result.design}:{result.version}")
+    click.echo(sanitize(f"Design:   {result.design}:{result.version}"))
 
     if not result.tool_requirements:
         click.echo("\nNo tool requirements defined.")
-        click.echo(f"\nDisclaimer: {result.disclaimer}")
+        click.echo(f"\nDisclaimer: {sanitize(result.disclaimer)}")
         # GENERIC: no requirements to check (ADR-008). Exit 2 is reserved for
         # PERMISSION; a missing-data signal must not collide with it.
         exit_with(FailureKind.GENERIC)
 
     if result.check is not None:
         # Tool/edition check mode
-        click.echo(f"\ncheck: {result.check.tool}" + (f" ({result.check.edition})" if result.check.edition else ""))
+        edition = f" ({result.check.edition})" if result.check.edition else ""
+        click.echo(f"\ncheck: {sanitize(result.check.tool + edition)}")
         symbol = "\u2713" if result.check.meets_requirements else "\u2717"
         for note in result.check.notes:
-            click.echo(f"  {symbol}  {note}")
+            click.echo(f"  {symbol}  {sanitize(note)}")
         status = "MEETS REQUIREMENTS" if result.check.meets_requirements else "DOES NOT MEET REQUIREMENTS"
         click.echo(f"\nResult: {status}")
     else:
@@ -64,16 +66,16 @@ def license_check_cmd(
         click.echo("\nTool Requirements:")
         for req in result.tool_requirements:
             label = "required" if req.required else "optional"
-            click.echo(f"  {req.tool} ({label})")
+            click.echo(f"  {sanitize(req.tool)} ({label})")
             if req.min_version:
-                click.echo(f"    Min version: {req.min_version}")
+                click.echo(f"    Min version: {sanitize(req.min_version)}")
             if req.edition:
-                click.echo(f"    Edition:     {req.edition}")
+                click.echo(f"    Edition:     {sanitize(req.edition)}")
             if req.note:
-                click.echo(f"    Note:        {req.note}")
+                click.echo(f"    Note:        {sanitize(req.note)}")
             click.echo()
 
-    click.echo(f"Disclaimer: {result.disclaimer}")
+    click.echo(f"Disclaimer: {sanitize(result.disclaimer)}")
 
     if result.check is not None and not result.check.meets_requirements:
         exit_with(FailureKind.INVALID)

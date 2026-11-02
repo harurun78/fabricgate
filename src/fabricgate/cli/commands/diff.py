@@ -4,22 +4,13 @@ from __future__ import annotations
 
 import json
 import string
-from collections.abc import Iterable
 
 import click
 
 from fabricgate.cli.exit_codes import sdk_errors
-from fabricgate.cli.formatting import format_size
+from fabricgate.cli.formatting import format_size, sanitize
 from fabricgate.models.api.responses import VersionDiffField, VersionDiffResponse
 from fabricgate.sdk import api as sdk_api
-
-
-def _sanitize_label(value: str) -> str:
-    return "".join(ch if ch.isprintable() and ch not in "\r\n\t" else "?" for ch in value)
-
-
-def _sanitize_labels(values: Iterable[str]) -> list[str]:
-    return [_sanitize_label(v) for v in values]
 
 
 def _format_value(field_name: str, value: object) -> str:
@@ -41,19 +32,20 @@ def _format_value(field_name: str, value: object) -> str:
 
 
 def _format_field(field: VersionDiffField, width: int) -> str:
-    before = _format_value(field.field, field.base)
-    after = _format_value(field.field, field.head)
-    safe_field = _sanitize_label(field.field)
+    # JSON escapes control characters but not format characters such as bidi overrides.
+    before = sanitize(_format_value(field.field, field.base))
+    after = sanitize(_format_value(field.field, field.head))
+    safe_field = sanitize(field.field)
     return f"  {safe_field.ljust(width)} {before} → {after}"
 
 
 def _format_platforms(platforms: list[str]) -> str:
-    return ", ".join(_sanitize_labels(platforms)) if platforms else "(none)"
+    return ", ".join([sanitize(p) for p in platforms]) if platforms else "(none)"
 
 
 def _render_text(result: VersionDiffResponse, design_ref: str) -> None:
     design_name = design_ref.split(":", 1)[0]
-    click.echo(f"Diff: {design_name}  {result.base} → {result.head}")
+    click.echo(sanitize(f"Diff: {design_name}  {result.base} → {result.head}"))
     click.echo()
     click.echo(f" Platforms added:   {_format_platforms(result.summary.platforms_added)}")
     click.echo(f" Platforms removed: {_format_platforms(result.summary.platforms_removed)}")
@@ -66,7 +58,7 @@ def _render_text(result: VersionDiffResponse, design_ref: str) -> None:
 
     for entry in result.diff:
         click.echo()
-        click.echo(f"{_sanitize_label(entry.platform)}:")
+        click.echo(f"{sanitize(entry.platform)}:")
         if entry.fields == "added":
             click.echo(f"  (added in {result.head})")
             continue
@@ -74,7 +66,7 @@ def _render_text(result: VersionDiffResponse, design_ref: str) -> None:
             click.echo(f"  (removed from {result.base})")
             continue
 
-        width = max((len(_sanitize_label(field.field)) for field in entry.fields), default=0)
+        width = max((len(sanitize(field.field)) for field in entry.fields), default=0)
         for field in entry.fields:
             click.echo(_format_field(field, width))
 

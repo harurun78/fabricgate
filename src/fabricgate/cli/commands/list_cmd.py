@@ -9,11 +9,13 @@ from pathlib import Path
 import click
 
 from fabricgate.cli.exit_codes import sdk_errors
+from fabricgate.cli.formatting import sanitize
 from fabricgate.client.cache import load_index
 from fabricgate.sdk import api as sdk_api
 
 
 def _echo_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> None:
+    rows = [[sanitize(cell) for cell in row] for row in rows]
     widths = [len(h) for h in headers]
     for row in rows:
         for i, cell in enumerate(row):

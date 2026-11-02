@@ -7,6 +7,7 @@ import json
 import click
 
 from fabricgate.cli.exit_codes import exit_with, sdk_errors
+from fabricgate.cli.formatting import sanitize
 from fabricgate.client.errors import FailureKind
 from fabricgate.sdk import api as sdk_api
 
@@ -48,9 +49,9 @@ def watch_cmd(
     if result.new_version_found:
         newest = result.latest_version
         platforms_str = ", ".join(result.platforms) if result.platforms else "(unknown)"
-        click.echo(f"New version found: {result.design_name}:{newest}  (platforms: {platforms_str})")
+        click.echo(sanitize(f"New version found: {result.design_name}:{newest}  (platforms: {platforms_str})"))
     else:
         latest_info = f" (latest: {result.latest_version})" if result.latest_version else ""
         ref = result.design_name
-        click.echo(f"No new version found for {ref}{latest_info}")
+        click.echo(sanitize(f"No new version found for {ref}{latest_info}"))
         exit_with(FailureKind.GENERIC)

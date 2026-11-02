@@ -1006,3 +1006,13 @@ def test_find_index_path_prefers_yaml(tmp_path: Path) -> None:
     assert _find_index_path(tmp_path) == tmp_path / "fabricgate-index.yml"
     (tmp_path / "fabricgate-index.yaml").write_text("x")
     assert _find_index_path(tmp_path) == tmp_path / "fabricgate-index.yaml"
+
+
+@pytest.mark.parametrize("name", ["a\x1b]0;x\x07.bit", "a\u202e.bit", "a\n.bit", "a\x7f.bit"])
+def test_is_single_filename_refuses_control_characters(name: str) -> None:
+    """A manifest's file name ends up in terminal output, so non-printable characters are refused."""
+    from fabricgate.client.validator import is_single_filename
+
+    assert not is_single_filename(name)
+    assert is_single_filename("design 1.bit")
+    assert is_single_filename("回路.bit")

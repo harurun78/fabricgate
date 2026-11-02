@@ -8,6 +8,7 @@ from pathlib import Path
 import click
 
 from fabricgate.cli.exit_codes import exit_with, sdk_errors
+from fabricgate.cli.formatting import sanitize
 from fabricgate.client.errors import FailureKind
 from fabricgate.sdk import api as sdk_api
 
@@ -39,7 +40,7 @@ def verify_cmd(
     for _, item in checked:
         if item.yanked:
             reason = f": {item.yanked_reason}" if item.yanked_reason else ""
-            click.echo(f"⚠ {item.checked_ref} is yanked{reason}", err=True)
+            click.echo(sanitize(f"⚠ {item.checked_ref} is yanked{reason}"), err=True)
     failed = not all(artifact.verified for _, item in checked for artifact in item.artifacts)
 
     if obj["json"]:
@@ -49,18 +50,18 @@ def verify_cmd(
         return
 
     for kind, item in checked:
-        click.echo(f"Verifying {kind}{item.design_ref} ({item.platform}) ...")
+        click.echo(sanitize(f"Verifying {kind}{item.design_ref} ({item.platform}) ..."))
         if item.manifest_verified:
             # Only the root's version can come from its own manifest; the others come from their paths.
             source = "" if kind or ref is not None else " (version from the manifest's design_ref; pin it with --ref)"
-            click.echo(f"  manifest matches {item.checked_ref} ({item.checked_platform}){source}")
+            click.echo(sanitize(f"  manifest matches {item.checked_ref} ({item.checked_platform}){source}"))
         else:
             click.echo("  manifest not checked against the registry (--offline)")
         for artifact in item.artifacts:
             status = "OK" if artifact.verified else "FAIL"
-            click.echo(f"  {artifact.file} sha256:{artifact.sha256} {status}")
+            click.echo(sanitize(f"  {artifact.file} sha256:{artifact.sha256} {status}"))
     for name in result.missing:
-        click.echo(f"Not pulled, not checked: {name}")
+        click.echo(sanitize(f"Not pulled, not checked: {name}"))
 
     if failed:
         exit_with(FailureKind.INVALID)

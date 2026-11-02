@@ -14,6 +14,7 @@ from typing import NoReturn
 
 import click
 
+from fabricgate.cli.formatting import sanitize_lines
 from fabricgate.client.errors import FailureKind
 from fabricgate.sdk.api import SDKError
 
@@ -45,5 +46,6 @@ def sdk_errors() -> Iterator[None]:
     try:
         yield
     except SDKError as exc:
-        click.echo(str(exc), err=True)
+        # An SDKError can quote the registry (its error message, an artifact name from a manifest).
+        click.echo(sanitize_lines(str(exc)), err=True)
         raise click.exceptions.Exit(exit_code_for(exc)) from exc

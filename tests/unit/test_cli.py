@@ -3581,3 +3581,218 @@ def test_stats_weekly_omits_last_7d_line(monkeypatch) -> None:
     result = CliRunner().invoke(main, ["stats", "alice/fpga-uart", "--period", "weekly"])
     assert result.exit_code == 0, result.output
     assert "Last 7d" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# Registry-supplied text in the terminal (GHSA-52f8-qqmp-xqw6)
+# ---------------------------------------------------------------------------
+
+# An OSC title change, a bell, a bidi override and line breaks, as a publisher could write them.
+_EVIL = "evil\x1b]0;pwned\x07\u202e\r\nx"
+_CONTROLS = ("\x1b", "\x07", "\u202e", "\r")
+
+
+def _evil_outputs() -> list[tuple[str, str, object, list[str]]]:
+    from fabricgate.models.cli import (
+        DesignInfo,
+        LicenseCheckInfo,
+        LicenseCheckToolReq,
+        LicenseCheckVerdict,
+        VerificationItem,
+        VerificationResult,
+        WatchResult,
+    )
+
+    platform = PlatformEntry.model_construct(platform=_EVIL, digest="sha256:" + "a" * 64)
+    verified = VerificationResult.model_construct(
+        design_ref="ns/x:1.0.0",
+        platform="a/pynq",
+        directory="d",
+        artifacts=[VerificationItem(file=_EVIL, sha256="a" * 64, verified=True)],
+        yanked=True,
+        yanked_reason=_EVIL,
+        checked_ref="ns/x:1.0.0",
+        dependencies=[],
+        shells=[],
+        missing=[],
+        manifest_verified=True,
+        checked_platform="a/pynq",
+    )
+    req = LicenseCheckToolReq(tool=_EVIL, min_version=_EVIL, edition=_EVIL, note=_EVIL)
+    return [
+        (
+            "info.sdk_api.info",
+            "info",
+            DesignInfo.model_construct(
+                name=_EVIL,
+                version=_EVIL,
+                summary=_EVIL,
+                license=_EVIL,
+                author=_EVIL,
+                repository=_EVIL,
+                tags=[_EVIL],
+                platforms=[platform],
+            ),
+            ["info", "ns/x:1.0.0"],
+        ),
+        (
+            "search.sdk_api.search",
+            "search",
+            [SearchResult.model_construct(name=_EVIL, version=_EVIL, summary=_EVIL, platforms=[_EVIL])],
+            ["search", "x"],
+        ),
+        (
+            "list_cmd.sdk_api.list_remote",
+            "list",
+            [
+                DesignSummary.model_construct(
+                    name=_EVIL,
+                    latest_version=_EVIL,
+                    platforms=[_EVIL, _EVIL],
+                    tags=[],
+                    updated_at=datetime(2026, 3, 17, tzinfo=UTC),
+                )
+            ],
+            ["list", "--remote", "--namespace", "ns"],
+        ),
+        (
+            "watch.sdk_api.watch",
+            "watch",
+            WatchResult.model_construct(
+                design_name=_EVIL, new_version_found=True, latest_version=_EVIL, new_versions=[_EVIL], platforms=[_EVIL]
+            ),
+            ["watch", "ns/x:1.0.0"],
+        ),
+        (
+            "pull.sdk_api.pull",
+            "pull",
+            PullResult.model_construct(
+                name="ns/x",
+                version="1.0.0",
+                platform="a/pynq",
+                path="/tmp/out",
+                artifacts=[_EVIL],
+                cached=False,
+                dependencies=[_EVIL],
+                shell=_EVIL,
+                deprecated_warning=_EVIL,
+                yanked_warning=_EVIL,
+                shell_yanked_warning=_EVIL,
+                dependency_yanked_warnings=[_EVIL],
+                fallback_from=_EVIL,
+            ),
+            ["pull", "ns/x:1.0.0"],
+        ),
+        ("verify.sdk_api.verify", "verify", verified, ["verify", "."]),
+        (
+            "diff.sdk_api.diff",
+            "diff",
+            VersionDiffResponse.model_construct(
+                base=_EVIL,
+                head=_EVIL,
+                summary=VersionDiffSummary.model_construct(
+                    platforms_added=[_EVIL], platforms_removed=[], platforms_changed=[]
+                ),
+                diff=[
+                    VersionDiffPlatform.model_construct(
+                        platform=_EVIL, fields=[VersionDiffField(field=_EVIL, base=_EVIL, head=[_EVIL])]
+                    )
+                ],
+            ),
+            ["diff", "ns/x:2.0.0", "--base", "1.0.0"],
+        ),
+        (
+            "license_check.sdk_api.license_check",
+            "license-check list",
+            LicenseCheckInfo(design=_EVIL, version=_EVIL, tool_requirements=[req], disclaimer=_EVIL),
+            ["license-check", "ns/x:1.0.0"],
+        ),
+        (
+            "license_check.sdk_api.license_check",
+            "license-check no requirements",
+            LicenseCheckInfo(design=_EVIL, version="1.0.0", tool_requirements=[], disclaimer=_EVIL),
+            ["license-check", "ns/x:1.0.0"],
+        ),
+        (
+            "license_check.sdk_api.license_check",
+            "license-check --tool",
+            LicenseCheckInfo(
+                design="ns/x",
+                version="1.0.0",
+                tool_requirements=[req],
+                check=LicenseCheckVerdict(tool=_EVIL, edition=_EVIL, meets_requirements=True, notes=[_EVIL]),
+            ),
+            ["license-check", "ns/x:1.0.0", "--tool", "vivado"],
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("target", "label", "value", "args"), _evil_outputs(), ids=lambda v: v if isinstance(v, str) else ""
+)
+def test_registry_text_reaches_the_terminal_without_control_characters(
+    monkeypatch, target: str, label: str, value: object, args: list[str]
+) -> None:
+    """GHSA-52f8-qqmp-xqw6: text a publisher controls is printed with control characters replaced."""
+    monkeypatch.setattr(f"fabricgate.cli.commands.{target}", lambda *_a, **_kw: value)
+    result = CliRunner().invoke(main, args)
+    printed = result.stdout + result.stderr
+    assert "evil?" in printed, (label, printed)
+    assert not any(c in printed for c in _CONTROLS), (label, printed)
+
+
+def test_error_messages_reach_the_terminal_without_control_characters(monkeypatch) -> None:
+    """An SDKError can quote the registry (its message, a manifest's artifact name); its lines are sanitized."""
+
+    def _fail(*_a, **_kw):
+        raise sdk_api.SDKError(f"Digest mismatch for {_EVIL}\nsecond line")
+
+    monkeypatch.setattr("fabricgate.cli.commands.info.sdk_api.info", _fail)
+    result = CliRunner().invoke(main, ["info", "ns/x:1.0.0"])
+    assert result.exit_code == 1
+    assert "Digest mismatch for evil?" in result.stderr
+    assert "\nsecond line" in result.stderr  # the message's own line break stays
+    assert not any(c in result.stderr for c in _CONTROLS)
+
+
+def test_pull_progress_label_is_plain_sanitized_text(monkeypatch) -> None:
+    """The progress label names a manifest's file: no escape sequences and no Rich markup."""
+    import io
+
+    from rich.console import Console
+
+    buffer = io.StringIO()
+    monkeypatch.setattr(
+        "fabricgate.cli.commands.pull.Console",
+        lambda **_kw: Console(file=buffer, force_terminal=True, width=200),
+    )
+
+    def _fake_pull(*_a, on_progress, **_kw):
+        on_progress(f"ns/x:1.0.0 [bold red]{_EVIL}", 1, 1)
+        return PullResult(name="ns/x", version="1.0.0", platform="a/pynq", path="/tmp/out", artifacts=[], cached=False)
+
+    monkeypatch.setattr("fabricgate.cli.commands.pull.sdk_api.pull", _fake_pull)
+    result = CliRunner().invoke(main, ["pull", "ns/x:1.0.0"])
+    assert result.exit_code == 0, result.output
+    shown = buffer.getvalue()
+    assert "[bold red]evil?" in shown
+    assert "\x1b]0;pwned" not in shown  # the OSC introducer was replaced
+    assert "\u202e" not in shown
+
+
+def test_sanitize_keeps_spaces_and_replaces_controls() -> None:
+    from fabricgate.cli.formatting import sanitize, sanitize_lines
+
+    assert sanitize("日本語\u3000説明\u00a0x") == "日本語\u3000説明\u00a0x"
+    assert sanitize("a\x1b[31mb\u202ec\nd\u2028e") == "a?[31mb?c?d?e"
+    assert sanitize_lines("a\x07\nb") == "a?\nb"
+
+
+def test_login_error_reaches_the_terminal_without_control_characters(monkeypatch) -> None:
+    def _fail(**_kw):
+        raise sdk_api.SDKError(f"[400] INVALID: {_EVIL}")
+
+    monkeypatch.setattr("fabricgate.cli.commands.login.sdk_api.login", _fail)
+    result = CliRunner().invoke(main, ["login"])
+    assert "evil?" in result.stderr
+    assert not any(c in result.stderr for c in _CONTROLS)

@@ -7,6 +7,7 @@ import json
 import click
 
 from fabricgate.cli.exit_codes import sdk_errors
+from fabricgate.cli.formatting import sanitize
 from fabricgate.sdk import api as sdk_api
 
 
@@ -22,18 +23,18 @@ def info_cmd(obj: dict[str, object], design_ref: str) -> None:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
         return
 
-    click.echo(f"Name: {result.name}")
-    click.echo(f"Version: {result.version}")
+    click.echo(f"Name: {sanitize(result.name)}")
+    click.echo(f"Version: {sanitize(result.version)}")
     if result.summary:
-        click.echo(f"Summary: {result.summary}")
+        click.echo(f"Summary: {sanitize(result.summary)}")
     if result.license:
-        click.echo(f"License: {result.license}")
+        click.echo(f"License: {sanitize(result.license)}")
     if result.author:
-        click.echo(f"Author: {result.author}")
+        click.echo(f"Author: {sanitize(result.author)}")
     if result.repository:
-        click.echo(f"Repository: {result.repository}")
+        click.echo(f"Repository: {sanitize(result.repository)}")
     if result.tags:
-        click.echo(f"Tags: {', '.join(result.tags)}")
+        click.echo(f"Tags: {', '.join(sanitize(t) for t in result.tags)}")
     click.echo("Platforms:")
     for platform in result.platforms:
-        click.echo(f"  {platform.platform}")
+        click.echo(f"  {sanitize(platform.platform)}")

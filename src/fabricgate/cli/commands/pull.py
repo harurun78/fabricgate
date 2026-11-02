@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.progress import BarColumn, DownloadColumn, Progress, TaskID, TextColumn, TransferSpeedColumn
 
 from fabricgate.cli.exit_codes import sdk_errors
+from fabricgate.cli.formatting import sanitize
 from fabricgate.sdk import api as sdk_api
 
 
@@ -17,7 +18,8 @@ def _progress_bars() -> Progress:
     """One download bar per artifact on stderr, shown only when stderr is a terminal."""
     console = Console(stderr=True)
     return Progress(
-        TextColumn("{task.description}"),
+        # The label names an artifact file from a manifest: not Rich markup.
+        TextColumn("{task.description}", markup=False),
         BarColumn(),
         DownloadColumn(),
         TransferSpeedColumn(),
@@ -76,7 +78,7 @@ def pull_cmd(
 
         def on_progress(label: str, received: int, total: int | None) -> None:
             if label not in tasks:
-                tasks[label] = progress.add_task(label, total=total)
+                tasks[label] = progress.add_task(sanitize(label), total=total)
             progress.update(tasks[label], completed=received, total=total)
 
         result = sdk_api.pull(
@@ -97,27 +99,27 @@ def pull_cmd(
             on_progress=on_progress,
         )
 
-    if result.yanked_warning:
-        click.echo(f"\u26a0  {result.yanked_warning}", err=True)
-    if result.deprecated_warning:
-        click.echo(f"\u26a0  {result.deprecated_warning}", err=True)
-    if result.shell_yanked_warning:
-        click.echo(f"\u26a0  {result.shell_yanked_warning}", err=True)
-    for warning in result.dependency_yanked_warnings:
-        click.echo(f"\u26a0  {warning}", err=True)
+    for warning in (
+        result.yanked_warning,
+        result.deprecated_warning,
+        result.shell_yanked_warning,
+        *result.dependency_yanked_warnings,
+    ):
+        if warning:
+            click.echo(f"\u26a0  {sanitize(warning)}", err=True)
 
     if obj["json"]:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
         return
 
     if result.fallback_from:
-        click.echo(f"Selected: {result.platform} (family fallback from {result.fallback_from})")
+        click.echo(sanitize(f"Selected: {result.platform} (family fallback from {result.fallback_from})"))
     click.echo(f"Saved to {result.path}" + (" (from cache)" if result.cached else ""))
     for artifact in result.artifacts:
-        click.echo(f"  {artifact}")
+        click.echo(f"  {sanitize(artifact)}")
     if result.dependencies:
         click.echo("Dependencies:")
         for dep in result.dependencies:
-            click.echo(f"  {dep}")
+            click.echo(f"  {sanitize(dep)}")
     if result.shell:
-        click.echo(f"Shell: {result.shell}")
+        click.echo(f"Shell: {sanitize(result.shell)}")
