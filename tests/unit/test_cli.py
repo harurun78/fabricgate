@@ -3925,3 +3925,24 @@ def test_search_says_nothing_when_every_result_is_shown(monkeypatch) -> None:
     result = CliRunner().invoke(main, ["search", "x", "--limit", "50"])
     assert result.exit_code == 0, result.output
     assert "Showing" not in result.stderr
+
+
+@pytest.mark.parametrize("limit", ["0", "1001"])
+def test_search_limit_out_of_range_exits_3(limit: str) -> None:
+    result = CliRunner().invoke(
+        main, ["search", "x", "--limit", limit], env={"FG_REGISTRY": "http://127.0.0.1:9/api/v1"}
+    )
+    assert result.exit_code == 3
+    assert "--limit must be between 1 and 1000" in result.stderr
+
+
+def test_search_passes_the_limit_to_the_sdk(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def _fake_search(*_a, **kwargs):
+        seen.update(kwargs)
+        return _results(0, total=0)
+
+    monkeypatch.setattr("fabricgate.cli.commands.search.sdk_api.search", _fake_search)
+    assert CliRunner().invoke(main, ["search", "x", "--limit", "50"]).exit_code == 0
+    assert seen["limit"] == 50

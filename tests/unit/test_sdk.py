@@ -6249,3 +6249,20 @@ def test_search_limit_out_of_range_is_invalid(limit: int) -> None:
     with pytest.raises(sdk_api.SDKError, match="--limit must be between 1 and 1000") as exc_info:
         sdk_api.search("x", limit=limit, registry="http://127.0.0.1:9/api/v1")
     assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_search_stops_at_a_short_page_before_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A page with fewer than per_page designs ends the search even if total says more: no endless loop."""
+
+    class _ShortPages(_PagedSearchClient):
+        total = 300
+        calls: ClassVar[list[tuple[int, int]]] = []
+
+        def search_designs(self, *, page: int = 1, per_page: int = 20, **kw):
+            response = super().search_designs(page=page, per_page=per_page, **kw)
+            return response.model_copy(update={"designs": response.designs[:90]})
+
+    _patch_all_rc(monkeypatch, _ShortPages)
+    results = sdk_api.search("x", limit=250)
+    assert len(results) == 90
+    assert _ShortPages.calls == [(1, 100)]
