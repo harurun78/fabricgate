@@ -343,7 +343,7 @@ fabricgate build <directory> [--namespace <ns>] [--version <semver>] [--tags <ta
 ```
 
 **Arguments:**
-- `<directory>`: `.xsa` または HWH ファイルを含むディレクトリ。サブディレクトリも再帰検索する。`manifest.yaml` と同じディレクトリにある `.hwh` は、以前の build がコピーしたものとして検索対象から外す。
+- `<directory>`: `.xsa` または HWH ファイルを含むディレクトリ。サブディレクトリも再帰検索する。`manifest.yaml` と同じディレクトリにある `.hwh` は、以前の build がコピーしたものとして検索対象から外す。`--hwh` を指定した場合は検索せず、指定したファイルをそのまま使う（`manifest.yaml` の隣にあってもよい）。
 
 **Options:**
 
@@ -352,7 +352,7 @@ fabricgate build <directory> [--namespace <ns>] [--version <semver>] [--tags <ta
 | `--namespace` | レジストリのネームスペース（省略時はインタラクティブに入力） |
 | `--version` | SemVer バージョン（省略時はインタラクティブに入力） |
 | `--tags` | カンマ区切りタグ（例: `dma,axi,zynq`） |
-| `--hwh <path>` | `.hwh` ファイルを明示指定する。複数 HWH ファイルが見つかった場合は必須 |
+| `--hwh <path>` | `.hwh` ファイルを明示指定する（ディレクトリの検索はしない）。複数 HWH ファイルが見つかった場合は必須 |
 | `--output <dir>` | 出力先ディレクトリ（デフォルト: カレントディレクトリに `<design_slug>/`） |
 | `--dry-run` | ファイルを書き出さずに生成内容をプレビューする |
 
@@ -379,7 +379,10 @@ fabricgate build <directory> [--namespace <ns>] [--version <semver>] [--tags <ta
 6. 名前・バージョン・説明などをインタラクティブに入力
    - デザイン名に `/` が無い場合は `--namespace` の値を前に付ける。`--namespace` も無ければ `Namespace` を追加で尋ねる
    - `<namespace>/<design>`（英小文字・数字・ハイフン）でない名前は、エラーを表示して再入力を求める
-7. `fabricgate-index.yaml` と `<board_id>/<runtime>/manifest.yaml` を出力し、パースした HWH を manifest と同じディレクトリに `design.hwh` としてコピーする。manifest は bitstream を `design.bit` として宣言するので、push の前にそのパスへ bitstream を置く。アーティファクトの sha256 はプレースホルダーのままでよい（push が埋める。§3.2）
+   - SemVer でないバージョン（`v1.0`、`1.0` など）も、エラーを表示して再入力を求める
+   - Runtime は `pynq` と `linux-fpgamgr` から選ぶ。`nanopynq` の manifest は HWH から決められない `transport` と `mtu` が必須なので、build では生成しない（platform-manifest-schema.md §5 に沿って手で書く）
+7. 生成した index と manifest を push と同じ検証（`DesignIndex` と Platform Manifest のスキーマ）に通す。通らなければ何も書かずに exit 3 で終わる（例: タグが 10 個を超える、説明が 200 文字を超える）。`--dry-run` でも同じ
+8. `fabricgate-index.yaml` と `<board_id>/<runtime>/manifest.yaml` を出力する。`pynq` では manifest が hwh を宣言するので、パースした HWH を manifest と同じディレクトリに `design.hwh` としてコピーする（`linux-fpgamgr` の manifest には hwh が無いのでコピーしない）。manifest は bitstream を `design.bit` として宣言するので、push の前にそのパスへ bitstream を置く。アーティファクトの sha256 はプレースホルダーのままでよい（push が埋める。§3.2）
 
 **Behavior:**
 
@@ -441,6 +444,7 @@ Run `fabricgate push ./my-design/` to publish.
 **Exit codes:**
 - 0: 生成成功
 - 1: HWH ファイルが見つからない / HWH パース失敗 / 非 TTY で複数 HWH が見つかり `--hwh` 未指定 / Board DB 未登録ボードの確認プロンプトを中断 / 正しいデザイン名が入力されないまま入力が終わった
+- 3: 生成した index か manifest が push の検証を通らない（何も書かない）
 - 4: Board DB 読み込み失敗 / 生成先ディレクトリへの書き込み・HWH のコピー失敗（infrastructure）
 
 ---
