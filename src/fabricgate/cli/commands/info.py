@@ -33,19 +33,20 @@ def info_cmd(obj: dict[str, object], design_ref: str) -> None:
         click.echo(json.dumps(result.model_dump(mode="json"), indent=2))
         return
 
-    click.echo(f"Name: {sanitize(result.name)}")
-    click.echo(f"Version: {sanitize(result.version)}")
-    if result.summary:
-        click.echo(f"Summary: {sanitize(result.summary)}")
-    if result.license:
-        click.echo(f"License: {sanitize(result.license)}")
-    if result.author:
-        click.echo(f"Author: {sanitize(result.author)}")
-    if result.repository:
-        click.echo(f"Repository: {sanitize(result.repository)}")
-    if result.tags:
-        click.echo(f"Tags: {', '.join(sanitize(t) for t in result.tags)}")
-    click.echo("Platforms:")
+    # Values start in one column, after the longest label ("Repository: "), as in CLI spec §3.5.
+    fields = [
+        ("Name", result.name),
+        ("Version", result.version),
+        ("Summary", result.summary),
+        ("License", result.license),
+        ("Author", result.author),
+        ("Repository", result.repository),
+        ("Tags", ", ".join(result.tags)),
+    ]
+    for label, value in fields:
+        if value:
+            click.echo(f"{label + ':':<12}{sanitize(value)}")
+    click.echo("\nPlatforms:")
     board_names = _board_names()
     for i, platform in enumerate(result.platforms):
         if i:

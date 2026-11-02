@@ -164,7 +164,7 @@ def test_info_text_output(monkeypatch) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["info", "test-ns/blink:1.0.0"])
     assert result.exit_code == 0
-    assert "Name: test-ns/blink" in result.output
+    assert "Name:       test-ns/blink" in result.output
 
 
 def _info_with_details() -> DesignInfo:
@@ -2694,6 +2694,7 @@ def test_info_all_optional_fields(monkeypatch) -> None:
         return DesignInfo(
             name="ns/blink",
             version="1.0.0",
+            summary="Blink demo",
             license="MIT",
             author="Alice",
             repository="https://github.com/alice/blink",
@@ -2710,10 +2711,18 @@ def test_info_all_optional_fields(monkeypatch) -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["info", "ns/blink:1.0.0"])
     assert result.exit_code == 0
-    assert "License: MIT" in result.output
-    assert "Author: Alice" in result.output
-    assert "Repository: https://github.com/alice/blink" in result.output
-    assert "Tags: fpga, zynq" in result.output
+    # #172: values aligned after the longest label and a blank line before Platforms (CLI spec §3.5).
+    assert result.output.startswith(
+        "Name:       ns/blink\n"
+        "Version:    1.0.0\n"
+        "Summary:    Blink demo\n"
+        "License:    MIT\n"
+        "Author:     Alice\n"
+        "Repository: https://github.com/alice/blink\n"
+        "Tags:       fpga, zynq\n"
+        "\n"
+        "Platforms:\n"
+    )
 
 
 # ---------------------------------------------------------------------------
