@@ -1352,3 +1352,25 @@ def test_a_malformed_registry_url_is_invalid_configuration() -> None:
     with pytest.raises(InvalidRegistryURLError, match="Invalid registry URL") as exc_info:
         RegistryClient(base_url="https://registry.example:80a/api/v1")
     assert exc_info.value.kind == FailureKind.INVALID
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "content_type", "expected"),
+    [
+        (200, b"", "application/json", "NetworkError"),
+        (200, b"\xff\xfe", "application/json", "NetworkError"),
+        (200, b"null", "application/json", "IncompatibleResponseError"),
+        (200, b"[]", "application/json", "IncompatibleResponseError"),
+        (502, b"<html>Bad Gateway</html>", "text/html", "RegistryError"),
+    ],
+    ids=["empty", "not-utf8", "null", "array", "html-502"],
+)
+def test_non_json_and_json_responses_are_told_apart(status: int, body: bytes, content_type: str, expected: str) -> None:
+    """Not JSON → a proxy answered (exit 4); JSON the model rejects → incompatible (exit 3); 5xx stays INFRA."""
+    from fabricgate.client.errors import FailureKind
+
+    with pytest.raises(RegistryError) as exc_info:
+        _make_client(_transport(status, body, content_type)).get_version("ns", "x", "1.0.0")
+    assert type(exc_info.value).__name__ == expected
+    expected_kind = FailureKind.INVALID if expected == "IncompatibleResponseError" else FailureKind.INFRA
+    assert exc_info.value.kind == expected_kind
