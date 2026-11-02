@@ -47,6 +47,8 @@ def _parse_expires(expires: str | None) -> str | None:
         ) from None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
+    if dt > datetime.now(tz=UTC) + timedelta(days=3650):
+        raise SDKError("Expiry must not exceed 3650 days.", code=ExitKind.INVALID)
     return dt.isoformat()
 
 

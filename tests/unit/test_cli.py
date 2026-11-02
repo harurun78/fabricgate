@@ -1271,6 +1271,29 @@ def test_pull_progress_bars_only_on_a_terminal(monkeypatch, terminal: bool) -> N
     assert ("progress-check.bit" in result.stderr) is terminal
 
 
+@pytest.mark.parametrize("use_env", [False, True])
+def test_cache_dir_tilde_is_expanded(monkeypatch, tmp_path, use_env: bool) -> None:
+    """#162: ~ in --cache-dir / FG_CACHE_DIR means the home directory, as it does in config.yaml."""
+    captured_kwargs: dict = {}
+
+    def _fake_pull(*_args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return PullResult(
+            name="test-ns/blink", version="1.0.0", platform="xc7z020/pynq", path="/tmp/out", artifacts=[], cached=False
+        )
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("fabricgate.cli.commands.pull.sdk_api.pull", _fake_pull)
+    if use_env:
+        monkeypatch.setenv("FG_CACHE_DIR", "~/fgc")
+        args = ["pull", "test-ns/blink:1.0.0"]
+    else:
+        args = ["--cache-dir", "~/fgc", "pull", "test-ns/blink:1.0.0"]
+    result = CliRunner().invoke(main, args)
+    assert result.exit_code == 0, result.output
+    assert captured_kwargs["cache_dir"] == tmp_path / "fgc"
+
+
 @pytest.mark.parametrize("no_cache", [False, True])
 def test_pull_no_cache_option(monkeypatch, tmp_path, no_cache: bool) -> None:
     """--no-cache passes no cache directory, so the SDK neither reads nor writes the cache (#115)."""
@@ -3534,7 +3557,9 @@ def test_yank_uses_fabricgate_token_env_and_never_prints_it(monkeypatch) -> None
     assert secret not in result.output
 
 
-@pytest.mark.parametrize("config_text", ["registry_url: https://x\n", "registry: [\n"])
+@pytest.mark.parametrize(
+    "config_text", ["registry_url: https://x\n", "registry: [\n", "https://x/api/v1\n", "- registry: https://x\n"]
+)
 def test_invalid_config_is_reported_without_traceback(monkeypatch, tmp_path, config_text: str) -> None:
     """#69: an unknown key or a YAML error in config.yaml is one error line and exit 3."""
     import fabricgate.client.config as config_mod

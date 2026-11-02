@@ -34,8 +34,10 @@ def load_config(path: Path | None = None) -> RegistryConfig:
     data: dict[str, object] = {}
     if config_path.exists():
         text = config_path.read_text(encoding="utf-8")
-        loaded = yaml.safe_load(text) or {}
-        if isinstance(loaded, dict):
+        loaded = yaml.safe_load(text)
+        if loaded is not None:
+            if not isinstance(loaded, dict):
+                raise ValueError(f"{config_path} must be a mapping of settings, got {type(loaded).__name__}")
             data = loaded
     data.update(_env_overrides())
     return RegistryConfig.model_validate(data)

@@ -21,6 +21,9 @@ first shipped the change. Changes not yet in a tagged release are listed under
   - `fabricgate stats --version` that is not SemVer: exit 3. `fabricgate webhook create --url` that cannot be parsed, has a port that is not a number, or carries a user name or password: exit 3, before anything is sent.
   - `fabricgate pull` with a manifest from the registry that the client cannot read: exit 3. Pull also no longer validates index fields it does not use (`summary`, `tags`, `license`, `author`), so a version whose summary the current schema would reject can still be pulled.
   - `fabricgate verify` with an artifact path that is a directory: exit 3 "Artifact not found"; an artifact that cannot be read: exit 4.
+- A `~/.fabricgate/config.yaml` that is not a mapping (a bare URL, a YAML list) is invalid configuration (exit 3); it was ignored, so the public registry was used instead. An empty file still means the defaults. No API or schema change.
+- `~` in `--cache-dir` and `FG_CACHE_DIR` is expanded to the home directory, as it already was in `config.yaml`; it created a directory named `~` in the working directory. No API or schema change.
+- `fabricgate token create --expires` with a date or datetime more than 3650 days ahead is exit 3, as `<N>d` over 3650 already was (CLI spec §3.8); it created a key with that expiry. No API or schema change.
 
 ## [0.5.1] - 2026-11-02
 
