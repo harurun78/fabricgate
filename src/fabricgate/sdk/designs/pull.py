@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
@@ -19,7 +18,7 @@ from fabricgate.client.puller import (
     IntegrityError,
 )
 from fabricgate.client.registry_client import RegistryClient
-from fabricgate.client.resolver import ResolutionError
+from fabricgate.client.resolver import ResolutionError, satisfies
 from fabricgate.client.validator import artifact_refs, is_single_filename, verify_artifact
 from fabricgate.models.cli import PullResult, VerificationItem, VerificationResult
 from fabricgate.models.platform_manifest import PlatformManifest, parse_platform_manifest
@@ -213,26 +212,11 @@ def verify(
 
 
 def _satisfies(version: str, constraint: str) -> bool:
-    """Return True if *version* satisfies a manifest dependency *constraint*.
-
-    The four forms of the Platform Manifest schema: ``1.2.0`` (exact), ``^1.2.0``
-    (same MAJOR; ``^0.2.0`` matches every ``0.Y.Z`` from ``0.2.0``), ``~1.2.0``
-    (same MAJOR.MINOR) and ``*``.
-    """
-    if constraint == "*":
-        return True
-    match = re.fullmatch(r"([~^]?)([0-9]+)\.([0-9]+)\.([0-9]+)", constraint)
-    if match is None:
-        # A trailing predicate passes the schema but the registry cannot resolve it, so nothing was pulled for it.
-        raise SDKError(f"Unsupported dependency constraint: {constraint!r}", code=ExitKind.INVALID)
-    operator = match.group(1)
-    wanted = tuple(int(part) for part in match.group(2, 3, 4))
-    found = tuple(int(part) for part in version.split("."))
-    if operator == "^":
-        return found >= wanted and found[0] == wanted[0]
-    if operator == "~":
-        return found >= wanted and found[:2] == wanted[:2]
-    return found == wanted
+    """:func:`~fabricgate.client.resolver.satisfies`, with an unsupported constraint as an INVALID SDKError."""
+    try:
+        return satisfies(version, constraint)
+    except ValueError as exc:
+        raise SDKError(str(exc), code=ExitKind.INVALID) from exc
 
 
 def _pulled_dirs(target_dir: Path, kind: str) -> list[Path]:

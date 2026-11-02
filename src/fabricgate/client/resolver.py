@@ -12,6 +12,7 @@ Resolution is two-stage (spec: docs/specs/client-behavior.md §6):
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, NamedTuple
 
 from fabricgate.models.design_index import DesignIndex, PlatformEntry
@@ -22,6 +23,29 @@ if TYPE_CHECKING:
 
 class ResolutionError(Exception):
     """Raised when platform resolution fails."""
+
+
+def satisfies(version: str, constraint: str) -> bool:
+    """Return True if *version* satisfies a manifest dependency *constraint*.
+
+    The four forms of the Platform Manifest schema: ``1.2.0`` (exact), ``^1.2.0``
+    (same MAJOR; ``^0.2.0`` matches every ``0.Y.Z`` from ``0.2.0``), ``~1.2.0``
+    (same MAJOR.MINOR) and ``*``. Raises ``ValueError`` for any other form.
+    """
+    if constraint == "*":
+        return True
+    match = re.fullmatch(r"([~^]?)([0-9]+)\.([0-9]+)\.([0-9]+)", constraint)
+    if match is None:
+        # A trailing predicate passes the schema but the registry cannot resolve it, so nothing was pulled for it.
+        raise ValueError(f"Unsupported dependency constraint: {constraint!r}")
+    operator = match.group(1)
+    wanted = tuple(int(part) for part in match.group(2, 3, 4))
+    found = tuple(int(part) for part in version.split("."))
+    if operator == "^":
+        return found >= wanted and found[0] == wanted[0]
+    if operator == "~":
+        return found >= wanted and found[:2] == wanted[:2]
+    return found == wanted
 
 
 class PlatformResolution(NamedTuple):

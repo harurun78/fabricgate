@@ -6,6 +6,7 @@ import hashlib
 import importlib
 import json
 import os
+import re
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, ClassVar
@@ -4198,8 +4199,32 @@ def test_quota_warning_message_none() -> None:
     assert _quota_warning_message(response) is None
 
 
+def _resolve_and_download_deps(client, namespace, design, version, device, runtime, target_dir, verify):
+    """Fetch the dependency manifests, then their artifacts, as pull does; return (refs, yanked warnings)."""
+    deps = _puller_mod._fetch_dependencies(client, namespace, design, version, device, runtime, target_dir)
+    for _, fetched in deps:
+        _puller_mod._download_artifacts(fetched, verify_digests=verify)
+    return [fetched.ref for _, fetched in deps], _puller_mod._dependency_yanked_warnings(deps)
+
+
+def _maybe_download_shell(client, namespace, design, version, device, runtime, target_dir, verify):
+    """Fetch the shell manifest, then its artifacts, as pull does; return the registry's shell info."""
+    shell = _puller_mod._fetch_shell(client, namespace, design, version, device, runtime, target_dir)
+    if shell is None:
+        return None
+    _puller_mod._download_artifacts(shell[1], verify_digests=verify)
+    return shell[0]
+
+
+def _download_platform(client, namespace, design, version, board, runtime, dest, *, verify_digests, signer, kind=""):
+    """Fetch one platform's manifest, then its artifacts."""
+    fetched = _puller_mod._fetch_manifest(
+        client, namespace, design, version, board, runtime, dest, signer=signer, kind=kind
+    )
+    return _puller_mod._download_artifacts(fetched, verify_digests=verify_digests)
+
+
 def test_resolve_and_download_deps_404_returns_empty(tmp_path: Path) -> None:
-    from fabricgate.client.puller import _resolve_and_download_deps
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
 
@@ -4212,7 +4237,6 @@ def test_resolve_and_download_deps_404_returns_empty(tmp_path: Path) -> None:
 
 
 def test_resolve_and_download_deps_reraises_unhandled_registry_error(tmp_path: Path) -> None:
-    from fabricgate.client.puller import _resolve_and_download_deps
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
 
@@ -4225,7 +4249,6 @@ def test_resolve_and_download_deps_reraises_unhandled_registry_error(tmp_path: P
 
 
 def test_resolve_and_download_deps_invalid_artifact_path(tmp_path: Path) -> None:
-    from fabricgate.client.puller import _resolve_and_download_deps
     from fabricgate.models.api.responses import DependenciesResponse
 
     class _Client:
@@ -4272,7 +4295,6 @@ def test_resolve_and_download_deps_invalid_artifact_path(tmp_path: Path) -> None
 
 
 def test_resolve_and_download_deps_digest_mismatch(tmp_path: Path) -> None:
-    from fabricgate.client.puller import _resolve_and_download_deps
     from fabricgate.models.api.responses import DependenciesResponse
 
     class _Client:
@@ -4320,7 +4342,6 @@ def test_resolve_and_download_deps_digest_mismatch(tmp_path: Path) -> None:
 
 def test_resolve_and_download_deps_names_joined_by_hyphen_do_not_collide(tmp_path: Path) -> None:
     """`a-b/c` と `a/b-c` の依存は別々のディレクトリに展開される(#73)。"""
-    from fabricgate.client.puller import _resolve_and_download_deps
     from fabricgate.models.api.responses import DependenciesResponse
 
     def _dep(name: str) -> dict[str, Any]:
@@ -4370,7 +4391,6 @@ def test_resolve_and_download_deps_names_joined_by_hyphen_do_not_collide(tmp_pat
 
 
 def test_maybe_download_shell_invalid_artifact_path(tmp_path: Path) -> None:
-    from fabricgate.client.puller import _maybe_download_shell
     from fabricgate.models.api.responses import ShellInfo, ShellResponse
 
     class _Client:
@@ -4412,7 +4432,6 @@ def test_maybe_download_shell_invalid_artifact_path(tmp_path: Path) -> None:
 
 
 def test_maybe_download_shell_ignores_not_a_partial(tmp_path: Path) -> None:
-    from fabricgate.client.puller import _maybe_download_shell
     from fabricgate.client.registry_client import RegistryError
     from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
 
@@ -4430,7 +4449,6 @@ def test_maybe_download_shell_ignores_not_a_partial(tmp_path: Path) -> None:
 
 
 def test_maybe_download_shell_digest_mismatch(tmp_path: Path) -> None:
-    from fabricgate.client.puller import _maybe_download_shell
     from fabricgate.models.api.responses import ShellInfo, ShellResponse
 
     class _Client:
@@ -4833,7 +4851,6 @@ def test_pull_digest_mismatch_does_not_overwrite_existing_file(monkeypatch: pyte
 
 
 def test_resolve_deps_digest_mismatch_writes_nothing(tmp_path: Path) -> None:
-    from fabricgate.client.puller import _resolve_and_download_deps
     from fabricgate.models.api.responses import DependenciesResponse
 
     class _Client:
@@ -4885,6 +4902,12 @@ def test_resolve_deps_digest_mismatch_writes_nothing(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 _ATTESTATION_YAML = "\nattestation:\n  bundle: cosign.bundle\n  transparency_log_url: https://rekor.sigstore.dev\n"
+_ROOT_DECLARATIONS_YAML = (
+    "\nbitstream_type: partial"
+    "\ndependencies:\n  - name: dep-ns/dep-design\n    version: ^0.1.0"
+    "\nshell_dependency:\n  name: shell-ns/shell-design\n  version: '=2.0.0'"
+    f"\n  sha256: {hashlib.sha256(b'shell-bitstream').hexdigest()}"
+)
 
 
 class _FakeAttestedClient(_FakeRegistryClientWithDeps):
@@ -4892,7 +4915,8 @@ class _FakeAttestedClient(_FakeRegistryClientWithDeps):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.manifest_bytes += _ATTESTATION_YAML.encode()
+        # The signed root declares what the registry returns: the dependency and the shell (by its bitstream).
+        self.manifest_bytes += _ROOT_DECLARATIONS_YAML.encode() + _ATTESTATION_YAML.encode()
         self.dep_manifest_bytes += _ATTESTATION_YAML.encode()
         self.shell_manifest_bytes += _ATTESTATION_YAML.encode()
 
@@ -5051,7 +5075,8 @@ def test_verify_manifest_attestation_requires_a_bundle(tmp_path: Path) -> None:
                 "shell manifest shell-ns/shell-design:2.0.0",
             ],
         ),
-        (True, ["dependency manifest dep-ns/dep-design:0.1.0"]),
+        # --deps-only still checks the root's signature: its declarations say which dependencies to expect.
+        (True, ["manifest test-ns/blink:1.0.0", "dependency manifest dep-ns/dep-design:0.1.0"]),
     ],
 )
 def test_pull_verify_attestation_checks_every_manifest(
@@ -5090,6 +5115,254 @@ def test_pull_attestation_failure_writes_no_artifacts(monkeypatch: pytest.Monkey
     assert exc_info.value.code == ExitKind.INVALID
     assert not (tmp_path / "design.bit").exists()
     assert not (tmp_path / "design.hwh").exists()
+
+
+class _DeclaredClient(_FakeAttestedClient):
+    """A registry whose answers (dependencies, shell) can differ from what the signed root declares.
+
+    Every manifest other than the root is generated: one bitstream ``<design>.bit`` whose content
+    is its ref, plus the dependencies ``declares`` gives for that ref.
+    """
+
+    root_yaml = (
+        "\nbitstream_type: partial"
+        "\ndependencies:\n  - name: dep-ns/dep-design\n    version: ^0.1.0"
+        "\nshell_dependency:\n  name: shell-ns/shell-design\n  version: '=2.0.0'"
+        f"\n  sha256: {hashlib.sha256(b'shell-ns/shell-design:2.0.0').hexdigest()}"
+    )
+    # (name, version[, platform]); the platform defaults to the root's.
+    deps: tuple[tuple[str, ...], ...] = (("dep-ns/dep-design", "0.1.0"),)
+    shell: tuple[str, str] | None = ("shell-ns/shell-design", "2.0.0")
+    declares: ClassVar[dict[str, str]] = {}
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.manifest_bytes = (
+            _FakeRegistryClientWithDeps().manifest_bytes + (self.root_yaml + _ATTESTATION_YAML).encode()
+        )
+
+    def get_platform_manifest_bytes(self, namespace, design, version, *_a):
+        if (namespace, design) == ("test-ns", "blink"):
+            return self.manifest_bytes
+        ref = f"{namespace}/{design}:{version}"
+        return (
+            "schema: fabricgate-platform/v1\nruntime: pynq\nboard: pynq-z2\n"
+            f"design_ref: {ref}\nartifacts:\n  bitstream:\n    file: {design}.bit\n"
+            f"    sha256: {hashlib.sha256(ref.encode()).hexdigest()}\n  hwh:\n    file: {design}.hwh\n"
+            f"    sha256: {hashlib.sha256(ref.encode()).hexdigest()}" + self.declares.get(ref, "") + _ATTESTATION_YAML
+        ).encode()
+
+    def download_artifact(self, namespace, design, version, *args, **_kw):
+        if (namespace, design) == ("test-ns", "blink"):
+            return super().download_artifact(namespace, design, version, *args)
+        return f"{namespace}/{design}:{version}".encode()
+
+    def get_dependencies(self, *_a, **_kw):
+        from fabricgate.models.api.responses import DependenciesResponse
+        from fabricgate.models.platform_manifest import ResolvedDependency
+
+        return DependenciesResponse(
+            root="test-ns/blink:1.0.0",
+            platform="xc7z020/pynq",
+            dependencies=[
+                ResolvedDependency(
+                    name=name,
+                    resolved_version=version,
+                    platform=platform[0] if platform else "xc7z020/pynq",
+                    optional=False,
+                    depth=1,
+                    required_by="test-ns/blink:1.0.0",
+                )
+                for name, version, *platform in self.deps
+            ],
+        )
+
+    def get_shell(self, *_a, **_kw):
+        from fabricgate.client.registry_client import RegistryError
+        from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
+        from fabricgate.models.api.responses import ShellInfo, ShellResponse
+
+        if self.shell is None:
+            raise RegistryError(404, ErrorResponse(error=ErrorDetail(code="NOT_FOUND", message="No shell")))
+        name, version = self.shell
+        return ShellResponse(
+            shell=ShellInfo(
+                name=name,
+                version=version,
+                board="zcu104",
+                runtime="pynq",
+                bitstream_type="full",
+                artifacts=[],
+                pull_url="https://example.com/pull/shell",
+            )
+        )
+
+
+def _pull_declared(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, signed: bool = True, **attrs: Any):
+    """Pull from a _DeclaredClient with *attrs* overridden; cosign itself is stubbed out (signatures pass)."""
+    client_cls = type("_Client", (_DeclaredClient,), {k: v for k, v in attrs.items() if k in _DeclaredClient.__dict__})
+    _patch_all_rc(monkeypatch, client_cls)
+    monkeypatch.setattr(_puller_mod, "_verify_manifest_attestation", lambda *_a, **_kw: None)
+    options = {k: v for k, v in attrs.items() if k not in _DeclaredClient.__dict__}
+    if signed:
+        options |= {"verify_attestation": True, "attestation_key": "cosign.pub"}
+    return sdk_api.pull(
+        "test-ns/blink:1.0.0", output=tmp_path, platform="xc7z020/pynq", registry="http://test", **options
+    )
+
+
+def test_pull_attested_accepts_what_the_signed_manifests_declare(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The declared dependency, a dependency it declares in turn, and the pinned shell all pass."""
+    result = _pull_declared(
+        monkeypatch,
+        tmp_path,
+        deps=(("sub-ns/sub", "1.4.0"), ("dep-ns/dep-design", "0.1.0")),
+        declares={"dep-ns/dep-design:0.1.0": "\ndependencies:\n  - name: sub-ns/sub\n    version: ~1.4.0"},
+    )
+    assert result.dependencies == ["sub-ns/sub:1.4.0", "dep-ns/dep-design:0.1.0"]
+    assert result.shell == "shell-ns/shell-design:2.0.0"
+
+
+def test_pull_attested_dependency_platform_follows_the_registry_rule(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A declared platform is used as is; one without a platform gets the root's, not the declaring manifest's."""
+    root_yaml = _DeclaredClient.root_yaml.replace("version: ^0.1.0", "version: ^0.1.0\n    platform: zcu104/pynq")
+    result = _pull_declared(
+        monkeypatch,
+        tmp_path,
+        root_yaml=root_yaml,
+        deps=(("sub-ns/sub", "1.4.0"), ("dep-ns/dep-design", "0.1.0", "zcu104/pynq")),
+        declares={"dep-ns/dep-design:0.1.0": "\ndependencies:\n  - name: sub-ns/sub\n    version: ~1.4.0"},
+    )
+    assert result.dependencies == ["sub-ns/sub:1.4.0", "dep-ns/dep-design:0.1.0"]
+    assert (tmp_path / "shell" / "shell-ns" / "shell-design" / "2.0.0" / "shell-design.bit").exists()
+
+
+@pytest.mark.parametrize(
+    ("attrs", "message"),
+    [
+        (
+            {"shell": ("evil-ns/shell", "9.9.9")},
+            "pins shell shell-ns/shell-design:2.0.0, but the registry returned evil-ns/shell:9.9.9",
+        ),
+        ({"shell": ("shell-ns/shell-design", "1.0.0")}, "but the registry returned shell-ns/shell-design:1.0.0"),
+        ({"shell": None}, "pins shell shell-ns/shell-design:2.0.0, but the registry returned no shell"),
+        ({"root_yaml": "\ndependencies:\n  - name: dep-ns/dep-design\n    version: ^0.1.0"}, "pins no shell"),
+        (
+            {"deps": (("evil-ns/dep", "1.0.0"), ("dep-ns/dep-design", "0.1.0"))},
+            "no signed manifest declares: evil-ns/dep:1.0.0",
+        ),
+        ({"deps": (("dep-ns/dep-design", "1.0.0"),)}, "no signed manifest declares: dep-ns/dep-design:1.0.0"),
+        ({"deps": ()}, "needs dep-ns/dep-design ^0.1.0, but the registry did not return it"),
+        (
+            {"deps": (("dep-ns/dep-design", "0.1.0", "zcu104/pynq"),)},
+            "no signed manifest declares: dep-ns/dep-design:0.1.0 (zcu104/pynq)",
+        ),
+        (
+            {"deps": (("dep-ns/dep-design", "0.1.0", "xc7z020/linux-fpgamgr"),)},
+            "no signed manifest declares: dep-ns/dep-design:0.1.0 (xc7z020/linux-fpgamgr)",
+        ),
+        (
+            {
+                "root_yaml": _DeclaredClient.root_yaml.replace(
+                    "version: ^0.1.0", "version: ^0.1.0\n    platform: kv260/pynq"
+                )
+            },
+            "no signed manifest declares: dep-ns/dep-design:0.1.0 (xc7z020/pynq)",
+        ),
+        (
+            {"deps": (("dep-ns/dep-design", "0.1.0"), ("dep-ns/dep-design", "0.9.0"))},
+            "more than one version of dep-ns/dep-design",
+        ),
+        (
+            # The root accepts sub 1.9.0 with ^1.0.0, but the dependency the root declares needs ~1.4.0.
+            {
+                "root_yaml": _DeclaredClient.root_yaml.replace(
+                    "version: ^0.1.0", "version: ^0.1.0\n  - name: sub-ns/sub\n    version: ^1.0.0"
+                ),
+                "deps": (("sub-ns/sub", "1.9.0"), ("dep-ns/dep-design", "0.1.0")),
+                "declares": {"dep-ns/dep-design:0.1.0": "\ndependencies:\n  - name: sub-ns/sub\n    version: ~1.4.0"},
+            },
+            "needs sub-ns/sub ~1.4.0, but the registry returned 1.9.0",
+        ),
+        (
+            # X and Y declare each other, but nothing the root declares leads to them.
+            {
+                "deps": (("x-ns/x", "1.0.0"), ("y-ns/y", "1.0.0"), ("dep-ns/dep-design", "0.1.0")),
+                "declares": {
+                    "x-ns/x:1.0.0": "\ndependencies:\n  - name: y-ns/y\n    version: '*'",
+                    "y-ns/y:1.0.0": "\ndependencies:\n  - name: x-ns/x\n    version: '*'",
+                },
+            },
+            "no signed manifest declares: x-ns/x:1.0.0 (xc7z020/pynq), y-ns/y:1.0.0 (xc7z020/pynq)",
+        ),
+    ],
+    ids=[
+        "other-shell",
+        "older-shell",
+        "no-shell",
+        "unpinned-shell",
+        "undeclared-dep",
+        "unsatisfied-dep",
+        "missing-dep",
+        "other-board",
+        "other-runtime",
+        "not-the-declared-platform",
+        "duplicate-name",
+        "transitive-constraint",
+        "cycle",
+    ],
+)
+def test_pull_attested_rejects_what_the_signed_manifests_do_not_declare(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, attrs: dict[str, Any], message: str
+) -> None:
+    """GHSA-5wfx-cj9v-h473: the registry cannot swap in another signed shell or dependency."""
+    with pytest.raises(sdk_api.SDKError) as exc_info:
+        _pull_declared(monkeypatch, tmp_path, **attrs)
+    assert exc_info.value.code == ExitKind.INVALID
+    assert message in str(exc_info.value)
+    # Checked before any artifact is downloaded.
+    assert not any(p.suffix in (".bit", ".hwh") for p in tmp_path.rglob("*"))
+
+
+def test_pull_attested_shell_must_carry_the_pinned_bitstream(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    root_yaml = _DeclaredClient.root_yaml.replace(hashlib.sha256(b"shell-ns/shell-design:2.0.0").hexdigest(), "c" * 64)
+    with pytest.raises(sdk_api.SDKError, match=re.escape("has no artifact with the sha256 that test-ns")):
+        _pull_declared(monkeypatch, tmp_path, root_yaml=root_yaml)
+
+
+def test_pull_attested_deps_only_checks_against_the_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """--deps-only reads the signed root's declarations without writing the root."""
+    with pytest.raises(sdk_api.SDKError, match=re.escape("no signed manifest declares: evil-ns/dep:1.0.0")):
+        _pull_declared(monkeypatch, tmp_path, deps=(("evil-ns/dep", "1.0.0"),), deps_only=True)
+    assert not (tmp_path / "manifest.yaml").exists()
+
+    result = _pull_declared(monkeypatch, tmp_path / "ok", deps_only=True)
+    assert result.dependencies == ["dep-ns/dep-design:0.1.0"]
+    assert not (tmp_path / "ok" / "manifest.yaml").exists()
+
+
+def test_pull_attested_optional_dependency_may_be_absent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    root_yaml = _DeclaredClient.root_yaml.replace("version: ^0.1.0", "version: ^0.1.0\n    optional: true")
+    result = _pull_declared(monkeypatch, tmp_path, root_yaml=root_yaml, deps=())
+    assert result.dependencies == []
+
+
+def test_pull_attested_no_shell_skips_the_shell_check(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    result = _pull_declared(monkeypatch, tmp_path, shell=("evil-ns/shell", "9.9.9"), no_shell=True)
+    assert result.shell is None
+
+
+def test_pull_without_attestation_still_trusts_the_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Without --verify-attestation the registry's answers are used as before."""
+    result = _pull_declared(
+        monkeypatch, tmp_path, signed=False, shell=("evil-ns/shell", "9.9.9"), deps=(("evil-ns/dep", "1.0.0"),)
+    )
+    assert result.shell == "evil-ns/shell:9.9.9"
+    assert result.dependencies == ["evil-ns/dep:1.0.0"]
 
 
 def test_pull_verify_attestation_cosign_not_installed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -5189,7 +5462,6 @@ _PULL_MANIFEST = "\n".join(
 
 
 def test_download_platform_writes_manifest_and_artifacts(tmp_path: Path) -> None:
-    from fabricgate.client.puller import _download_platform
 
     calls: list[tuple[object, ...]] = []
 
@@ -5214,8 +5486,6 @@ def test_download_platform_writes_manifest_and_artifacts(tmp_path: Path) -> None
 
 def test_download_platform_writes_nothing_for_a_broken_manifest(tmp_path: Path) -> None:
     from pydantic import ValidationError
-
-    from fabricgate.client.puller import _download_platform
 
     class _Client:
         def get_platform_manifest_bytes(self, *_a):

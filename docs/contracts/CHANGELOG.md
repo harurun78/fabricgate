@@ -6,6 +6,10 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+### Security
+
+- `fabricgate pull --verify-attestation` now checks that the dependencies and the shell the registry hands over are the ones the signed manifests declare (GHSA-5wfx-cj9v-h473). The shell must match the root manifest's `shell_dependency` (name, version and an artifact with the pinned sha256); each dependency must be declared, with a constraint it satisfies and the platform it was served for (the root's platform when the declaration names none), by the root or by a dependency already accepted this way; a design may come only once; a declared dependency that is not optional must be there. Before, the expected ref came from the registry's own answer, so another manifest from the same signer could stand in. All manifests are now fetched and checked before any artifact is downloaded, and no artifact is written when a check fails (exit 3; the manifests and bundles already fetched stay on disk). With `--deps-only`, the root manifest is fetched and its signature checked (it is not written). No API or schema change.
+
 ### Added
 
 - `fabricgate pull` warns when the version being pulled is itself yanked: `⚠  <namespace>/<design>:<version> is yanked: <reason>` on stderr (without `: <reason>` when there is none), before the deprecated warning, and still downloads it with exit code 0, as it already did for a yanked shell or dependency. It reads `yanked` / `yanked_reason` of `VersionDetailResponse`, which the registry already returns. The SDK's `PullResult` and `fabricgate.client.puller.PullOutcome` gain `yanked_warning` (string or null) with the same text. No API or schema change.

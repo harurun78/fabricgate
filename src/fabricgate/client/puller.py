@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
@@ -21,12 +22,17 @@ from typing import Any
 
 from fabricgate.client import cache
 from fabricgate.client.registry_client import RegistryClientProtocol, RegistryError
-from fabricgate.client.resolver import resolve_platform_detailed
+from fabricgate.client.resolver import resolve_platform_detailed, satisfies
 from fabricgate.client.validator import artifact_refs, is_single_filename
 from fabricgate.models.api.errors import ErrorCode
 from fabricgate.models.api.responses import ShellInfo
 from fabricgate.models.design_index import DesignIndex, PlatformEntry
-from fabricgate.models.platform_manifest import PlatformManifest, parse_platform_manifest
+from fabricgate.models.platform_manifest import (
+    Dependency,
+    PlatformManifest,
+    ResolvedDependency,
+    parse_platform_manifest,
+)
 
 ProgressCallback = Callable[[str, int, int | None], None]
 """``on_progress(label, bytes_received, total_bytes)``; *label* is ``"<ns>/<design>:<version> <file>"``."""
@@ -182,7 +188,18 @@ def _verify_manifest_attestation(
         raise AttestationError(f"Attestation verification failed for {label}: {result.stderr.strip()}")
 
 
-def _download_platform(
+@dataclass(frozen=True)
+class _FetchedManifest:
+    """A platform manifest that is on disk (and attested, with a signer), its artifacts not yet fetched."""
+
+    ref: str
+    dest: Path
+    manifest: PlatformManifest
+    fetch: Callable[..., bytes]
+    kind: str
+
+
+def _fetch_manifest(
     client: RegistryClientProtocol,
     namespace: str,
     design: str,
@@ -191,20 +208,11 @@ def _download_platform(
     runtime: str,
     dest: Path,
     *,
-    verify_digests: bool,
     signer: AttestationSigner | None,
-    cache_dir: Path | None = None,
     kind: str = "",
-    on_progress: ProgressCallback | None = None,
-) -> tuple[list[str], bool]:
-    """Download one platform's manifest and artifacts into *dest*.
+) -> _FetchedManifest:
+    """Fetch one platform's manifest into *dest* and, with *signer*, check its attestation.
 
-    Returns the artifact names and whether every artifact came from the cache.
-    With *cache_dir*, an artifact whose pinned sha256 is cached is copied from
-    there instead of downloaded, and a downloaded one is added to the cache. The
-    manifest (and its attestation) is always fetched and checked first.
-
-    *on_progress* is told about each artifact; a cached one is reported once, as complete.
     *kind* (``""``, ``"dependency"`` or ``"shell"``) only prefixes error messages.
     The manifest is parsed before it is written, so a broken one leaves nothing on disk.
     """
@@ -212,6 +220,9 @@ def _download_platform(
     ref = f"{namespace}/{design}:{version}"
     manifest_bytes = client.get_platform_manifest_bytes(namespace, design, version, board, runtime)
     manifest = parse_platform_manifest(manifest_bytes.decode("utf-8"))
+    for artifact in artifact_refs(manifest):
+        # Before anything is written or fetched, so a manifest naming a path outside dest stops the pull here.
+        _validate_artifact_filename(str(artifact.file), context=f"{prefix}manifest")
     (dest / "manifest.yaml").write_bytes(manifest_bytes)
     fetch = partial(client.download_artifact, namespace, design, version, board, runtime)
     if signer is not None:
@@ -224,23 +235,45 @@ def _download_platform(
             expected_ref=ref,
             expected_runtime=runtime,
         )
+    return _FetchedManifest(ref, dest, manifest, fetch, kind)
 
+
+def _download_artifacts(
+    fetched: _FetchedManifest,
+    *,
+    verify_digests: bool,
+    cache_dir: Path | None = None,
+    on_progress: ProgressCallback | None = None,
+) -> tuple[list[str], bool]:
+    """Download the artifacts *fetched*'s manifest lists into its directory.
+
+    Returns the artifact names and whether every artifact came from the cache.
+    With *cache_dir*, an artifact whose pinned sha256 is cached is copied from
+    there instead of downloaded, and a downloaded one is added to the cache.
+    *on_progress* is told about each artifact; a cached one is reported once, as complete.
+    """
+    kind = fetched.kind
+    prefix = f"{kind} " if kind else ""
     names: list[str] = []
     all_cached = True
-    for artifact in artifact_refs(manifest):
+    for artifact in artifact_refs(fetched.manifest):
         name = str(artifact.file)
         path = _validate_artifact_filename(name, context=f"{prefix}manifest")
         data = cache.get_blob(cache_dir, artifact.sha256) if cache_dir is not None else None
         downloaded = data is None
-        label = f"{ref} {name}"
+        label = f"{fetched.ref} {name}"
         if data is None:
             all_cached = False
             # on_progress is only passed when set, so clients written before it keep working.
-            data = fetch(name) if on_progress is None else fetch(name, on_progress=partial(on_progress, label))
+            data = (
+                fetched.fetch(name)
+                if on_progress is None
+                else fetched.fetch(name, on_progress=partial(on_progress, label))
+            )
         elif on_progress is not None:
             on_progress(label, len(data), len(data))
         _write_verified(
-            dest / path,
+            fetched.dest / path,
             data,
             artifact.sha256,
             verify=verify_digests,
@@ -252,7 +285,7 @@ def _download_platform(
     return names, bool(names) and all_cached
 
 
-def _resolve_and_download_deps(
+def _fetch_dependencies(
     client: RegistryClientProtocol,
     namespace: str,
     design: str,
@@ -260,17 +293,13 @@ def _resolve_and_download_deps(
     device: str,
     runtime: str,
     target_dir: Path,
-    verify_digests: bool,
     *,
     include_optional: bool = False,
     signer: AttestationSigner | None = None,
-    cache_dir: Path | None = None,
-    on_progress: ProgressCallback | None = None,
-) -> tuple[list[str], list[str]]:
-    """Resolve dependencies and download them into deps/ subdirectory.
+) -> list[tuple[ResolvedDependency, _FetchedManifest]]:
+    """Resolve the dependencies and fetch each one's manifest into ``deps/<ns>/<design>/<version>/``.
 
-    Returns the dependency refs (``ns/design:version``) that were downloaded, and a
-    warning for each one that is yanked.
+    Their artifacts are downloaded later, once every manifest has been checked.
     """
     try:
         deps_resp = client.get_dependencies(
@@ -284,29 +313,21 @@ def _resolve_and_download_deps(
     except RegistryError as exc:
         if exc.status_code == 404:
             # No dependencies endpoint or no deps — not an error
-            return [], []
+            return []
         raise
 
-    if not deps_resp.dependencies:
-        return [], []
-
-    dep_refs: list[str] = []
-    yanked_warnings: list[str] = []
-    deps_dir = target_dir / "deps"
-    deps_dir.mkdir(parents=True, exist_ok=True)
-
+    fetched: list[tuple[ResolvedDependency, _FetchedManifest]] = []
     # Dependencies come in topological order from server
     for dep in deps_resp.dependencies:
         dep_ns, dep_design = str(dep.name).split("/", 1)
         dep_version = str(dep.resolved_version)
         dep_device, dep_runtime = str(dep.platform).split("/", 1)
-        dep_ref = f"{dep.name}:{dep.resolved_version}"
 
         # One path segment per part: joining them with "-" made a-b/c and a/b-c collide.
-        dep_dir = deps_dir / dep_ns / dep_design / dep_version
+        dep_dir = target_dir / "deps" / dep_ns / dep_design / dep_version
         dep_dir.mkdir(parents=True, exist_ok=True)
 
-        _download_platform(
+        manifest = _fetch_manifest(
             client,
             dep_ns,
             dep_design,
@@ -314,22 +335,24 @@ def _resolve_and_download_deps(
             dep_device,
             dep_runtime,
             dep_dir,
-            verify_digests=verify_digests,
             signer=signer,
-            cache_dir=cache_dir,
             kind="dependency",
-            on_progress=on_progress,
         )
-        dep_refs.append(dep_ref)
-        # An exact constraint still resolves to a yanked version; say so like `verify` does.
+        fetched.append((dep, manifest))
+    return fetched
+
+
+def _dependency_yanked_warnings(deps: list[tuple[ResolvedDependency, _FetchedManifest]]) -> list[str]:
+    """A warning for each dependency that is yanked (an exact constraint still resolves to one, like `verify` says)."""
+    warnings: list[str] = []
+    for dep, fetched in deps:
         if dep.yanked:
             reason = f": {dep.yanked_reason}" if dep.yanked_reason else ""
-            yanked_warnings.append(f"Dependency {dep_ref} is yanked{reason}")
+            warnings.append(f"Dependency {fetched.ref} is yanked{reason}")
+    return warnings
 
-    return dep_refs, yanked_warnings
 
-
-def _maybe_download_shell(
+def _fetch_shell(
     client: RegistryClientProtocol,
     namespace: str,
     design: str,
@@ -337,21 +360,14 @@ def _maybe_download_shell(
     device: str,
     runtime: str,
     target_dir: Path,
-    verify_digests: bool,
     *,
-    no_shell: bool = False,
     signer: AttestationSigner | None = None,
-    cache_dir: Path | None = None,
-    on_progress: ProgressCallback | None = None,
-) -> ShellInfo | None:
-    """Download the static shell for a partial bitstream if applicable.
+) -> tuple[ShellInfo, _FetchedManifest] | None:
+    """Fetch the manifest of the static shell for a partial bitstream, if there is one.
 
-    Returns the registry's shell info if downloaded, or None.
+    Returns the registry's shell info and the fetched manifest, or None. Its artifacts
+    are downloaded later, once every manifest has been checked.
     """
-    if no_shell:
-        # Skip shell download entirely — caller handles the warning output
-        return None
-
     try:
         shell_resp = client.get_shell(namespace, design, version, device, runtime)
     except RegistryError as exc:
@@ -368,10 +384,9 @@ def _maybe_download_shell(
     shell_dir = target_dir / "shell" / shell_ns / shell_design / str(shell_info.version)
     shell_dir.mkdir(parents=True, exist_ok=True)
 
-    # Fetch the shell's own manifest and download the artifacts it lists. The shell may
-    # be published for a different board ID than the design, so use shell_info.board,
-    # not the design's device.
-    _download_platform(
+    # The shell may be published for a different board ID than the design, so use
+    # shell_info.board, not the design's device.
+    manifest = _fetch_manifest(
         client,
         shell_ns,
         shell_design,
@@ -379,14 +394,116 @@ def _maybe_download_shell(
         shell_info.board,
         shell_info.runtime,
         shell_dir,
-        verify_digests=verify_digests,
         signer=signer,
-        cache_dir=cache_dir,
         kind="shell",
-        on_progress=on_progress,
     )
+    return shell_info, manifest
 
-    return shell_info
+
+def _check_signed_declarations(
+    root: PlatformManifest,
+    root_platform: str,
+    deps: list[tuple[ResolvedDependency, _FetchedManifest]] | None,
+    shell: tuple[ShellInfo, _FetchedManifest] | None,
+    *,
+    check_shell: bool,
+) -> None:
+    """Check that the registry's dependencies and shell are the ones the signed manifests declare.
+
+    With ``--verify-attestation`` each manifest is signed, but which dependencies and
+    shell to pull comes from the registry. Without this check the registry could hand
+    over any other manifest from the same signer (an older version, another design).
+    *deps* is None when dependencies were not resolved (``--no-deps``); *check_shell*
+    is False when the shell was not looked up (``--no-shell``, ``--deps-only``).
+    Raises :class:`AttestationError` before any of their artifacts is downloaded.
+    """
+    if deps is not None:
+        _check_dependencies(root, root_platform, deps)
+    if not check_shell:
+        return
+    pin = root.shell_dependency
+    if pin is None:
+        if shell is not None:
+            raise AttestationError(
+                f"The registry returned shell {shell[1].ref}, but the signed manifest {root.design_ref} pins no shell."
+            )
+        return
+    pinned_ref = f"{pin.name}:{pin.version.removeprefix('=')}"
+    if shell is None:
+        raise AttestationError(
+            f"The signed manifest {root.design_ref} pins shell {pinned_ref}, but the registry returned no shell."
+        )
+    shell_info, fetched = shell
+    if fetched.ref != pinned_ref:
+        raise AttestationError(
+            f"The signed manifest {root.design_ref} pins shell {pinned_ref}, but the registry returned {fetched.ref}."
+        )
+    if not any(artifact.sha256 == pin.sha256 for artifact in artifact_refs(fetched.manifest)):
+        # Another genuine platform of the same shell version would pass the ref check.
+        raise AttestationError(
+            f"Shell {pinned_ref} ({shell_info.board}/{shell_info.runtime}) has no artifact with the sha256 "
+            f"that {root.design_ref} pins."
+        )
+
+
+def _check_dependencies(
+    root: PlatformManifest, root_platform: str, deps: list[tuple[ResolvedDependency, _FetchedManifest]]
+) -> None:
+    """Accept only dependencies that a signed manifest reachable from the root declares, and require every declared one.
+
+    The registry's order and ``required_by`` are not trusted: starting from the root's
+    declarations, a dependency is accepted when an accepted manifest declares its name with a
+    constraint its version satisfies and the platform it was served for, and then its own
+    declarations count too. A declaration without ``platform`` means the root's platform, as
+    the registry resolves it (not the declaring manifest's). The registry resolves one version
+    per design, so a name that comes twice is rejected.
+    """
+    names = [str(dep.name) for dep, _ in deps]
+    if duplicates := sorted({name for name in names if names.count(name) > 1}):
+        raise AttestationError(f"The registry returned more than one version of {', '.join(duplicates)}.")
+
+    def declares(d: Dependency, dep: ResolvedDependency) -> bool:
+        platform = str(d.platform) if d.platform is not None else root_platform
+        return (
+            str(d.name) == str(dep.name)
+            and str(dep.platform) == platform
+            and _satisfies(str(dep.resolved_version), d.version)
+        )
+
+    declared = list(root.dependencies)
+    pending = list(deps)
+    accepted: dict[str, str] = {}
+    progress = True
+    while pending and progress:
+        progress = False
+        for item in list(pending):
+            dep = item[0]
+            if any(declares(d, dep) for d in declared):
+                pending.remove(item)
+                accepted[str(dep.name)] = str(dep.resolved_version)
+                declared.extend(item[1].manifest.dependencies)
+                progress = True
+    if pending:
+        refs = ", ".join(f"{fetched.ref} ({dep.platform})" for dep, fetched in pending)
+        raise AttestationError(f"The registry returned dependencies that no signed manifest declares: {refs}")
+    for d in declared:
+        version = accepted.get(str(d.name))
+        if version is None:
+            if not d.optional:
+                raise AttestationError(
+                    f"A signed manifest needs {d.name} {d.version}, but the registry did not return it."
+                )
+        elif not _satisfies(version, d.version):
+            raise AttestationError(
+                f"A signed manifest needs {d.name} {d.version}, but the registry returned {version}."
+            )
+
+
+def _satisfies(version: str, constraint: str) -> bool:
+    try:
+        return satisfies(version, constraint)
+    except ValueError as exc:
+        raise AttestationError(str(exc)) from exc
 
 
 def pull_design(
@@ -455,30 +572,24 @@ def pull_design(
     target_dir = Path(output) if output is not None else Path.cwd() / f"{design}-{version}"
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    downloaded_files: list[str] = []
-    cached = False
-
-    # --- Download root design (unless deps_only) ---
+    # Every manifest (root, dependencies, shell) is fetched and checked before any artifact is
+    # downloaded, so with --verify-attestation nothing the signed manifests do not declare is written.
+    root: _FetchedManifest | None = None
+    root_manifest: PlatformManifest | None = None
     if not deps_only:
-        downloaded_files, cached = _download_platform(
-            client,
-            namespace,
-            design,
-            version,
-            board_id,
-            runtime,
-            target_dir,
-            verify_digests=verify_digests,
-            signer=signer,
-            cache_dir=cache_path,
-            on_progress=on_progress,
-        )
+        root = _fetch_manifest(client, namespace, design, version, board_id, runtime, target_dir, signer=signer)
+        root_manifest = root.manifest
+    elif signer is not None:
+        # --deps-only skips the root, but its signed manifest says which dependencies are expected.
+        with tempfile.TemporaryDirectory() as scratch:
+            root_manifest = _fetch_manifest(
+                client, namespace, design, version, board_id, runtime, Path(scratch), signer=signer
+            ).manifest
 
-    # --- Dependency resolution ---
-    dep_refs: list[str] = []
-    dependency_yanked_warnings: list[str] = []
-    if not no_deps:
-        dep_refs, dependency_yanked_warnings = _resolve_and_download_deps(
+    deps = (
+        None
+        if no_deps
+        else _fetch_dependencies(
             client,
             namespace,
             design,
@@ -486,34 +597,39 @@ def pull_design(
             board_id,
             runtime,
             target_dir,
-            verify_digests,
             include_optional=include_optional_deps,
             signer=signer,
-            cache_dir=cache_path,
-            on_progress=on_progress,
         )
+    )
+    check_shell = not deps_only and not no_shell
+    shell = (
+        _fetch_shell(client, namespace, design, version, board_id, runtime, target_dir, signer=signer)
+        if check_shell
+        else None
+    )
+    if signer is not None and root_manifest is not None:
+        _check_signed_declarations(root_manifest, f"{board_id}/{runtime}", deps, shell, check_shell=check_shell)
 
-    # --- Shell auto-download ---
+    download = partial(
+        _download_artifacts, verify_digests=verify_digests, cache_dir=cache_path, on_progress=on_progress
+    )
+    downloaded_files: list[str] = []
+    cached = False
+    if root is not None:
+        downloaded_files, cached = download(root)
+    dep_refs: list[str] = []
+    dependency_yanked_warnings: list[str] = []
+    if deps:
+        for _, fetched in deps:
+            download(fetched)
+        dep_refs = [fetched.ref for _, fetched in deps]
+        dependency_yanked_warnings = _dependency_yanked_warnings(deps)
     shell_ref: str | None = None
     shell_yanked_warning: str | None = None
-    shell_info: ShellInfo | None = None
-    if not deps_only:
-        shell_info = _maybe_download_shell(
-            client,
-            namespace,
-            design,
-            version,
-            board_id,
-            runtime,
-            target_dir,
-            verify_digests,
-            no_shell=no_shell,
-            signer=signer,
-            cache_dir=cache_path,
-            on_progress=on_progress,
-        )
-    if shell_info is not None:
-        shell_ref = f"{shell_info.name}:{shell_info.version}"
+    if shell is not None:
+        shell_info, shell_manifest = shell
+        download(shell_manifest)
+        shell_ref = shell_manifest.ref
         # The pin is an exact version, so a yanked shell still resolves; say so like `verify` does.
         if shell_info.yanked:
             reason = f": {shell_info.yanked_reason}" if shell_info.yanked_reason else ""
