@@ -1282,34 +1282,66 @@ _LOGIN_PAGE = b"<html><body>Sign in</body></html>"
             httpx2.MockTransport(lambda r: httpx2.Response(302, headers={"Location": "https://sso/login"}, request=r)),
             "Unexpected redirect from the registry (HTTP 302 to https://sso/login)",
         ),
-        (
-            lambda c: c.device_authorization(),
-            _transport(200, _LOGIN_PAGE, "text/html"),
-            "not a device authorization response",
-        ),
-        (
-            lambda c: c.device_authorization(),
-            _transport(200, {"device_code": "d"}),
-            "not a device authorization response",
-        ),
+        (lambda c: c.device_authorization(), _transport(200, _LOGIN_PAGE, "text/html"), "not a device authorization"),
         (lambda c: c.token_exchange(grant_type="g"), _transport(200, _LOGIN_PAGE, "text/html"), "not a token response"),
-        (
-            # RFC 6749 only RECOMMENDS expires_in; without it the token's lifetime is unknown.
-            lambda c: c.token_exchange(grant_type="g"),
-            _transport(200, {"access_token": "t", "token_type": "Bearer"}),
-            "not the expected OAuthTokenResponse",
-        ),
     ],
-    ids=["html-200", "redirect", "device-html", "device-missing-keys", "token-html", "token-no-expires-in"],
+    ids=["html-200", "redirect", "device-html", "token-html"],
 )
 def test_a_response_that_is_not_the_apis_is_an_infra_error(call, transport, message: str) -> None:
-    """#157: a proxy, captive portal or SSO page answering is reported, not a traceback."""
+    """#157: a proxy, captive portal or SSO page answering is reported (exit 4), not a traceback."""
     from fabricgate.client.errors import FailureKind
 
     with pytest.raises(NetworkError) as exc_info:
         call(_make_client(transport))
     assert message in str(exc_info.value)
     assert exc_info.value.kind == FailureKind.INFRA
+
+
+@pytest.mark.parametrize(
+    ("call", "body", "message"),
+    [
+        # A newer registry: a nested field this client does not know.
+        (lambda c: c.search_designs(), {"designs": [], "total": 0, "page": 1, "per_page": 20, "x": {"y": 1}}, None),
+        (
+            lambda c: c.get_version("ns", "x", "1.0.0"),
+            {
+                "schema": "fabricgate-index/v1",
+                "name": "ns/x",
+                "version": "1.0.0",
+                "published_at": "2026-01-01T00:00:00Z",
+                "platforms": [
+                    {
+                        "platform": "zcu104/pynq",
+                        "digest": "sha256:" + "a" * 64,
+                        "shell_dependency": {"name": "s/s", "version": "=1.0.0", "sha256": "a" * 64, "future": 1},
+                    }
+                ],
+            },
+            "VersionDetailResponse: platforms.0.shell_dependency.future",
+        ),
+        (lambda c: c.device_authorization(), {"device_code": "d"}, "device authorization response"),
+        # RFC 6749 only RECOMMENDS expires_in; without it the token's lifetime is unknown.
+        (
+            lambda c: c.token_exchange(grant_type="g"),
+            {"access_token": "t", "token_type": "Bearer"},
+            "OAuthTokenResponse: expires_in",
+        ),
+    ],
+    ids=["unknown-field-ok-at-top", "unknown-nested-field", "device-missing-keys", "token-no-expires-in"],
+)
+def test_json_this_client_does_not_accept_is_invalid(call, body, message: str | None) -> None:
+    """#161: JSON that the models reject is a registry this client does not understand (exit 3), not a proxy."""
+    from fabricgate.client.errors import FailureKind
+    from fabricgate.client.registry_client import IncompatibleResponseError
+
+    client = _make_client(_transport(200, body))
+    if message is None:
+        call(client)  # unknown top-level fields are ignored (ApiResponseModel)
+        return
+    with pytest.raises(IncompatibleResponseError, match="Is fabricgate up to date") as exc_info:
+        call(client)
+    assert message in str(exc_info.value)
+    assert exc_info.value.kind == FailureKind.INVALID
 
 
 def test_a_malformed_registry_url_is_invalid_configuration() -> None:

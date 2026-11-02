@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -9,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 from urllib.parse import quote
 
 import httpx2
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from fabricgate.client.errors import FailureKind
 from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
@@ -117,6 +118,30 @@ class InvalidRegistryURLError(RegistryError):
         return FailureKind.INVALID
 
 
+class IncompatibleResponseError(RegistryError):
+    """Raised when the registry answers with JSON that this client's models do not accept.
+
+    The registry is reachable and speaks JSON, but in a shape this client does not know
+    (typically a newer registry): ``kind`` is ``FailureKind.INVALID``, not a transport failure.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.status_code = 0
+        self.error = None
+        Exception.__init__(self, message)
+
+    @property
+    def kind(self) -> FailureKind:
+        return FailureKind.INVALID
+
+
+def _incompatible_response(resp: httpx2.Response, expected: str, detail: str) -> IncompatibleResponseError:
+    return IncompatibleResponseError(
+        f"The registry's response (HTTP {resp.status_code}) does not match {expected}: {detail}. "
+        "Is fabricgate up to date?"
+    )
+
+
 def _unexpected_response(resp: httpx2.Response, expected: str) -> NetworkError:
     """The error for a response that is not the API's: a proxy, captive portal or SSO page answered."""
     content_type = resp.headers.get("Content-Type", "no content type")
@@ -130,11 +155,21 @@ _Model = TypeVar("_Model", bound=BaseModel)
 
 
 def _parse(model: type[_Model], resp: httpx2.Response) -> _Model:
-    """Validate *resp*'s JSON body as *model*; a body that is not one is an unexpected response."""
+    """Validate *resp*'s JSON body as *model*.
+
+    A body that is not JSON comes from something in front of the registry (exit 4); JSON
+    that *model* rejects is a registry this client does not understand (exit 3).
+    """
+    try:
+        json.loads(resp.content)
+    except ValueError as exc:
+        raise _unexpected_response(resp, f"the expected {model.__name__}") from exc
     try:
         return model.model_validate_json(resp.content)
-    except ValueError as exc:  # pydantic's ValidationError is a ValueError
-        raise _unexpected_response(resp, f"the expected {model.__name__}") from exc
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        where = ".".join(str(part) for part in first["loc"]) or "body"
+        raise _incompatible_response(resp, f"the expected {model.__name__}", f"{where}: {first['msg']}") from exc
 
 
 def _seg(value: str | int) -> str:
@@ -386,7 +421,8 @@ class RegistryClient:
             raise _unexpected_response(resp, "a device authorization response") from exc
         required = ("device_code", "user_code", "verification_uri")
         if not isinstance(result, dict) or not all(isinstance(result.get(key), str) for key in required):
-            raise _unexpected_response(resp, "a device authorization response")
+            detail = f"needs string {', '.join(required)}"
+            raise _incompatible_response(resp, "a device authorization response (RFC 8628)", detail)
         return result
 
     def token_exchange(self, **kwargs: str) -> LoginResponse:
@@ -404,7 +440,7 @@ class RegistryClient:
         if not (isinstance(body, dict) and "access_token" in body):
             return _parse(LoginResponse, resp)
         # Without expires_in (RFC 6749 only RECOMMENDS it) the token's lifetime is unknown:
-        # an unexpected response rather than a guessed expiry.
+        # an incompatible response rather than a guessed expiry.
         oauth = _parse(OAuthTokenResponse, resp)
         return LoginResponse(
             token=oauth.access_token,
