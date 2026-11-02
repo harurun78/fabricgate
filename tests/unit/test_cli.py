@@ -2936,6 +2936,22 @@ def test_login_triggers_user_code_callback(monkeypatch) -> None:
     assert "Waiting for authorization" in result.output
 
 
+@pytest.mark.parametrize("json_flag", [[], ["--json"]])
+def test_login_user_code_reaches_the_terminal_without_control_characters(monkeypatch, json_flag) -> None:
+    """The verification URL and code come from the registry: escape sequences and line breaks become ``?``."""
+
+    def _fake_login(registry: str, on_user_code, **_kwargs):
+        on_user_code("https://login.example.com/\x1b[2J\nactivate", "AB\x1b]0;x\x07CD")
+        return LoginResult(registry=registry, storage="file (~/.fabricgate)")
+
+    monkeypatch.setattr("fabricgate.cli.commands.login.sdk_api.login", _fake_login)
+    result = CliRunner().invoke(main, [*json_flag, "login"])
+    assert result.exit_code == 0
+    assert "\x1b" not in result.output and "\x07" not in result.output
+    assert "  https://login.example.com/?[2J?activate\n" in result.output
+    assert "  and enter code: AB?]0;x?CD\n" in result.output
+
+
 def test_login_json_stdout_is_only_json(monkeypatch) -> None:
     """#163: with --json the guidance goes to stderr, so stdout parses as JSON."""
 

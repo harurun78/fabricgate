@@ -7,7 +7,7 @@ import json
 import click
 
 from fabricgate.cli.exit_codes import exit_code_for
-from fabricgate.cli.formatting import sanitize_lines
+from fabricgate.cli.formatting import sanitize, sanitize_lines
 from fabricgate.sdk import api as sdk_api
 
 
@@ -26,9 +26,10 @@ def login_cmd(obj: dict[str, object], registry: str | None) -> None:
     click.echo(f"Using registry: {reg}\n", err=to_stderr)
 
     def _on_user_code(verification_uri: str, user_code: str) -> None:
+        # Both come from the registry's response: no control characters to the terminal.
         click.echo("To authenticate, visit:", err=to_stderr)
-        click.echo(f"  {verification_uri}", err=to_stderr)
-        click.echo(f"  and enter code: {user_code}\n", err=to_stderr)
+        click.echo(f"  {sanitize(verification_uri)}", err=to_stderr)
+        click.echo(f"  and enter code: {sanitize(user_code)}\n", err=to_stderr)
         click.echo("Waiting for authorization ...", nl=False, err=to_stderr)
 
     try:
