@@ -6,6 +6,10 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+### Added
+
+- `fabricgate pull` warns when the version being pulled is itself yanked: `⚠  <namespace>/<design>:<version> is yanked: <reason>` on stderr (without `: <reason>` when there is none), before the deprecated warning, and still downloads it with exit code 0, as it already did for a yanked shell or dependency. It reads `yanked` / `yanked_reason` of `VersionDetailResponse`, which the registry already returns. The SDK's `PullResult` and `fabricgate.client.puller.PullOutcome` gain `yanked_warning` (string or null) with the same text. No API or schema change.
+
 ## [0.5.0] - 2026-11-01
 
 ### Added

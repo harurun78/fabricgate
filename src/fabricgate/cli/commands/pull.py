@@ -97,6 +97,8 @@ def pull_cmd(
             on_progress=on_progress,
         )
 
+    if result.yanked_warning:
+        click.echo(f"\u26a0  {result.yanked_warning}", err=True)
     if result.deprecated_warning:
         click.echo(f"\u26a0  {result.deprecated_warning}", err=True)
     if result.shell_yanked_warning:

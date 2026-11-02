@@ -91,6 +91,7 @@ class PullOutcome:
     dependencies: list[str] = field(default_factory=list)
     shell: str | None = None
     deprecated_warning: str | None = None
+    yanked_warning: str | None = None
     shell_yanked_warning: str | None = None
     dependency_yanked_warnings: list[str] = field(default_factory=list)
     fallback_from: str | None = None
@@ -440,6 +441,12 @@ def pull_design(
             msg += f" {version_detail.deprecation_message}"
         deprecated_warning = msg
 
+    # The registry still serves a yanked version by its exact ref; say so like `verify` does.
+    yanked_warning: str | None = None
+    if version_detail.yanked:
+        reason = f": {version_detail.yanked_reason}" if version_detail.yanked_reason else ""
+        yanked_warning = f"{version_detail.name}:{version_detail.version} is yanked{reason}"
+
     index = _version_detail_to_index(version_detail.model_dump(by_alias=True))
     resolution = resolve_platform_detailed(index, platform)
     selected = resolution.entry
@@ -532,6 +539,7 @@ def pull_design(
         dependencies=dep_refs,
         shell=shell_ref,
         deprecated_warning=deprecated_warning,
+        yanked_warning=yanked_warning,
         shell_yanked_warning=shell_yanked_warning,
         dependency_yanked_warnings=dependency_yanked_warnings,
         fallback_from=resolution.fallback_from,

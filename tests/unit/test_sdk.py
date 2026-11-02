@@ -1766,6 +1766,40 @@ def test_pull_deprecated_version_warning(
     assert "Use newer version" in result.deprecated_warning
 
 
+class _FakeRegistryClientYanked(_FakeRegistryClientWithDeps):
+    """Returns a yanked version; ``reason`` is its yanked_reason."""
+
+    reason: str | None = "Timing bug"
+
+    def get_version(self, namespace, design, version):
+        detail = super().get_version(namespace, design, version)
+        return detail.model_copy(update={"yanked": True, "yanked_reason": self.reason})
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected"),
+    [("Timing bug", "test-ns/blink:1.0.0 is yanked: Timing bug"), (None, "test-ns/blink:1.0.0 is yanked")],
+)
+def test_pull_yanked_version_warning(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, reason: str | None, expected: str
+) -> None:
+    """#153: pulling a yanked version still succeeds and says so, like a yanked shell or dependency."""
+    monkeypatch.setattr(_FakeRegistryClientYanked, "reason", reason)
+    _patch_all_rc(monkeypatch, _FakeRegistryClientYanked)
+
+    result = sdk_api.pull("test-ns/blink:1.0.0", platform="xc7z020/pynq", output=tmp_path, cache_dir=tmp_path / "cache")
+
+    assert result.yanked_warning == expected
+
+
+def test_pull_not_yanked_version_has_no_warning(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _patch_all_rc(monkeypatch, _FakeRegistryClientWithDeps)
+
+    result = sdk_api.pull("test-ns/blink:1.0.0", platform="xc7z020/pynq", output=tmp_path, cache_dir=tmp_path / "cache")
+
+    assert result.yanked_warning is None
+
+
 def test_pull_dependency_unresolvable_exit_5(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
