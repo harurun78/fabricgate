@@ -86,7 +86,8 @@ def _extract_device_family_and_package(part: str) -> tuple[str | None, str | Non
     ``"xc7a35ticsg324-1L"`` → ``("xc7a35ti", "csg324")`` (as SYSTEMINFO's DEVICE / PACKAGE give them).
     """
     segments = part.lower().split("-")
-    if seven_series := re.fullmatch(r"(xc7[a-z]+[0-9]+t?i?)([a-z]+[0-9]+)", segments[0]):
+    # Zynq-7000S devices end in "s" (xc7z007s); other packages can start with "s" (xc7z030sbg485).
+    if seven_series := re.fullmatch(r"(xc7(?:z0(?:07|12|14)s|[a-z]+[0-9]+t?)i?)([a-z]+[0-9]+)", segments[0]):
         return seven_series.group(1), seven_series.group(2)
     device_family = segments[0] if segments else None
     package = segments[1] if len(segments) >= 2 else None

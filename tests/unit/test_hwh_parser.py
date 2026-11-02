@@ -101,6 +101,11 @@ class TestExtractDeviceFamilyAndPackage:
             ("xc7a100tcsg324-1", ("xc7a100t", "csg324")),
             ("xc7k325tffg900-2", ("xc7k325t", "ffg900")),
             ("xc7s50csga324-1", ("xc7s50", "csga324")),
+            ("xc7z007sclg225-1", ("xc7z007s", "clg225")),
+            ("xc7z014sclg400-1", ("xc7z014s", "clg400")),
+            ("xc7z030sbg485-1", ("xc7z030", "sbg485")),
+            ("xc7vx485tffg1157-1", ("xc7vx485t", "ffg1157")),
+            ("xc7z007s-clg225-1", ("xc7z007s", "clg225")),
         ],
     )
     def test_seven_series_part_without_dash_before_package(self, part: str, expected: tuple[str, str]) -> None:
