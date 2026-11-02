@@ -32,7 +32,12 @@ from fabricgate.client.errors import FailureKind
 
 
 @click.group()
-@click.option("--registry", envvar="FG_REGISTRY", default=None, help="Registry base URL.")
+@click.option(
+    "--registry",
+    envvar="FG_REGISTRY",
+    default=None,
+    help="Registry API base URL, including /api/v1 (default: https://registry.fabricgate.dev/api/v1).",
+)
 @click.option("--platform", envvar="FG_PLATFORM", default=None, help="Default target platform.")
 @click.option(
     "--cache-dir",

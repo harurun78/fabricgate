@@ -254,6 +254,15 @@ def test_login_sdk_error(monkeypatch) -> None:
     assert result.exit_code == 1
 
 
+def test_registry_help_says_the_api_prefix_is_required() -> None:
+    """--registry needs /api/v1, and the help of both options says so (#148)."""
+    runner = CliRunner()
+    for args in (["--help"], ["login", "--help"]):
+        result = runner.invoke(main, args)
+        assert result.exit_code == 0
+        assert "including /api/v1" in " ".join(result.output.split())
+
+
 @pytest.mark.parametrize(("kind", "code"), [("INVALID", 3), ("INFRA", 4), ("PERMISSION", 2)])
 def test_login_sdk_error_maps_the_kind(monkeypatch, kind: str, code: int) -> None:
     """login exits with the code of the SDK failure kind, like every other command (#66)."""

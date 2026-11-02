@@ -27,7 +27,7 @@ fabricgate [--registry <url>] [--platform <board_id/runtime>] [--cache-dir <path
 
 | Option | Env Var | Default | Description |
 |--------|---------|---------|-------------|
-| `--registry` | `FG_REGISTRY` | `https://registry.fabricgate.dev/api/v1` | Registry base URL |
+| `--registry` | `FG_REGISTRY` | `https://registry.fabricgate.dev/api/v1` | Registry API base URL, including the `/api/v1` prefix (a host alone such as `https://registry.example` is not enough) |
 | `--platform` | `FG_PLATFORM` | (none) | Default platform for pull (format: `board_id/runtime`) |
 | `--cache-dir` | `FG_CACHE_DIR` | `~/.fabricgate/cache` | Local cache directory |
 | `--verbose` | — | false | Verbose output |
@@ -675,6 +675,10 @@ interval. A `429` (registry rate limit) waits for `Retry-After` (seconds or HTTP
 less than the interval, the interval if the header is missing or invalid) and polls again. If
 that wait would outlast the device code (`expires_in`), login fails with exit 3 and a
 rate-limit message.
+
+If the device authorization request returns `404` and the registry URL has no path (a host
+alone, with or without a trailing `/`), the error also says that the URL must include the API
+prefix and shows the URL with `/api/v1` appended. The exit code stays that of a 404 (1).
 
 ---
 

@@ -11,7 +11,11 @@ from fabricgate.sdk import api as sdk_api
 
 
 @click.command(name="login")
-@click.option("--registry", default=None, help="Registry base URL.")
+@click.option(
+    "--registry",
+    default=None,
+    help="Registry API base URL, including /api/v1 (default: https://registry.fabricgate.dev/api/v1).",
+)
 @click.pass_obj
 def login_cmd(obj: dict[str, object], registry: str | None) -> None:
     """Authenticate with the registry."""

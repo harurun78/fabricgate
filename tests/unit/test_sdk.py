@@ -709,6 +709,39 @@ def test_login_storage_label_follows_actual_store(monkeypatch: pytest.MonkeyPatc
     assert "credentials.json" in result.storage
 
 
+class _DeviceAuthorizationNotFoundClient(_FakeLoginRegistryClient):
+    """The registry has no device authorization endpoint at this URL (404)."""
+
+    def device_authorization(self) -> dict[str, Any]:
+        from fabricgate.client.registry_client import RegistryError
+        from fabricgate.models.api.errors import ErrorDetail, ErrorResponse
+
+        raise RegistryError(404, ErrorResponse(error=ErrorDetail(code="NOT_FOUND", message="Not Found")))
+
+
+@pytest.mark.parametrize("registry", ["https://registry.example", "https://registry.example/"])
+def test_login_404_on_a_url_without_path_mentions_the_api_prefix(
+    monkeypatch: pytest.MonkeyPatch, registry: str
+) -> None:
+    """--registry without /api/v1 gets a 404 that says to add the prefix (#148)."""
+    _patch_all_rc(monkeypatch, _DeviceAuthorizationNotFoundClient)
+
+    with pytest.raises(sdk_api.SDKError) as excinfo:
+        sdk_api.login(registry=registry, poll_interval=0)
+    assert excinfo.value.code == sdk_api.ExitKind.NOT_FOUND
+    assert "[404] NOT_FOUND: Not Found" in str(excinfo.value)
+    assert "https://registry.example/api/v1" in str(excinfo.value)
+
+
+def test_login_404_on_a_url_with_a_path_is_not_rewritten(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A URL that already has a path is not the missing-prefix case, so the error stays as is."""
+    _patch_all_rc(monkeypatch, _DeviceAuthorizationNotFoundClient)
+
+    with pytest.raises(sdk_api.SDKError) as excinfo:
+        sdk_api.login(registry="https://registry.example/api/v1", poll_interval=0)
+    assert str(excinfo.value) == "[404] NOT_FOUND: Not Found"
+
+
 # ---------------------------------------------------------------------------
 # push
 # ---------------------------------------------------------------------------
