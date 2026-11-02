@@ -1355,6 +1355,28 @@ def test_pull_yanked_shell_shows_warning(monkeypatch, tmp_path) -> None:
     assert "is yanked" not in result.stdout
 
 
+def test_pull_yanked_version_shows_warning(monkeypatch, tmp_path) -> None:
+    """#153: a yanked root version is reported on stderr, keeping stdout for the result."""
+    yanked_result = PullResult(
+        name="test-ns/blink",
+        version="1.0.0",
+        platform="xc7z020/pynq",
+        path="/tmp/out",
+        artifacts=["design.bit"],
+        cached=False,
+        yanked_warning="test-ns/blink:1.0.0 is yanked: Timing bug",
+    )
+    monkeypatch.setattr("fabricgate.cli.commands.pull.sdk_api.pull", lambda *_a, **_kw: yanked_result)
+    result = CliRunner().invoke(main, ["pull", "test-ns/blink:1.0.0"])
+    assert result.exit_code == 0
+    assert "\u26a0  test-ns/blink:1.0.0 is yanked: Timing bug" in result.stderr
+    assert "is yanked" not in result.stdout
+
+    result = CliRunner().invoke(main, ["--json", "pull", "test-ns/blink:1.0.0"])
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["yanked_warning"] == "test-ns/blink:1.0.0 is yanked: Timing bug"
+
+
 def test_pull_yanked_dependencies_show_warnings(monkeypatch, tmp_path) -> None:
     """Each yanked dependency is reported on stderr, keeping stdout for the result."""
     yanked_deps_result = PullResult(

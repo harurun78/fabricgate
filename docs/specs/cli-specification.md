@@ -174,6 +174,17 @@ Saved to /home/user/work/fft-accel-1.0.0
   ...
 ```
 
+**Yanked バージョン指定時の警告:**
+
+yank 済みの版も厳密な ref(`ns/design:X.Y.Z`)なら取得できる。取得は止めず、終了コードも変えない。警告は deprecated の警告と同じタイミングで、その前に stderr に 1 行で出す(理由が無ければ `: <reason>` は付けない)。`--json` では `yanked_warning` に同じ文字列が入る。yank 済みの shell と依存の警告(`Shell ... is yanked` / `Dependency ... is yanked`)はこの後に続く:
+
+```
+$ fabricgate pull community/fft-accel:1.0.0 --platform zcu104/pynq
+⚠  community/fft-accel:1.0.0 is yanked: Known timing issue
+Saved to /home/user/work/fft-accel-1.0.0
+  ...
+```
+
 **認証と帰属（API-KPI-001）:**
 
 pull は認証不要（public）だが、ログイン済み（保存済み認証情報あり）の場合は

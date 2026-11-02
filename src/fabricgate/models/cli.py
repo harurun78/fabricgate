@@ -83,6 +83,8 @@ class PullResult(FabricGateModel):
     dependencies: list[str] = Field(default_factory=list)
     shell: str | None = None
     deprecated_warning: str | None = None
+    yanked_warning: str | None = None
+    """Set when the version that was pulled is yanked."""
     shell_yanked_warning: str | None = None
     """Set when the shell that was pulled is a yanked version."""
     dependency_yanked_warnings: list[str] = Field(default_factory=list)
