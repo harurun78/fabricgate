@@ -9,6 +9,7 @@ import click
 from fabricgate.cli.exit_codes import sdk_errors
 from fabricgate.cli.formatting import sanitize
 from fabricgate.sdk import api as sdk_api
+from fabricgate.sdk.designs.search import SEARCH_LIMIT_DEFAULT, SEARCH_LIMIT_MAX
 
 
 @click.command(name="search")
@@ -20,6 +21,13 @@ from fabricgate.sdk import api as sdk_api
 @click.option("--device-family", "device_family_alias", default=None, hidden=True)
 @click.option("--runtime", default=None, help="Filter by runtime.")
 @click.option("--tag", default=None, help="Filter by tag.")
+@click.option(
+    "--limit",
+    type=int,
+    default=SEARCH_LIMIT_DEFAULT,
+    show_default=True,
+    help=f"Show at most this many designs, most recently updated first (up to {SEARCH_LIMIT_MAX}).",
+)
 @click.pass_obj
 def search_cmd(
     obj: dict[str, object],
@@ -30,6 +38,7 @@ def search_cmd(
     device_family_alias: str | None,
     runtime: str | None,
     tag: str | None,
+    limit: int,
 ) -> None:
     """Search for designs in the registry."""
     with sdk_errors():
@@ -41,6 +50,15 @@ def search_cmd(
             runtime=runtime,
             tag=tag,
             registry=str(obj["registry"]),
+            limit=limit,
+        )
+
+    if len(results) < results.total:
+        # On stderr, so the table and the --json list stay as they are.
+        click.echo(
+            f"Showing {len(results)} of {results.total} designs. Use --limit (up to {SEARCH_LIMIT_MAX}) "
+            "or narrow the search.",
+            err=True,
         )
 
     if obj["json"]:

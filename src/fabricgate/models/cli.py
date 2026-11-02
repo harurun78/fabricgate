@@ -147,6 +147,18 @@ class SearchResult(FabricGateModel):
     platforms: list[PlatformId]
 
 
+class SearchResults(list[SearchResult]):
+    """What ``fabricgate.search()`` returns: the results, plus ``total``, how many designs match.
+
+    A list, so code written when ``search()`` returned a plain list keeps working;
+    ``len(results) < results.total`` means the results stop at the limit.
+    """
+
+    def __init__(self, results: list[SearchResult], total: int) -> None:
+        super().__init__(results)
+        self.total = total
+
+
 class LoginResult(FabricGateModel):
     """Return value of ``fabricgate.login()``."""
 

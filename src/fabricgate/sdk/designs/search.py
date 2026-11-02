@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fabricgate.client.registry_client import RegistryClient
 from fabricgate.models.api.responses import DesignSummary
-from fabricgate.models.cli import DesignInfo, SearchResult
+from fabricgate.models.cli import DesignInfo, SearchResult, SearchResults
 from fabricgate.sdk._helpers import (
     ExitKind,
     SDKError,
@@ -16,6 +16,8 @@ from fabricgate.sdk._helpers import (
 )
 
 _LIST_PAGE_SIZE = 100  # API maximum for per_page
+SEARCH_LIMIT_DEFAULT = 20
+SEARCH_LIMIT_MAX = 1000  # at most 10 requests of the API maximum page
 
 
 def search(
@@ -28,27 +30,45 @@ def search(
     tag: str | None = None,
     registry: str = "https://registry.fabricgate.dev/api/v1",
     token: str | None = None,
-) -> list[SearchResult]:
-    """Search for designs in the registry."""
-    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
-        response = client.search_designs(
-            q=query,
-            platform=platform,
-            board=board,
-            device_family=device_family,
-            runtime=runtime,
-            tag=tag,
-        )
+    limit: int = SEARCH_LIMIT_DEFAULT,
+) -> SearchResults:
+    """Search for designs in the registry, most recently updated first.
 
-    return [
+    Returns at most *limit* designs (1 to 1000), fetching more than one page when
+    *limit* is over the API's page size; ``total`` on the result says how many match.
+    """
+    if not 1 <= limit <= SEARCH_LIMIT_MAX:
+        raise SDKError(f"--limit must be between 1 and {SEARCH_LIMIT_MAX}.", code=ExitKind.INVALID)
+    per_page = min(limit, _LIST_PAGE_SIZE)  # the same size on every page, so pages do not overlap
+    designs: list[DesignSummary] = []
+    with _registry_errors(), RegistryClient(base_url=registry, token=token) as client:
+        page = 1
+        while True:
+            response = client.search_designs(
+                q=query,
+                platform=platform,
+                board=board,
+                device_family=device_family,
+                runtime=runtime,
+                tag=tag,
+                page=page,
+                per_page=per_page,
+            )
+            designs.extend(response.designs)
+            if len(designs) >= min(limit, response.total) or len(response.designs) < per_page:
+                break
+            page += 1
+
+    results = [
         SearchResult(
             name=entry.name,
             version=entry.latest_version,
             summary=entry.summary,
             platforms=entry.platforms,
         )
-        for entry in response.designs
+        for entry in designs[:limit]
     ]
+    return SearchResults(results, total=response.total)
 
 
 def list_remote(

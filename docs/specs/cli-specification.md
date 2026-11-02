@@ -465,7 +465,7 @@ Run `fabricgate push ./my-design/` to publish.
 Search for designs in the registry.
 
 ```
-fabricgate search [<query>] [--platform <board_id/runtime>] [--device <device_family>] [--runtime <runtime>] [--tag <tag>] [--board <board_id>]
+fabricgate search [<query>] [--platform <board_id/runtime>] [--device <device_family>] [--runtime <runtime>] [--tag <tag>] [--board <board_id>] [--limit <n>]
 ```
 
 **Options:**
@@ -477,6 +477,9 @@ fabricgate search [<query>] [--platform <board_id/runtime>] [--device <device_fa
 | `--runtime` | ランタイム（`pynq`, `linux-fpgamgr`, `nanopynq`）で絞り込む |
 | `--tag` | タグで絞り込む |
 | `--board` | Board DB の `board_id` で絞り込む（`zcu104`, `pynq-z2` など） |
+| `--limit` | 表示する件数の上限（1〜1000、既定 20）。結果は最近更新された順。100 件を超える上限は、レジストリの 1 ページ（最大 100 件）をまたいで取得する |
+
+結果が上限で切れたとき（一致する件数が上限より多いとき）は、stderr に `Showing 20 of 45 designs. Use --limit (up to 1000) or narrow the search.` を出す。stdout の表と `--json` の配列は変わらない。範囲外の `--limit` は exit 3。
 
 **Behavior:**
 

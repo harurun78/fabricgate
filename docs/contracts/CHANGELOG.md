@@ -6,6 +6,10 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+### Added
+
+- `fabricgate search --limit <n>` (1 to 1000, default 20) and the SDK's `search(limit=...)`: results are the most recently updated designs, fetched across pages of the registry (at most 100 per page) when the limit is over 100. When more designs match than are shown, search says so on stderr ("Showing 20 of 45 designs ..."); before, everything after the first 20 was dropped silently. `search()` now returns `SearchResults`, a list with a `total` attribute (the number of matching designs), so existing code that treats the result as a list keeps working. An out-of-range limit is exit 3. No API or schema change.
+
 ### Fixed
 
 - Errors that ended in a Python traceback (exit 1) now print a message and exit with the code for their kind (ADR-008). No API or schema change.

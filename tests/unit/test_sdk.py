@@ -6177,3 +6177,92 @@ def test_verify_artifact_path_that_is_a_directory_is_not_found(tmp_path: Path) -
     with pytest.raises(sdk_api.SDKError, match="Artifact not found") as exc_info:
         sdk_api.verify(tmp_path, offline=True)
     assert exc_info.value.code == ExitKind.INVALID
+
+
+# ---------------------------------------------------------------------------
+# search(limit=...) (#160)
+# ---------------------------------------------------------------------------
+
+
+class _PagedSearchClient:
+    """A registry with *total* matching designs, served page by page."""
+
+    total = 260
+    calls: ClassVar[list[tuple[int, int]]] = []
+
+    def __init__(self, *_a, **_kw) -> None:
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a) -> None:
+        return None
+
+    def search_designs(self, *, page: int = 1, per_page: int = 20, **_kw):
+        from fabricgate.models.api.responses import SearchResponse
+
+        type(self).calls.append((page, per_page))
+        start = (page - 1) * per_page
+        names = [f"ns/d{i}" for i in range(start, min(start + per_page, self.total))]
+        body = {
+            "designs": [
+                {
+                    "name": n,
+                    "latest_version": "1.0.0",
+                    "platforms": ["a/pynq"],
+                    "tags": [],
+                    "updated_at": "2026-01-01T00:00:00Z",
+                }
+                for n in names
+            ],
+            "total": self.total,
+            "page": page,
+            "per_page": per_page,
+        }
+        return SearchResponse.model_validate_json(json.dumps(body))  # strict models take ISO dates only from JSON
+
+
+@pytest.mark.parametrize(
+    ("limit", "total", "expected", "calls"),
+    [
+        (20, 260, 20, [(1, 20)]),  # the default: one request, as before
+        (150, 260, 150, [(1, 100), (2, 100)]),
+        (1000, 260, 260, [(1, 100), (2, 100), (3, 100)]),  # stops at total
+        (100, 100, 100, [(1, 100)]),  # a full last page does not ask for an empty one
+    ],
+)
+def test_search_fetches_up_to_the_limit(
+    monkeypatch: pytest.MonkeyPatch, limit: int, total: int, expected: int, calls: list
+) -> None:
+    client = type("_C", (_PagedSearchClient,), {"total": total, "calls": []})
+    _patch_all_rc(monkeypatch, client)
+    results = sdk_api.search("x", limit=limit)
+    assert len(results) == expected
+    assert results.total == total
+    assert client.calls == calls
+    assert [r.name for r in results][:2] == ["ns/d0", "ns/d1"]
+
+
+@pytest.mark.parametrize("limit", [0, 1001])
+def test_search_limit_out_of_range_is_invalid(limit: int) -> None:
+    with pytest.raises(sdk_api.SDKError, match="--limit must be between 1 and 1000") as exc_info:
+        sdk_api.search("x", limit=limit, registry="http://127.0.0.1:9/api/v1")
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_search_stops_at_a_short_page_before_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A page with fewer than per_page designs ends the search even if total says more: no endless loop."""
+
+    class _ShortPages(_PagedSearchClient):
+        total = 300
+        calls: ClassVar[list[tuple[int, int]]] = []
+
+        def search_designs(self, *, page: int = 1, per_page: int = 20, **kw):
+            response = super().search_designs(page=page, per_page=per_page, **kw)
+            return response.model_copy(update={"designs": response.designs[:90]})
+
+    _patch_all_rc(monkeypatch, _ShortPages)
+    results = sdk_api.search("x", limit=250)
+    assert len(results) == 90
+    assert _ShortPages.calls == [(1, 100)]
