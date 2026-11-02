@@ -67,7 +67,7 @@ def main(
     ctx.obj = {
         "registry": registry or config.registry,
         "platform": platform or config.platform,
-        "cache_dir": cache_dir or Path(config.cache_dir).expanduser(),
+        "cache_dir": (cache_dir or Path(config.cache_dir)).expanduser(),
         "verbose": verbose,
         "json": json_output,
     }

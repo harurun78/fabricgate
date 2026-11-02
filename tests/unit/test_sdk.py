@@ -2002,6 +2002,28 @@ def test_parse_expires_rejects_garbage() -> None:
         _parse_expires("next tuesday")
 
 
+@pytest.mark.parametrize("days", [3651, 36500])
+def test_parse_expires_iso_over_limit_is_invalid(days: int) -> None:
+    """#164: an absolute date has the same 3650-day limit as ``<N>d``."""
+    from datetime import timedelta
+
+    from fabricgate.sdk.auth import SDKError, _parse_expires
+
+    value = (datetime.now(tz=UTC) + timedelta(days=days)).date().isoformat()
+    with pytest.raises(SDKError, match="3650 days") as exc_info:
+        _parse_expires(value)
+    assert exc_info.value.code == ExitKind.INVALID
+
+
+def test_parse_expires_iso_within_limit() -> None:
+    from datetime import timedelta
+
+    from fabricgate.sdk.auth import _parse_expires
+
+    value = (datetime.now(tz=UTC) + timedelta(days=3649)).replace(microsecond=0).isoformat()
+    assert _parse_expires(value) == value
+
+
 @pytest.mark.parametrize(
     "value", ["\u0669\u0660d", "\uff19\uff10d", "9\u00b2d"]
 )  # Arabic-Indic, full-width, superscript

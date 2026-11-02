@@ -38,6 +38,20 @@ class TestConfig:
         assert cfg.registry == "https://registry.fabricgate.dev/api/v1"
         assert cfg.platform is None
 
+    @pytest.mark.parametrize("text", ["", "# only a comment\n"])
+    def test_load_config_empty_file_is_defaults(self, tmp_path: Path, text: str) -> None:
+        p = tmp_path / "cfg.yaml"
+        p.write_text(text)
+        assert config.load_config(p).registry == "https://registry.fabricgate.dev/api/v1"
+
+    @pytest.mark.parametrize("text", ["https://private.example/api/v1\n", "- registry: https://x/api/v1\n"])
+    def test_load_config_rejects_non_mapping(self, tmp_path: Path, text: str) -> None:
+        """#162: a file that is not a mapping is an error, not the defaults."""
+        p = tmp_path / "cfg.yaml"
+        p.write_text(text)
+        with pytest.raises(ValueError, match="must be a mapping"):
+            config.load_config(p)
+
     def test_roundtrip(self, tmp_path: Path) -> None:
         p = tmp_path / "cfg.yaml"
         cfg = RegistryConfig(
