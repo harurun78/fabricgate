@@ -48,8 +48,11 @@ def watch_cmd(
 
     if result.new_version_found:
         newest = result.latest_version
-        platforms_str = ", ".join(result.platforms) if result.platforms else "(unknown)"
-        click.echo(sanitize(f"New version found: {result.design_name}:{newest}  (platforms: {platforms_str})"))
+        if shell_ref:
+            click.echo(sanitize(f"New shell version found: {result.design_name}:{newest}"))
+        else:
+            platforms_str = ", ".join(result.platforms) if result.platforms else "(unknown)"
+            click.echo(sanitize(f"New version found: {result.design_name}:{newest}  (platforms: {platforms_str})"))
     else:
         latest_info = f" (latest: {result.latest_version})" if result.latest_version else ""
         ref = result.design_name
