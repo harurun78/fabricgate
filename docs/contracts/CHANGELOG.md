@@ -6,6 +6,8 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-02
+
 ### Security
 
 - Text output no longer passes control characters from the registry to the terminal (GHSA-52f8-qqmp-xqw6). Strings that publishers write (summaries, authors, tags, platform names, tool requirement notes, deprecation messages, yank reasons) were printed as they are by `info`, `search`, `list --remote`, `watch`, `pull` and `verify` warnings, `license-check` and `diff` values, so escape sequences (such as an OSC window-title change), bidi overrides and line breaks reached the viewer's terminal. Control and format characters in them (and in error messages, which can quote the registry) are now printed as `?`; spaces are kept. `--json` output is unchanged (the JSON encoder escapes control characters). An artifact file name with a non-printable character (a control or format character, or a space other than U+0020) is now refused by `pull`, `verify` and `push` like a `../` name, so a design published with such a name can no longer be pulled. No API or schema change.
@@ -14,6 +16,11 @@ first shipped the change. Changes not yet in a tagged release are listed under
 ### Added
 
 - `fabricgate pull` warns when the version being pulled is itself yanked: `⚠  <namespace>/<design>:<version> is yanked: <reason>` on stderr (without `: <reason>` when there is none), before the deprecated warning, and still downloads it with exit code 0, as it already did for a yanked shell or dependency. It reads `yanked` / `yanked_reason` of `VersionDetailResponse`, which the registry already returns. The SDK's `PullResult` and `fabricgate.client.puller.PullOutcome` gain `yanked_warning` (string or null) with the same text. No API or schema change.
+
+### Changed
+
+- `fabricgate build` writes only output that `fabricgate push` accepts. The `hwh` artifact is declared, and the HWH copied next to the manifest, only for the `pynq` runtime (the `linux-fpgamgr` manifest has no `hwh`). `nanopynq` is no longer offered at the Runtime prompt, since its manifest needs `transport` and `mtu`, which an HWH does not give. A version that is not SemVer is asked again. The generated index and manifest go through push's checks before anything is written (also with `--dry-run`); if they fail, nothing is written and build exits 3. `--hwh` is used as given, without the scan that skips HWH files next to a `manifest.yaml`. No API or schema change.
+- `--registry` / `FG_REGISTRY` help says the URL includes `/api/v1`, and when `fabricgate login` gets `404` for a URL without a path, the error shows the URL with `/api/v1` appended. No API or schema change.
 
 ## [0.5.0] - 2026-11-01
 
