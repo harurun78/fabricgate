@@ -950,9 +950,7 @@ class TestBuildOutputIsPushable:
         assert "fabricgate-index.yaml would be rejected by push" in result.output
         assert not (tmp_path / "my-design").exists()
 
-    def test_manifest_push_would_reject_is_not_written(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_manifest_push_would_reject_is_not_written(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """#152: the generated manifest goes through push's parser too (here: a stub missing the hwh)."""
         monkeypatch.setattr("fabricgate.cli.commands.build._HWH_RUNTIME", "none")
         result = _invoke_build(tmp_path, monkeypatch, _ZCU104_INFO, [], _BUILD_INPUT)
