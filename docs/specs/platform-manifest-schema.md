@@ -690,11 +690,11 @@ No other artifact is accepted.
 
 ```bash
 # Pull
-fabricgate pull fabricgate/blink:1.0.0 --platform tang-nano-4k/programmer
+fabricgate pull fabricgate/blink:1.0.0 --platform tang-nano-4k/programmer --output blink
 
 # Program (manual; any tool that reads the format)
-openFPGALoader -b tangnano4k blink.fs       # SRAM (volatile)
-openFPGALoader -b tangnano4k -f blink.fs    # flash
+openFPGALoader -b tangnano4k blink/blink.fs       # SRAM (volatile)
+openFPGALoader -b tangnano4k -f blink/blink.fs    # flash
 ```
 
 ### 6.5 Example
@@ -708,7 +708,7 @@ design_ref: fabricgate/blink:1.0.0
 artifacts:
   bitstream:
     file: blink.fs
-    sha256: 3344556633445566334455663344556633445566334455663344556633445566
+    sha256: "3344556633445566334455663344556633445566334455663344556633445566"
 
 tool_requirements:
   - tool: gowin-eda
