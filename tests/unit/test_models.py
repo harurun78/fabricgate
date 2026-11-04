@@ -35,6 +35,7 @@ from fabricgate.models.platform_manifest import (
     Interface,
     LinuxFpgamgrManifest,
     NanopynqManifest,
+    ProgrammerManifest,
     PynqManifest,
     parse_platform_manifest,
 )
@@ -955,6 +956,68 @@ class TestBitstreamExtensionWarning:
         assert m.artifacts.bitstream.file == "blink.bit"
         assert "blink.bit" in caplog.text
         assert "nanopynq" in caplog.text
+
+    @pytest.mark.parametrize("filename", ["blink.bit", "blink.bin", "blink.fs", "blink.rbf"])
+    def test_programmer_known_extensions_no_warning(self, caplog, filename):
+        """Xilinx `.bit`/`.bin`, Gowin `.fs` and Intel `.rbf` are in the programmer allowlist."""
+        import logging
+
+        data = _programmer_manifest_data()
+        data["artifacts"]["bitstream"]["file"] = filename
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            ProgrammerManifest.model_validate(data)
+        assert caplog.text == ""
+
+    def test_programmer_unknown_extension_warns_but_validates(self, caplog):
+        import logging
+
+        data = _programmer_manifest_data()
+        data["artifacts"]["bitstream"]["file"] = "blink.xyz"
+        with caplog.at_level(logging.WARNING, logger=self._LOGGER):
+            ProgrammerManifest.model_validate(data)
+        assert "blink.xyz" in caplog.text
+        assert "programmer" in caplog.text
+
+
+def _programmer_manifest_data() -> dict:
+    return {
+        "schema": "fabricgate-platform/v1",
+        "runtime": "programmer",
+        "board": "tang-nano-4k",
+        "design_ref": "fabricgate/blink:1.0.0",
+        "artifacts": {
+            "bitstream": {
+                "file": "blink.fs",
+                "sha256": "3344556633445566334455663344556633445566334455663344556633445566",
+            },
+        },
+    }
+
+
+class TestProgrammerManifest:
+    def test_valid_with_bitstream_only(self):
+        m = ProgrammerManifest.model_validate(_programmer_manifest_data())
+        assert m.runtime == "programmer"
+        assert m.artifacts.bitstream.file == "blink.fs"
+
+    def test_bitstream_required(self):
+        data = _programmer_manifest_data()
+        data["artifacts"] = {}
+        with pytest.raises(ValidationError, match="bitstream"):
+            ProgrammerManifest.model_validate(data)
+
+    def test_other_artifacts_rejected(self):
+        """v1 distributes the bitstream only; firmware etc. are not part of the artifact set."""
+        data = _programmer_manifest_data()
+        data["artifacts"]["firmware"] = {"file": "fw.elf", "sha256": "ab" * 32}
+        with pytest.raises(ValidationError, match="firmware"):
+            ProgrammerManifest.model_validate(data)
+
+    def test_dispatch(self):
+        import yaml
+
+        m = parse_platform_manifest(yaml.safe_dump(_programmer_manifest_data(), sort_keys=False))
+        assert isinstance(m, ProgrammerManifest)
 
 
 class TestNanopynqManifest:

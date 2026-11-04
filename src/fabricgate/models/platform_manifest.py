@@ -1,9 +1,10 @@
 """Platform Manifest model definitions.
 
-Supports three runtimes via a discriminated union on the ``runtime`` field:
+Supports four runtimes via a discriminated union on the ``runtime`` field:
 - ``pynq``: PYNQ Overlay-based designs
 - ``linux-fpgamgr``: Linux FPGA Manager designs
 - ``nanopynq``: MCU + external FPGA (Phase 3)
+- ``programmer``: bitstream written by a host-side programming tool
 """
 
 import logging
@@ -41,6 +42,8 @@ KNOWN_BITSTREAM_EXTENSIONS: dict[str, frozenset[str]] = {
     # platform-manifest-schema.md §5.2: nanopynq's format is `.bin` (raw
     # bitstream), not `.bit` — so `.bit` should surface the ADR-011 warning.
     "nanopynq": frozenset({".bin"}),
+    # Xilinx `.bit`/`.bin`, Lattice `.bin`, Gowin `.fs`, Intel `.rbf`.
+    "programmer": frozenset({".bit", ".bin", ".fs", ".rbf"}),
 }
 
 
@@ -184,7 +187,7 @@ class _ManifestValidators:
 
     if TYPE_CHECKING:
         runtime: str
-        artifacts: "PynqArtifacts | LinuxFpgamgrArtifacts | NanopynqArtifacts"
+        artifacts: "PynqArtifacts | LinuxFpgamgrArtifacts | NanopynqArtifacts | ProgrammerArtifacts"
         bitstream_type: str | None
         shell_dependency: ShellDependency | None
 
@@ -373,6 +376,56 @@ class NanopynqManifest(_ManifestValidators, FabricGateModel):
 
 
 # ---------------------------------------------------------------------------
+# Runtime: programmer
+# ---------------------------------------------------------------------------
+
+
+class ProgrammerArtifacts(FabricGateModel):
+    """Artifact set for the ``programmer`` runtime: the bitstream alone.
+
+    The design must work from the programmable-logic bitstream alone; processor
+    software (FSBL, ELF, MCU firmware) is not part of the set
+    (platform-manifest-schema.md §6).
+    """
+
+    bitstream: ArtifactRef
+
+
+class ProgrammerManifest(_ManifestValidators, FabricGateModel):
+    """Platform Manifest — programmer runtime.
+
+    The bitstream is written to the FPGA by a host-side programming tool
+    (e.g. openFPGALoader), not by software on the target. Which tool, which
+    cable and whether to write SRAM or flash are the user's choice and are not
+    recorded in the manifest.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    schema_: str = Field(
+        alias="schema",
+        default="fabricgate-platform/v1",
+        pattern=r"^fabricgate-platform/v1$",
+    )
+    runtime: Literal["programmer"] = "programmer"
+    board: str = Field(pattern=r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+    device_family: str | None = None
+    design_ref: DesignRef
+    artifacts: ProgrammerArtifacts
+    bitstream_type: str | None = Field(
+        default=None,
+        pattern=r"^(shell|partial)$",
+    )
+    status: Literal["deprecated", "yanked"] | None = None
+    design_portability: Literal["axi-only", "board-specific", "io-constrained"] | None = None
+    shell_dependency: ShellDependency | None = None
+    tool_requirements: list[ToolRequirement] = Field(default_factory=list)
+    attestation: Attestation | None = None
+    interfaces: list[Interface] = Field(default_factory=list)
+    dependencies: list[Dependency] = Field(default_factory=list, max_length=20)
+
+
+# ---------------------------------------------------------------------------
 # Discriminated union
 # ---------------------------------------------------------------------------
 
@@ -381,6 +434,7 @@ PlatformManifest = Annotated[
         Annotated[PynqManifest, Tag("pynq")],
         Annotated[LinuxFpgamgrManifest, Tag("linux-fpgamgr")],
         Annotated[NanopynqManifest, Tag("nanopynq")],
+        Annotated[ProgrammerManifest, Tag("programmer")],
     ],
     Discriminator("runtime"),
 ]

@@ -143,7 +143,7 @@ Known board_id values (the bundled `official.yaml`, see `board-db-schema.md`):
 | `generic-xczu7ev` | (virtual) | xczu7ev（任意パッケージ）|
 | `generic-xc7z020` | (virtual) | xc7z020（任意パッケージ）|
 
-Known runtime values: `pynq`, `linux-fpgamgr`, `nanopynq`
+Known runtime values: `pynq`, `linux-fpgamgr`, `nanopynq`, `programmer`
 
 Registry MAY reject unknown board_id/runtime values in strict mode, or accept them in permissive mode.
 
