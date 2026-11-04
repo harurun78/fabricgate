@@ -22,7 +22,7 @@ Each runtime defines its own schema. The common envelope is minimal. This docume
 ### 1.1 対象 runtime とスコープ（ADR-010）
 
 対象 runtime は `pynq` / `linux-fpgamgr` / `nanopynq` / `programmer` の 4 つ。
-**XRT/Alveo（`.xclbin`）は対象外**とする（[ADR-010](../adr/010-xrt-alveo-out-of-scope.md)、再開条件付き）。
+**XRT/Alveo（`.xclbin`）は対象外**とする（ADR-010、再開条件付き）。
 
 - `runtime` discriminated union への将来の `xrt` runtime 追加は**加算的**に可能（新 runtime 追加は既存 manifest を壊さない）。実装は行わない。
 - **再開条件**（いずれかを満たしたら XRT/Alveo 対応の Issue を再オープン。詳細は ADR-010 参照）:
@@ -166,7 +166,7 @@ shell_dependency:
 
 #### `sha256`
 
-**必須**（省略時はスキーマバリデーションで 400 `SCHEMA_VALIDATION_FAILED`）。値の定義（[ADR-009](../adr/009-shell-dependency-sha256-target.md)）:
+**必須**（省略時はスキーマバリデーションで 400 `SCHEMA_VALIDATION_FAILED`）。値の定義（ADR-009）:
 
 > **参照する Shell design の、この partial と同一 platform（`board_id/runtime`）における配布 bitstream アーティファクトのバイト列の SHA-256**（= 当該アーティファクトの `ArtifactRef.sha256` と同一系の値）。
 
@@ -243,7 +243,7 @@ tool_requirements:
 
 ### 2.9 bitstream コンテナ形式 — 拡張子を正とする（ADR-011）
 
-bitstream のコンテナ形式に**型次元（enum フィールド）は存在しない**。`artifacts.bitstream.file`（`ArtifactRef.file`）の**ファイル拡張子を形式の正**とする（[ADR-011](../adr/011-bitstream-container-format-by-extension.md)）。
+bitstream のコンテナ形式に**型次元（enum フィールド）は存在しない**。`artifacts.bitstream.file`（`ArtifactRef.file`）の**ファイル拡張子を形式の正**とする（ADR-011）。
 
 - FabricGate は形式変換をしない（Non-Goal）。manifest は具体ファイルを列挙し、pull はそのまま配布する。形式の整合責任は publisher（正しい形式でビルドする）と runtime（期待形式を知っている）にある。
 - publish 時バリデーションは、runtime ごとの**既知拡張子 allowlist** を検査し、allowlist 外の拡張子は **WARNING のみ**とする（**エラーにしない・リジェクトしない**）。
