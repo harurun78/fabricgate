@@ -156,6 +156,11 @@ def test_platform_manifest_spec_examples_validate(block: str) -> None:
     parse_platform_manifest(block)
 
 
+def test_platform_manifest_spec_examples_found() -> None:
+    """Guards the test above: pytest would skip it, not fail, if no example matched."""
+    assert _spec_example_manifests()
+
+
 # --- corrupted fixtures are rejected -------------------------------------
 
 
