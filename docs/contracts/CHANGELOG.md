@@ -6,6 +6,10 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+### Fixed
+
+- `openapi.yaml` / `openapi.json`: `ShellDependency.version` now has the pattern that 0.5.2 gave the model (`=X.Y.Z` without leading zeros). 0.5.2 regenerated the wire-format schemas but not the OpenAPI document. No behavior change.
+
 ## [0.5.2] - 2026-11-02
 
 ### Security
