@@ -37,7 +37,7 @@ Commit the regenerated files together with the model change and add an entry to 
 
 ## Adding a board to the Board DB
 
-Boards live in `src/fabricgate/data/board-db/official.yaml` and are validated against `docs/contracts/schemas/board-db.schema.json` (`tests/unit/test_models.py`). Add an entry with `board_id`, `device`, the supported runtimes and a source URL for the identification data, and open a pull request. No code change is needed.
+Boards live in `src/fabricgate/data/board-db/official.yaml` and are validated against `docs/contracts/schemas/board-db.schema.json` (`tests/unit/test_models.py`). Add an entry with the required `board_id`, `display_name` and `device_family`, plus `device` and `boardpart` when the board has them, and `pynq_supported: true` if PYNQ supports the board (fields: `docs/specs/board-db-schema.md`). Open a pull request and give a source URL for the identification data in its description. No code change is needed.
 
 ## Pull requests
 

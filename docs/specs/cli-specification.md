@@ -36,7 +36,7 @@ fabricgate [--registry <url>] [--platform <board_id/runtime>] [--cache-dir <path
 ## 2.1 Exit Code Conventions
 
 Exit codes are a machine-readable contract for scripting (`$?`). They follow a
-**semantic standard** shared by every command (see [ADR-008](../adr/008-cli-exit-code-standard.md)).
+**semantic standard** shared by every command (see ADR-008).
 A given kind of failure produces the same code in every subcommand.
 
 | Code | Meaning | Examples |
