@@ -6,6 +6,10 @@ first shipped the change. Changes not yet in a tagged release are listed under
 
 ## [Unreleased]
 
+### Added
+
+- Platform Manifest: a new runtime, `programmer`, for bitstreams that a host-side programming tool (openFPGALoader, Gowin Programmer, Vivado Hardware Manager, iceprog, ...) writes to the FPGA directly, such as a Tang Nano 4K, or a Zynq programmed from a host without Linux. Its only artifact is `bitstream`, which is required; the programming tool, cable and SRAM / flash target are not in the manifest (platform-manifest-schema §6). Known bitstream extensions: `.bit`, `.bin`, `.fs`, `.rbf` (others warn, as for every runtime). Existing manifests are unchanged. Clients before this release cannot read a `programmer` manifest, so `fabricgate pull` of such a platform exits 3 with them; `search` and `info` are not affected. `platform-manifest.schema.json` is regenerated. platform-manifest-schema §6 Validation Rules, §6.5 `attestation` and §7 Extensibility are now §7, §7.5 and §8.
+
 ## [0.5.2] - 2026-11-02
 
 ### Security

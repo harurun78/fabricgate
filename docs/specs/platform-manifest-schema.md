@@ -17,10 +17,11 @@ Each runtime defines its own schema. The common envelope is minimal. This docume
 2. `pynq` runtime schema (MVP)
 3. `linux-fpgamgr` runtime schema (MVP)
 4. `nanopynq` runtime schema (Phase 3, included for forward reference)
+5. `programmer` runtime schema
 
 ### 1.1 対象 runtime とスコープ（ADR-010）
 
-対象 runtime は `pynq` / `linux-fpgamgr` / `nanopynq` の 3 つ。
+対象 runtime は `pynq` / `linux-fpgamgr` / `nanopynq` / `programmer` の 4 つ。
 **XRT/Alveo（`.xclbin`）は対象外**とする（[ADR-010](../adr/010-xrt-alveo-out-of-scope.md)、再開条件付き）。
 
 - `runtime` discriminated union への将来の `xrt` runtime 追加は**加算的**に可能（新 runtime 追加は既存 manifest を壊さない）。実装は行わない。
@@ -234,6 +235,7 @@ tool_requirements:
 | `f4pga` | F4PGA (OSS) | Xilinx/Lattice。PR サポートは開発中 |
 | `icestorm` | Project IceStorm (OSS) | iCE40 |
 | `trellis` | Project Trellis (OSS) | ECP5 |
+| `gowin-eda` | GOWIN EDA | GW1N / GW2A 等 |
 
 **ライセンス注記**: FabricGate はビットストリームのみを配布する。ツールチェーンのライセンス遵守はデザイン作成者の責任である。
 
@@ -254,6 +256,7 @@ bitstream のコンテナ形式に**型次元（enum フィールド）は存在
 | `pynq` | `.bit` |
 | `linux-fpgamgr` | `.bit`, `.bin` |
 | `nanopynq` | `.bin` |
+| `programmer` | `.bit`, `.bin`, `.fs`, `.rbf` |
 
 実装: `fabricgate.models.platform_manifest.KNOWN_BITSTREAM_EXTENSIONS`
 
@@ -267,8 +270,11 @@ bitstream のコンテナ形式に**型次元（enum フィールド）は存在
 | Zynq-7000 | `linux-fpgamgr` | `.bin` | fpga_manager は Bootgen 変換した `.bin` が典型 |
 | Zynq UltraScale+ | `linux-fpgamgr` | `.bit` / `.bin` | カーネル・ボード構成に依存 |
 | iCE40（pico-ice 等） | `nanopynq` | `.bin` | raw bitstream（§5.2） |
+| Xilinx（7 シリーズ、Linux を使わない Zynq 等） | `programmer` | `.bit` / `.bin` | Vivado Hardware Manager / openFPGALoader 等で書き込む |
+| iCE40 / ECP5 | `programmer` | `.bin`（ECP5 は `.bit` も） | iceprog / openFPGALoader 等 |
+| Gowin（GW1N / GW1NSR 等） | `programmer` | `.fs` | Gowin Programmer / openFPGALoader 等 |
+| Intel | `programmer` | `.rbf` | Quartus Programmer / openFPGALoader 等 |
 | Versal | —（将来） | `.pdi` | 対応時に allowlist 更新（契約変更なし） |
-| Intel | —（将来） | `.rbf` | 対応時に allowlist 更新（契約変更なし） |
 | Alveo（XRT） | —（対象外） | `.xclbin` | ADR-010 により対象外 |
 
 ---
@@ -636,7 +642,81 @@ interfaces:
 
 ---
 
-## 6. Validation Rules (Common)
+## 6. Runtime: `programmer`
+
+For bitstreams that a host-side programming tool writes to the FPGA directly (openFPGALoader, Gowin Programmer,
+Vivado Hardware Manager, iceprog, ...), not software on the target. This covers FPGAs without a processor running
+Linux (e.g. Tang Nano 4K) and SoC FPGAs programmed from a host without Linux.
+
+### 6.1 Schema
+
+```yaml
+schema: fabricgate-platform/v1
+runtime: programmer
+board: <board_id>
+device_family: <string>         # Optional
+design_ref: <namespace>/<design>:<version>
+
+artifacts:
+  bitstream:
+    file: <filename>.<bit|bin|fs|rbf>
+    sha256: <64-hex>
+
+# Optional (common fields)
+bitstream_type: <shell|partial>
+tool_requirements: [ ... ]       # The toolchain that generated the bitstream (§2.8), not the programming tool
+interfaces: [ ... ]
+```
+
+### 6.2 Required Artifacts
+
+| Artifact | Required | Purpose |
+|----------|----------|---------|
+| `bitstream` | Yes | FPGA configuration binary |
+
+No other artifact is accepted.
+
+### 6.3 Scope
+
+- **The design must work from the bitstream alone.** Designs that also need processor software (a Zynq FSBL or
+  ELF, the Cortex-M3 firmware of a GW1NSR, ...) are out of scope for now. If they are supported later, it will be
+  as optional artifacts, which does not break existing manifests.
+- **The manifest does not say how to program the device.** The programming tool, the cable and whether to write
+  SRAM or flash are chosen by the user at programming time; fabricgate does not program devices
+  (`fabricgate pull` stops at the file system).
+- When Linux on the target loads the bitstream through FPGA Manager, use `linux-fpgamgr` (§4) instead.
+
+### 6.4 Usage Pattern
+
+```bash
+# Pull
+fabricgate pull fabricgate/blink:1.0.0 --platform tang-nano-4k/programmer
+
+# Program (manual; any tool that reads the format)
+openFPGALoader -b tangnano4k blink.fs       # SRAM (volatile)
+openFPGALoader -b tangnano4k -f blink.fs    # flash
+```
+
+### 6.5 Example
+
+```yaml
+schema: fabricgate-platform/v1
+runtime: programmer
+board: tang-nano-4k
+design_ref: fabricgate/blink:1.0.0
+
+artifacts:
+  bitstream:
+    file: blink.fs
+    sha256: 3344556633445566334455663344556633445566334455663344556633445566
+
+tool_requirements:
+  - tool: gowin-eda
+```
+
+---
+
+## 7. Validation Rules (Common)
 
 | Rule | Severity |
 |------|----------|
@@ -660,7 +740,7 @@ interfaces:
 | `artifacts.bitstream.file` の拡張子が runtime の既知拡張子 allowlist 外（§2.9, ADR-011） | Warning |
 | `attestation.bundle` present → `attestation.transparency_log_url` must be non-empty | Error |
 
-## 6.5 `attestation` (optional)
+## 7.5 `attestation` (optional)
 
 アーティファクトのサプライチェーン完全性を証明する Sigstore / cosign 署名バンドルフィールド。
 publish 時はオプション。`fabricgate pull --verify-attestation` 指定時に CLI が検証する。
@@ -689,7 +769,7 @@ attestation:
 
 > **注意:** FabricGate はバンドルファイルの内容をバリデーションしない。CLI の `--verify-attestation` フラグが cosign CLI を呼び出し、manifest.yaml に対して検証する。サーバーはバンドルファイルを他のアーティファクトと同様に保存し、`artifacts/{bundle}` で配信する（`client-behavior.md` §10.2）。
 
-## 7. Extensibility
+## 8. Extensibility
 
 New runtimes are added by:
 

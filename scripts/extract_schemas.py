@@ -46,7 +46,7 @@ def build_schemas() -> dict[str, dict[str, object]]:
     platform_manifest["$id"] = "urn:fabricgate:schema:platform-manifest:v1"
     platform_manifest["title"] = "FabricGate Platform Manifest"
     platform_manifest["description"] = (
-        "Per-platform manifest, discriminated by runtime (pynq | linux-fpgamgr | nanopynq)."
+        "Per-platform manifest, discriminated by runtime (pynq | linux-fpgamgr | nanopynq | programmer)."
     )
 
     board_db = BoardDbFile.model_json_schema(by_alias=True)

@@ -198,7 +198,7 @@ shell 依存の宣言形式（`name`/`version`/`board_id`/`runtime` 等）は [p
 
 署名検証は任意機能である（`--verify-attestation`、`client/puller.py` `_verify_manifest_attestation`）:
 
-- 署名の対象は各プラットフォームの `manifest.yaml` である。Manifest の `attestation.bundle` は `cosign sign-blob manifest.yaml --bundle <bundle>` で作られた Sigstore bundle を指す（`platform-manifest-schema.md` §6.5）。
+- 署名の対象は各プラットフォームの `manifest.yaml` である。Manifest の `attestation.bundle` は `cosign sign-blob manifest.yaml --bundle <bundle>` で作られた Sigstore bundle を指す（`platform-manifest-schema.md` §7.5）。
 - ルート・依存・shell の各マニフェストについて、マニフェストを取得した直後に bundle を `artifacts/{bundle}` から取得し、`cosign verify-blob manifest.yaml --bundle <bundle> <署名者>` を実行する。検証はアーティファクトのダウンロードより前に行い、失敗したらアーティファクトを 1 つも書き込まない。
 - アーティファクトはマニフェストの sha256 で照合される（§10.1）ため、マニフェストの署名でプラットフォームの全アーティファクトが保証される。
 - 署名者は鍵（cosign `--key`）か、keyless の証明書 ID と OIDC issuer（cosign `--certificate-identity` / `--certificate-oidc-issuer`）で指定し、必須とする。
