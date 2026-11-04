@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.resources
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 SCHEMAS_DIR = Path(__file__).resolve().parents[2] / "docs" / "contracts" / "schemas"
+SPECS_DIR = Path(__file__).resolve().parents[2] / "docs" / "specs"
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 
@@ -129,6 +131,29 @@ def test_bundled_official_pynq_boards_resolve_both_ways(
     assert entry.device == device
     assert entry.device_family == device_family
     assert db.lookup_by_boardpart(boardpart) is entry
+
+
+def _spec_example_manifests() -> list[Any]:
+    """Return each complete example manifest in platform-manifest-schema.md, with its line as the id.
+
+    Schema outlines (with ``<placeholder>`` values) and fragments (no ``design_ref`` /
+    ``artifacts``) are skipped.
+    """
+    text = (SPECS_DIR / "platform-manifest-schema.md").read_text(encoding="utf-8")
+    examples = []
+    for match in re.finditer(r"```yaml\n(.*?)```", text, re.S):
+        block = match.group(1)
+        if "design_ref:" in block and "artifacts:" in block and not re.search(r"<[a-z_-]+>", block):
+            examples.append(pytest.param(block, id=f"line-{text.count(chr(10), 0, match.start()) + 1}"))
+    return examples
+
+
+@pytest.mark.parametrize("block", _spec_example_manifests())
+def test_platform_manifest_spec_examples_validate(block: str) -> None:
+    """A manifest copied from the spec's examples passes the same validation as push."""
+    from fabricgate.models.platform_manifest import parse_platform_manifest
+
+    parse_platform_manifest(block)
 
 
 # --- corrupted fixtures are rejected -------------------------------------
