@@ -610,6 +610,159 @@
       "title": "PostLoad",
       "type": "object"
     },
+    "ProgrammerArtifacts": {
+      "additionalProperties": false,
+      "description": "Artifact set for the ``programmer`` runtime: the bitstream alone.\n\nThe design must work from the programmable-logic bitstream alone; processor\nsoftware (FSBL, ELF, MCU firmware) is not part of the set\n(platform-manifest-schema.md §6).",
+      "properties": {
+        "bitstream": {
+          "$ref": "#/$defs/ArtifactRef"
+        }
+      },
+      "required": [
+        "bitstream"
+      ],
+      "title": "ProgrammerArtifacts",
+      "type": "object"
+    },
+    "ProgrammerManifest": {
+      "description": "Platform Manifest — programmer runtime.\n\nThe bitstream is written to the FPGA by a host-side programming tool\n(e.g. openFPGALoader), not by software on the target. Which tool, which\ncable and whether to write SRAM or flash are the user's choice and are not\nrecorded in the manifest.",
+      "properties": {
+        "schema": {
+          "default": "fabricgate-platform/v1",
+          "pattern": "^fabricgate-platform/v1$",
+          "title": "Schema",
+          "type": "string"
+        },
+        "runtime": {
+          "const": "programmer",
+          "default": "programmer",
+          "title": "Runtime",
+          "type": "string"
+        },
+        "board": {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+          "title": "Board",
+          "type": "string"
+        },
+        "device_family": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Device Family"
+        },
+        "design_ref": {
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?/[a-z0-9]([a-z0-9-]*[a-z0-9])?:(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "title": "Design Ref",
+          "type": "string"
+        },
+        "artifacts": {
+          "$ref": "#/$defs/ProgrammerArtifacts"
+        },
+        "bitstream_type": {
+          "anyOf": [
+            {
+              "pattern": "^(shell|partial)$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bitstream Type"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "deprecated",
+                "yanked"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
+        "design_portability": {
+          "anyOf": [
+            {
+              "enum": [
+                "axi-only",
+                "board-specific",
+                "io-constrained"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Design Portability"
+        },
+        "shell_dependency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ShellDependency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tool_requirements": {
+          "items": {
+            "$ref": "#/$defs/ToolRequirement"
+          },
+          "title": "Tool Requirements",
+          "type": "array"
+        },
+        "attestation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Attestation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "interfaces": {
+          "items": {
+            "$ref": "#/$defs/Interface"
+          },
+          "title": "Interfaces",
+          "type": "array"
+        },
+        "dependencies": {
+          "items": {
+            "$ref": "#/$defs/Dependency"
+          },
+          "maxItems": 20,
+          "title": "Dependencies",
+          "type": "array"
+        }
+      },
+      "required": [
+        "board",
+        "design_ref",
+        "artifacts"
+      ],
+      "title": "ProgrammerManifest",
+      "type": "object"
+    },
     "PynqArtifacts": {
       "additionalProperties": false,
       "description": "Artifact set for the ``pynq`` runtime.",
@@ -926,6 +1079,7 @@
     "mapping": {
       "linux-fpgamgr": "#/$defs/LinuxFpgamgrManifest",
       "nanopynq": "#/$defs/NanopynqManifest",
+      "programmer": "#/$defs/ProgrammerManifest",
       "pynq": "#/$defs/PynqManifest"
     },
     "propertyName": "runtime"
@@ -939,10 +1093,13 @@
     },
     {
       "$ref": "#/$defs/NanopynqManifest"
+    },
+    {
+      "$ref": "#/$defs/ProgrammerManifest"
     }
   ],
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:fabricgate:schema:platform-manifest:v1",
   "title": "FabricGate Platform Manifest",
-  "description": "Per-platform manifest, discriminated by runtime (pynq | linux-fpgamgr | nanopynq)."
+  "description": "Per-platform manifest, discriminated by runtime (pynq | linux-fpgamgr | nanopynq | programmer)."
 }

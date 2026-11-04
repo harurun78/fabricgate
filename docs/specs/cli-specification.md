@@ -391,7 +391,7 @@ fabricgate build <directory> [--namespace <ns>] [--version <semver>] [--tags <ta
    - デザイン名に `/` が無い場合は `--namespace` の値を前に付ける。`--namespace` も無ければ `Namespace` を追加で尋ねる
    - `<namespace>/<design>`（英小文字・数字・ハイフン）でない名前は、エラーを表示して再入力を求める
    - SemVer でないバージョン（`v1.0`、`1.0` など）も、エラーを表示して再入力を求める
-   - Runtime は `pynq` と `linux-fpgamgr` から選ぶ。`nanopynq` の manifest は HWH から決められない `transport` と `mtu` が必須なので、build では生成しない（platform-manifest-schema.md §5 に沿って手で書く）
+   - Runtime は `pynq` と `linux-fpgamgr` から選ぶ。`nanopynq` の manifest は HWH から決められない `transport` と `mtu` が必須なので、build では生成しない（platform-manifest-schema.md §5 に沿って手で書く）。`programmer` も build では生成しない。HWH を出さないツールチェーン（Gowin など）のデザインが主な対象なので、platform-manifest-schema.md §6 に沿って手で書く
 7. 生成した index と manifest を push と同じ検証（`DesignIndex` と Platform Manifest のスキーマ）に通す。通らなければ何も書かずに exit 3 で終わる（例: タグが 10 個を超える、説明が 200 文字を超える）。`--dry-run` でも同じ
 8. `fabricgate-index.yaml` と `<board_id>/<runtime>/manifest.yaml` を出力する。`pynq` では manifest が hwh を宣言するので、パースした HWH を manifest と同じディレクトリに `design.hwh` としてコピーする（`linux-fpgamgr` の manifest には hwh が無いのでコピーしない）。manifest は bitstream を `design.bit` として宣言するので、push の前にそのパスへ bitstream を置く。アーティファクトの sha256 はプレースホルダーのままでよい（push が埋める。§3.2）
 
@@ -474,7 +474,7 @@ fabricgate search [<query>] [--platform <board_id/runtime>] [--device <device_fa
 |---|---|
 | `--platform` | `board_id/runtime` 形式でプラットフォームを絞り込む（仮想ボード `generic-*`, `custom-*` も指定可） |
 | `--device` | デバイスファミリー（`xczu7ev`, `xc7z020` など）で絞り込む |
-| `--runtime` | ランタイム（`pynq`, `linux-fpgamgr`, `nanopynq`）で絞り込む |
+| `--runtime` | ランタイム（`pynq`, `linux-fpgamgr`, `nanopynq`, `programmer`）で絞り込む |
 | `--tag` | タグで絞り込む |
 | `--board` | Board DB の `board_id` で絞り込む（`zcu104`, `pynq-z2` など） |
 | `--limit` | 表示する件数の上限（1〜1000、既定 20）。結果は最近更新された順。100 件を超える上限は、レジストリの 1 ページ（最大 100 件）をまたいで取得する |

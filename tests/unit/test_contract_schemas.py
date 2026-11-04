@@ -56,6 +56,16 @@ def test_platform_manifest_accepts_sample() -> None:
     Draft202012Validator(_schema("platform-manifest.schema.json")).validate(_yaml(FIXTURES / "sample_manifest.yaml"))
 
 
+def test_platform_manifest_accepts_programmer_runtime() -> None:
+    data = {
+        "runtime": "programmer",
+        "board": "tang-nano-4k",
+        "design_ref": "fabricgate/blink:1.0.0",
+        "artifacts": {"bitstream": {"file": "blink.fs", "sha256": "ab" * 32}},
+    }
+    Draft202012Validator(_schema("platform-manifest.schema.json")).validate(data)
+
+
 def test_design_index_accepts_hello_seed() -> None:
     """fabricgate/hello seed manifest passes the published wire schema (spec 2026-07-03 §5)."""
     Draft202012Validator(_schema("design-index.schema.json")).validate(_yaml(FIXTURES / "hello_design_index.yaml"))
